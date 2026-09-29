@@ -501,13 +501,43 @@ def _pending(limit: int) -> list[str]:
 	)
 
 
+def _record_failure(name: str, error: Exception):
+	"""Count the attempt, so a message that keeps failing stops being retried after MAX_ATTEMPTS."""
+	try:
+		attempts = (frappe.db.get_value("Periskope Message", name, "classification_attempts") or 0) + 1
+		_mark(
+			name,
+			classification_status="Failed",
+			classification_attempts=attempts,
+			classification_error=describe_error(error),
+		)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title=f"Periskope: could not record the failure of message {name}")
+
+
+def _classify_and_commit(name: str):
+	"""Classify one message and commit its result on its own.
+
+	A failure (or a failed commit) is rolled back and logged, and the message is marked Failed,
+	so one bad message can neither stop the rest of the batch nor undo the ones already saved.
+	"""
+	try:
+		classify(name)
+		frappe.db.commit()
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(title=f"Periskope: could not save the classification of message {name}")
+		_record_failure(name, e)
+
+
 def retry_failed_classifications():
 	"""Hourly scheduler: pick up Pending/Failed messages, a limited batch per run."""
 	if not _ready_to_run():
 		return
 	for name in _pending(RETRY_BATCH):
-		classify(name)
-		frappe.db.commit()  # keep each result even if a later one crashes
+		_classify_and_commit(name)
 
 
 def classify_pending(limit: int = 500):
@@ -516,8 +546,7 @@ def classify_pending(limit: int = 500):
 		return "Classification is not enabled or the Anthropic API key is missing"
 	names = _pending(limit)
 	for name in names:
-		classify(name)
-		frappe.db.commit()
+		_classify_and_commit(name)
 	return len(names)
 
 

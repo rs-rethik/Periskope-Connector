@@ -11,11 +11,18 @@ def _fetch_phones() -> list[dict]:
 
 
 def _set_status(status: str):
-	frappe.db.set_single_value(
-		"Periskope Settings",
-		{"connection_status": status, "last_checked": now_datetime()},
-	)
-	frappe.db.commit()
+	"""Save the connection status right away. test_connection() calls this after an error, when
+	the request is about to fail and would roll everything back. A problem saving the status must
+	not replace the error the user needs to see, so it is logged instead of raised."""
+	try:
+		frappe.db.set_single_value(
+			"Periskope Settings",
+			{"connection_status": status, "last_checked": now_datetime()},
+		)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Periskope: could not save the connection status")
 
 
 @frappe.whitelist()

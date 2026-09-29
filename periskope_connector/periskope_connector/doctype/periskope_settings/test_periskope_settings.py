@@ -80,6 +80,24 @@ class TestPeriskopeSettings(FrappeTestCase):
 		):
 			return webhook.receive()
 
+	def test_saving_the_status_commits_it(self):
+		settings_api._set_status("Connected (1 phone(s))")
+		frappe.db.commit.assert_called_once()
+		self.assertEqual(
+			frappe.db.get_single_value("Periskope Settings", "connection_status"), "Connected (1 phone(s))"
+		)
+
+	def test_a_commit_error_while_saving_the_status_is_logged_not_raised(self):
+		# It runs after a connection error; raising here would hide the error the user needs to see.
+		with (
+			patch.object(frappe.db, "commit", side_effect=Exception("commit failed")),
+			patch.object(frappe.db, "rollback") as rollback,
+			patch.object(frappe, "log_error") as log_error,
+		):
+			settings_api._set_status("Failed: bad key")  # must not raise
+		rollback.assert_called_once()
+		log_error.assert_called_once()
+
 	def test_webhook_valid_signature(self):
 		body = json.dumps({"event_type": "message.created", "data": {}}).encode()
 		self.assertEqual(self._call_receive(body, _sign(body)), {"ok": True})

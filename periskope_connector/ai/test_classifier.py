@@ -271,6 +271,70 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(real.classification_status, "Pending")
 		enqueue.assert_called_once()  # only the real message is queued
 
+	def _run_batch(self, names, classify=None, commit_errors=None):
+		"""Run the hourly retry over `names`. Rollback and error logging are mocked so the test's
+		own transaction survives; returns the mocks."""
+		with (
+			patch.object(classifier, "_ready_to_run", lambda: True),
+			patch.object(classifier, "_pending", lambda n: names),
+			patch.object(frappe.db, "rollback") as rollback,
+			patch.object(frappe, "log_error") as log_error,
+			patch.object(classifier, "classify", classify or classifier.classify),
+		):
+			if commit_errors:
+				frappe.db.commit.side_effect = commit_errors
+			classifier.retry_failed_classifications()
+		return rollback, log_error
+
+	def _status(self, name):
+		return frappe.db.get_value(
+			"Periskope Message",
+			name,
+			["classification_status", "classification_attempts", "classification_error"],
+			as_dict=True,
+		)
+
+	def test_one_failing_message_does_not_stop_the_batch(self):
+		bad = self._message("Send the price list", message_id="batch_bad")
+		good = self._message("Need a quote for 20 units", message_id="batch_good")
+		real = classifier.classify
+
+		def flaky(name):
+			if name == bad.name:
+				raise RuntimeError("database went away")
+			return real(name)
+
+		with self._claude_says():
+			rollback, log_error = self._run_batch([bad.name, good.name], classify=flaky)
+
+		rollback.assert_called()
+		log_error.assert_called()
+		failed = self._status(bad.name)
+		self.assertEqual((failed.classification_status, failed.classification_attempts), ("Failed", 1))
+		self.assertIn("database went away", failed.classification_error)
+		self.assertEqual(self._status(good.name).classification_status, "Done")  # still processed
+
+	def test_a_failed_commit_is_rolled_back_and_the_batch_carries_on(self):
+		first = self._message("Send the price list", message_id="commit_1")
+		second = self._message("Need a quote for 20 units", message_id="commit_2")
+		# 1st commit fails (first message), then the failure record and the second message commit fine
+		with self._claude_says():
+			rollback, log_error = self._run_batch(
+				[first.name, second.name], commit_errors=[Exception("commit failed"), None, None]
+			)
+		rollback.assert_called_once()
+		log_error.assert_called_once()
+		self.assertEqual(self._status(first.name).classification_status, "Failed")
+		self.assertEqual(self._status(second.name).classification_status, "Done")
+
+	def test_a_message_that_keeps_failing_stops_being_retried(self):
+		bad = self._message("Send the price list", message_id="keeps_failing")
+		self.assertIn(bad.name, classifier._pending(100000))
+		for _i in range(classifier.MAX_ATTEMPTS):
+			self._run_batch([bad.name], classify=lambda n: (_ for _ in ()).throw(RuntimeError("boom")))
+		self.assertEqual(self._status(bad.name).classification_attempts, classifier.MAX_ATTEMPTS)
+		self.assertNotIn(bad.name, classifier._pending(100000))
+
 	def test_only_text_chats_are_analysed(self):
 		for kind in ("image", "document", "ptt", "video", "vcard", "sticker"):
 			doc = self._message(
