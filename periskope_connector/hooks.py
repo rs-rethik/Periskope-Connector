@@ -157,6 +157,10 @@ after_install = "periskope_connector.install.after_install"
 # ---------------
 
 scheduler_events = {
+	"cron": {
+		# Customer reply reminders; only acts inside the configured working hours.
+		"*/10 * * * *": ["periskope_connector.reminders.run"],
+	},
 	"hourly": [
 		"periskope_connector.ai.classifier.retry_failed_classifications",
 	],
