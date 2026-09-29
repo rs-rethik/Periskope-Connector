@@ -156,6 +156,12 @@ after_install = "periskope_connector.install.after_install"
 # Scheduled Tasks
 # ---------------
 
+scheduler_events = {
+	"hourly": [
+		"periskope_connector.ai.classifier.retry_failed_classifications",
+	],
+}
+
 # scheduler_events = {
 # 	"all": [
 # 		"periskope_connector.tasks.all"
