@@ -1,0 +1,149 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-09-29 16:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "rep",
+  "contact_number",
+  "is_group",
+  "column_time",
+  "waiting_since",
+  "reminded_on",
+  "escalated_on",
+  "closed_on",
+  "section_msg",
+  "message_preview",
+  "last_message",
+  "todo",
+  "chat_id"
+ ],
+ "fields": [
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nEscalated\nClosed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rep",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Rep",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer Number",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_group",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Group Chat",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_time",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "waiting_since",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Customer Waiting Since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reminded_on",
+   "fieldtype": "Datetime",
+   "label": "ToDo Created On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "escalated_on",
+   "fieldtype": "Datetime",
+   "label": "Managers Emailed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Datetime",
+   "label": "Closed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_msg",
+   "fieldtype": "Section Break",
+   "label": "Chat"
+  },
+  {
+   "fieldname": "message_preview",
+   "fieldtype": "Small Text",
+   "label": "Latest Unanswered Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message",
+   "fieldtype": "Link",
+   "label": "Message",
+   "options": "Periskope Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "todo",
+   "fieldtype": "Link",
+   "label": "ToDo",
+   "options": "ToDo",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Chat ID",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-29 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Reply Reminder",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "contact_number"
+}

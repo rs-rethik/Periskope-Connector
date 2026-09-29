@@ -1,0 +1,68 @@
+{
+ "actions": [],
+ "creation": "2026-09-29 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "event_type",
+  "org_id",
+  "event_timestamp",
+  "signature_valid",
+  "payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "org_id",
+   "fieldtype": "Data",
+   "label": "Org ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "event_timestamp",
+   "fieldtype": "Data",
+   "label": "Event Timestamp",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "signature_valid",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Signature Valid",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "label": "Payload",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-29 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Webhook Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

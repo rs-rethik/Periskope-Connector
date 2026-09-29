@@ -1,0 +1,423 @@
+{
+ "actions": [],
+ "creation": "2026-09-29 13:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "message_id",
+  "direction",
+  "message_type",
+  "message_timestamp",
+  "column_who",
+  "rep",
+  "org_phone",
+  "contact_number",
+  "is_group",
+  "sender_phone",
+  "section_content",
+  "body",
+  "quoted_message_id",
+  "section_ai",
+  "primary_tag",
+  "tags",
+  "ai_summary",
+  "suggested_action",
+  "column_ai",
+  "classification_status",
+  "severity",
+  "sentiment",
+  "needs_reply",
+  "ai_confidence",
+  "section_facts",
+  "follow_up_on",
+  "mentioned_products",
+  "mentioned_amount",
+  "column_facts",
+  "competitor_name",
+  "language",
+  "section_suggestions",
+  "suggested_actions",
+  "section_ai_log",
+  "classified_at",
+  "classification_attempts",
+  "column_ai_log",
+  "classification_error",
+  "section_media",
+  "media_filename",
+  "media_mimetype",
+  "column_media",
+  "media_path",
+  "media_size",
+  "section_meta",
+  "chat_id",
+  "ack",
+  "performed_by",
+  "column_meta",
+  "webhook_log",
+  "raw_payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "message_id",
+   "fieldtype": "Data",
+   "in_list_view": 0,
+   "label": "Message ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Direction",
+   "options": "Incoming\nOutgoing",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "message_type",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Message Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message_timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Sent At",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_who",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "rep",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Rep",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "org_phone",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Company WhatsApp Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer Number",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_group",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Group Chat",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sender_phone",
+   "fieldtype": "Data",
+   "label": "Sender",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_content",
+   "fieldtype": "Section Break",
+   "label": "Message"
+  },
+  {
+   "fieldname": "body",
+   "fieldtype": "Text",
+   "in_list_view": 1,
+   "label": "Message Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quoted_message_id",
+   "fieldtype": "Data",
+   "label": "Reply To Message ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_ai",
+   "fieldtype": "Section Break",
+   "label": "AI Classification"
+  },
+  {
+   "fieldname": "primary_tag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Main Tag",
+   "options": "Periskope Message Tag",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tags",
+   "fieldtype": "Table MultiSelect",
+   "in_standard_filter": 1,
+   "label": "All Tags",
+   "options": "Periskope Message Tag Link",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "suggested_action",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Suggested CRM Action",
+   "options": "\nNone\nCreate Lead\nUpdate Lead Status\nUpdate Deal Status\nMark Lost\nCreate Task\nEscalate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_ai",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "classification_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Classification Status",
+   "options": "\nPending\nDone\nSkipped\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "severity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Severity",
+   "options": "\nNone\nLow\nMedium\nHigh\nCritical",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sentiment",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sentiment",
+   "options": "\nPositive\nNeutral\nNegative",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "needs_reply",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Waiting for Rep Reply",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_confidence",
+   "fieldtype": "Percent",
+   "label": "AI Confidence",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_facts",
+   "fieldtype": "Section Break",
+   "label": "Details Found in the Message"
+  },
+  {
+   "fieldname": "follow_up_on",
+   "fieldtype": "Datetime",
+   "label": "Follow-up Promised For",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mentioned_products",
+   "fieldtype": "Small Text",
+   "label": "Products Mentioned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mentioned_amount",
+   "fieldtype": "Data",
+   "label": "Amount / Quantity Mentioned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_facts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "competitor_name",
+   "fieldtype": "Data",
+   "label": "Competitor Mentioned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Data",
+   "label": "Language",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_suggestions",
+   "fieldtype": "Section Break",
+   "label": "Suggested CRM Actions"
+  },
+  {
+   "fieldname": "suggested_actions",
+   "fieldtype": "Code",
+   "label": "Suggested Actions (from the tags)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_ai_log",
+   "fieldtype": "Section Break",
+   "label": "Classification Log"
+  },
+  {
+   "fieldname": "classified_at",
+   "fieldtype": "Datetime",
+   "label": "Classified At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "classification_attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_ai_log",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "classification_error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_media",
+   "fieldtype": "Section Break",
+   "label": "Attachment"
+  },
+  {
+   "fieldname": "media_filename",
+   "fieldtype": "Data",
+   "label": "File Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "media_mimetype",
+   "fieldtype": "Data",
+   "label": "File Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_media",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "media_path",
+   "fieldtype": "Small Text",
+   "label": "Periskope File Path",
+   "read_only": 1
+  },
+  {
+   "fieldname": "media_size",
+   "fieldtype": "Int",
+   "label": "File Size (bytes)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Technical Details"
+  },
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Chat ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ack",
+   "fieldtype": "Data",
+   "label": "Delivery Status Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "performed_by",
+   "fieldtype": "Data",
+   "label": "Sent Via",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "webhook_log",
+   "fieldtype": "Link",
+   "label": "Webhook Log",
+   "options": "Periskope Webhook Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_payload",
+   "fieldtype": "Code",
+   "label": "Raw Message Data",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-29 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Message",
+ "naming_rule": "Random",
+ "autoname": "hash",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "message_timestamp",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "contact_number"
+}

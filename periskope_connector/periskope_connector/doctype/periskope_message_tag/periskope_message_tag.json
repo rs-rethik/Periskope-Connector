@@ -1,0 +1,149 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:tag_name",
+ "creation": "2026-09-29 15:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tag_name",
+  "category",
+  "enabled",
+  "description",
+  "section_fcrm",
+  "fcrm_action",
+  "lead_source",
+  "target_lead_status",
+  "target_deal_status",
+  "lost_reason",
+  "column_task",
+  "task_title",
+  "task_priority",
+  "escalation_severity"
+ ],
+ "fields": [
+  {
+   "fieldname": "tag_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tag",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Category",
+   "options": "Buying Intent\nDeal Progress\nLead Qualification\nLost Reason\nFollow-up & Task\nIssue & Escalation\nBusiness Insight",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Enabled"
+  },
+  {
+   "description": "What this tag means, with an example. The AI reads only this to decide when to use the tag.",
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "When to use this tag",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_fcrm",
+   "fieldtype": "Section Break",
+   "label": "What CRM should do when this tag is found"
+  },
+  {
+   "default": "None",
+   "fieldname": "fcrm_action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Main Action",
+   "options": "None\nCreate Lead\nUpdate Lead Status\nUpdate Deal Status\nMark Lost\nCreate Task\nEscalate"
+  },
+  {
+   "fieldname": "lead_source",
+   "fieldtype": "Link",
+   "label": "Lead Source",
+   "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "target_lead_status",
+   "fieldtype": "Link",
+   "label": "Set Lead Status To",
+   "options": "CRM Lead Status"
+  },
+  {
+   "fieldname": "target_deal_status",
+   "fieldtype": "Link",
+   "label": "Set Deal Status To",
+   "options": "CRM Deal Status"
+  },
+  {
+   "fieldname": "lost_reason",
+   "fieldtype": "Link",
+   "label": "Lost Reason",
+   "options": "CRM Lost Reason"
+  },
+  {
+   "fieldname": "column_task",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "task_title",
+   "fieldtype": "Data",
+   "label": "Create Task Titled"
+  },
+  {
+   "default": "Medium",
+   "fieldname": "task_priority",
+   "fieldtype": "Select",
+   "label": "Task Priority",
+   "options": "Low\nMedium\nHigh"
+  },
+  {
+   "fieldname": "escalation_severity",
+   "fieldtype": "Select",
+   "label": "Escalation Severity",
+   "options": "\nLow\nMedium\nHigh\nCritical"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-29 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Message Tag",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "category",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

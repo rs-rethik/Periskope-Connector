@@ -1,0 +1,294 @@
+{
+ "actions": [],
+ "creation": "2026-09-29 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tab_connection",
+  "enabled",
+  "section_connect",
+  "api_key",
+  "column_status",
+  "connection_status",
+  "last_checked",
+  "section_webhook",
+  "webhook_url",
+  "column_secret",
+  "webhook_signing_secret",
+  "section_phones",
+  "phones",
+  "tab_ai",
+  "section_ai",
+  "enable_classification",
+  "anthropic_api_key",
+  "ai_business_context",
+  "section_prompt",
+  "ai_instructions",
+  "optimize_instructions",
+  "section_ai_options",
+  "ai_model",
+  "ai_base_url",
+  "column_ai_options",
+  "context_messages",
+  "classify_group_chats",
+  "tab_reminders",
+  "section_reminders",
+  "enable_reply_reminders",
+  "working_hours_start",
+  "working_hours_end",
+  "working_days",
+  "column_reminders",
+  "remind_after_hours",
+  "escalate_after_hours",
+  "alert_emails",
+  "remind_group_chats",
+  "tab_advanced",
+  "base_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "tab_connection",
+   "fieldtype": "Tab Break",
+   "label": "Connection"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enable Periskope Integration"
+  },
+  {
+   "fieldname": "section_connect",
+   "fieldtype": "Section Break",
+   "label": "1. Connect to Periskope"
+  },
+  {
+   "description": "Paste the API key from Periskope (console.periskope.app > Settings > Integrations > API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "Periskope API Key"
+  },
+  {
+   "fieldname": "column_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "connection_status",
+   "fieldtype": "Data",
+   "label": "Connection Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_checked",
+   "fieldtype": "Datetime",
+   "label": "Last Tested On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_webhook",
+   "fieldtype": "Section Break",
+   "label": "2. Receive Messages (Webhook)"
+  },
+  {
+   "fieldname": "webhook_url",
+   "fieldtype": "Data",
+   "label": "Webhook URL to Add in Periskope",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_secret",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Paste the signing secret from Periskope (Settings > Webhooks). Add the Webhook URL shown on the left there first, with the <b>message.created</b> and <b>message.updated</b> events.",
+   "fieldname": "webhook_signing_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Signing Secret"
+  },
+  {
+   "fieldname": "section_phones",
+   "fieldtype": "Section Break",
+   "label": "3. Assign Phones to Sales Reps"
+  },
+  {
+   "fieldname": "phones",
+   "fieldtype": "Table",
+   "label": "Linked WhatsApp Phones",
+   "options": "Periskope Phone"
+  },
+  {
+   "fieldname": "tab_ai",
+   "fieldtype": "Tab Break",
+   "label": "AI Tagging"
+  },
+  {
+   "fieldname": "section_ai",
+   "fieldtype": "Section Break",
+   "label": "Turn On AI Tagging"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_classification",
+   "fieldtype": "Check",
+   "label": "Tag New Messages with AI"
+  },
+  {
+   "description": "Paste the API key of your AI provider: Anthropic (console.anthropic.com) for Claude models, or Z.ai for GLM models. Message text is sent to that provider to be tagged. Then use <b>Actions &gt; Test AI Connection</b>. For GLM, also set <b>AI API Address</b> under AI Options to <b>https://api.z.ai/api/anthropic</b>.",
+   "fieldname": "anthropic_api_key",
+   "fieldtype": "Password",
+   "label": "AI API Key"
+  },
+  {
+   "fieldname": "ai_business_context",
+   "fieldtype": "Small Text",
+   "label": "About Your Business"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_prompt",
+   "fieldtype": "Section Break",
+   "label": "AI Instructions"
+  },
+  {
+   "fieldname": "ai_instructions",
+   "fieldtype": "Long Text",
+   "label": "Instructions for the AI"
+  },
+  {
+   "fieldname": "optimize_instructions",
+   "fieldtype": "Button",
+   "label": "Improve Instructions with AI"
+  },
+  {
+   "fieldname": "section_ai_options",
+   "fieldtype": "Section Break",
+   "label": "AI Options",
+   "collapsible": 1
+  },
+  {
+   "default": "claude-haiku-4-5",
+   "fieldname": "ai_model",
+   "fieldtype": "Select",
+   "label": "AI Model",
+   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air"
+  },
+  {
+   "fieldname": "ai_base_url",
+   "fieldtype": "Data",
+   "label": "AI API Address"
+  },
+  {
+   "fieldname": "column_ai_options",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "10",
+   "fieldname": "context_messages",
+   "fieldtype": "Int",
+   "label": "Earlier Messages Given to the AI"
+  },
+  {
+   "default": "0",
+   "fieldname": "classify_group_chats",
+   "fieldtype": "Check",
+   "label": "Also Tag Group Chats"
+  },
+  {
+   "fieldname": "tab_reminders",
+   "fieldtype": "Tab Break",
+   "label": "Reply Reminders"
+  },
+  {
+   "fieldname": "section_reminders",
+   "fieldtype": "Section Break",
+   "label": "Remind Reps When a Customer Is Waiting"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_reply_reminders",
+   "fieldtype": "Check",
+   "label": "Enable Reply Reminders"
+  },
+  {
+   "default": "09:00:00",
+   "fieldname": "working_hours_start",
+   "fieldtype": "Time",
+   "label": "Working Hours Start"
+  },
+  {
+   "default": "19:00:00",
+   "fieldname": "working_hours_end",
+   "fieldtype": "Time",
+   "label": "Working Hours End"
+  },
+  {
+   "default": "Monday to Saturday",
+   "fieldname": "working_days",
+   "fieldtype": "Select",
+   "label": "Working Days",
+   "options": "Monday to Saturday\nMonday to Friday\nEvery day"
+  },
+  {
+   "fieldname": "column_reminders",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "remind_after_hours",
+   "fieldtype": "Float",
+   "label": "Create ToDo After (working hours)"
+  },
+  {
+   "default": "2",
+   "fieldname": "escalate_after_hours",
+   "fieldtype": "Float",
+   "label": "Email Managers After (more working hours)"
+  },
+  {
+   "fieldname": "alert_emails",
+   "fieldtype": "Small Text",
+   "label": "Manager Emails"
+  },
+  {
+   "default": "0",
+   "fieldname": "remind_group_chats",
+   "fieldtype": "Check",
+   "label": "Include Group Chats"
+  },
+  {
+   "fieldname": "tab_advanced",
+   "fieldtype": "Tab Break",
+   "label": "Advanced"
+  },
+  {
+   "default": "https://api.periskope.app/v1",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Periskope API Address",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-29 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
