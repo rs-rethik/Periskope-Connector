@@ -32,7 +32,7 @@ def test_connection() -> dict:
 		phones = _fetch_phones()
 		_save_phones(phones)
 	except Exception as e:
-		# frappe.throw rolls back; commit the status after that in a fresh transaction.
+		# The failed request rolls everything back, so the status is saved on its own afterwards.
 		frappe.db.rollback()
 		_set_status(f"Failed: {str(e)[:100]}")
 		raise
