@@ -48,6 +48,75 @@ class TestResolveActions(FrappeTestCase):
 		self.assertEqual(actions[0]["lost_reason"], "Competition")
 
 
+class TestCreateDefaultTags(FrappeTestCase):
+	"""Runs on the real site DB: never commit, always roll back."""
+
+	def setUp(self):
+		p = patch.object(frappe.db, "commit")
+		p.start()
+		self.addCleanup(p.stop)
+		frappe.db.savepoint("periskope_default_tags_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_default_tags_test")
+
+	def test_lookups_do_not_grow_with_the_number_of_tags(self):
+		real_exists = frappe.db.exists
+		with patch.object(frappe.db, "exists", wraps=real_exists) as exists:
+			self.assertEqual(default_tags.create_default_tags(), 0)  # all tags already exist
+		# Only the single WhatsApp lead source check. It used to be a query per tag and per link.
+		self.assertLessEqual(exists.call_count, 2)
+
+	def test_all_new_tags_go_in_with_one_insert_and_no_get_doc(self):
+		frappe.db.delete("Periskope Message Tag")  # a fresh install has none
+		with (
+			patch.object(frappe, "get_doc", wraps=frappe.get_doc) as get_doc,
+			patch.object(frappe.db, "bulk_insert", wraps=frappe.db.bulk_insert) as bulk_insert,
+		):
+			created = default_tags.create_default_tags()
+		self.assertEqual(created, len(default_tags.TAGS))
+		self.assertEqual(bulk_insert.call_count, 1)
+		get_doc.assert_not_called()  # no per-tag document loading or inserting
+		self.assertEqual(frappe.db.count("Periskope Message Tag"), len(default_tags.TAGS))
+
+	def test_bulk_inserted_tags_match_the_definitions(self):
+		frappe.db.delete("Periskope Message Tag")
+		default_tags.create_default_tags()
+		by_name = {t[1]: t for t in default_tags.TAGS}
+		for tag in frappe.get_all("Periskope Message Tag", fields=["*"]):
+			category, name, action, extra, description = by_name[tag.name]
+			self.assertEqual(
+				(tag.tag_name, tag.category, tag.fcrm_action, tag.description, tag.enabled),
+				(name, category, action, description, 1),
+			)
+			self.assertEqual((tag.owner, tag.modified_by, tag.docstatus), (frappe.session.user,) * 2 + (0,))
+			self.assertEqual(tag.task_priority, extra.get("task_priority", "Medium"))
+			self.assertEqual(tag.task_title, extra.get("task_title"))
+			self.assertEqual(tag.escalation_severity or None, extra.get("escalation_severity"))
+			self.assertIsNotNone(tag.creation)
+		# a tag inserted this way opens and validates like any other
+		frappe.get_doc("Periskope Message Tag", "Complaint").run_method("validate")
+
+	def test_nothing_is_inserted_when_all_tags_exist(self):
+		with patch.object(frappe.db, "bulk_insert") as bulk_insert:
+			self.assertEqual(default_tags.create_default_tags(), 0)
+		bulk_insert.assert_not_called()
+
+	def test_a_missing_tag_is_recreated_with_its_fcrm_links(self):
+		frappe.db.delete("Periskope Message Tag", {"name": "Quotation Shared"})
+		self.assertEqual(default_tags.create_default_tags(), 1)
+		tag = frappe.get_doc("Periskope Message Tag", "Quotation Shared")
+		self.assertEqual(
+			(tag.fcrm_action, tag.target_deal_status), ("Update Deal Status", "Proposal/Quotation")
+		)
+
+	def test_a_link_the_site_does_not_have_is_left_empty(self):
+		frappe.db.delete("Periskope Message Tag", {"name": "Lost to Competitor"})
+		real = default_tags._existing_link_values()
+		real["CRM Lost Reason"] = set()  # the site renamed or removed its lost reasons
+		with patch.object(default_tags, "_existing_link_values", lambda: real):
+			self.assertEqual(default_tags.create_default_tags(), 1)
+		self.assertFalse(frappe.db.get_value("Periskope Message Tag", "Lost to Competitor", "lost_reason"))
+
+
 class TestDefaultTags(FrappeTestCase):
 	def test_tag_definitions_are_consistent(self):
 		names = [t[1] for t in default_tags.TAGS]

@@ -5,6 +5,7 @@ only set when that status / reason / source exists on the site.
 """
 
 import frappe
+from frappe.utils import now
 
 BI = "Buying Intent"
 DP = "Deal Progress"
@@ -102,26 +103,86 @@ def _ensure_whatsapp_source():
 		)
 
 
-def create_default_tags():
+def _existing_link_values() -> dict[str, set[str]]:
+	"""Names that exist for each FCRM doctype a tag can link to, fetched once.
+	A doctype that is not installed on the site gives an empty set."""
+	doctypes = set(LINK_FIELDS.values())
+	installed = set(frappe.get_all("DocType", filters={"name": ["in", list(doctypes)]}, pluck="name"))
+	return {dt: set(frappe.get_all(dt, pluck="name")) if dt in installed else set() for dt in doctypes}
+
+
+# Column order of the rows written by create_default_tags().
+TAG_COLUMNS = [
+	"name",
+	"creation",
+	"modified",
+	"modified_by",
+	"owner",
+	"docstatus",
+	"idx",
+	"tag_name",
+	"category",
+	"description",
+	"fcrm_action",
+	"enabled",
+	"lead_source",
+	"target_lead_status",
+	"target_deal_status",
+	"lost_reason",
+	"task_title",
+	"task_priority",
+	"escalation_severity",
+]
+
+
+def _tag_row(category, name, action, extra, description, link_values, timestamp) -> list:
+	def link(field):
+		value = extra.get(field)
+		# Leave a mapping empty if the site does not have it (its statuses may have been renamed).
+		return value if value in link_values[LINK_FIELDS[field]] else None
+
+	return [
+		name,
+		timestamp,
+		timestamp,
+		frappe.session.user,
+		frappe.session.user,
+		0,
+		0,
+		name,
+		category,
+		description,
+		action,
+		1,
+		link("lead_source"),
+		link("target_lead_status"),
+		link("target_deal_status"),
+		link("lost_reason"),
+		extra.get("task_title"),
+		extra.get("task_priority") or "Medium",
+		extra.get("escalation_severity"),
+	]
+
+
+def create_default_tags() -> int:
+	"""Create the default tags that do not exist yet, and return how many were created.
+
+	Periskope Message Tag has no controller logic or doc events, and the link values are checked
+	against the FCRM records fetched below, so all new tags go in with one bulk insert instead of
+	a get_doc().insert() (with its own validation queries) per tag.
+	"""
 	_ensure_whatsapp_source()
-	created = 0
-	for category, name, action, extra, description in TAGS:
-		if frappe.db.exists("Periskope Message Tag", name):
-			continue
-		values = {
-			"doctype": "Periskope Message Tag",
-			"tag_name": name,
-			"category": category,
-			"description": description,
-			"fcrm_action": action,
-			"enabled": 1,
-		}
-		for field, value in extra.items():
-			doctype = LINK_FIELDS.get(field)
-			# Skip a mapping the site does not have (its statuses may have been renamed).
-			if doctype and not (frappe.db.exists("DocType", doctype) and frappe.db.exists(doctype, value)):
-				continue
-			values[field] = value
-		frappe.get_doc(values).insert(ignore_permissions=True)
-		created += 1
-	return created
+
+	# Read what exists in a few queries up front, not once per tag and per link.
+	existing_tags = set(frappe.get_all("Periskope Message Tag", pluck="name"))
+	link_values = _existing_link_values()
+
+	timestamp = now()
+	rows = [
+		_tag_row(category, name, action, extra, description, link_values, timestamp)
+		for category, name, action, extra, description in TAGS
+		if name not in existing_tags
+	]
+	if rows:
+		frappe.db.bulk_insert("Periskope Message Tag", TAG_COLUMNS, rows)
+	return len(rows)
