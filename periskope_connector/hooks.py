@@ -85,7 +85,7 @@ required_apps = ["crm"]
 # ------------
 
 # before_install = "periskope_connector.install.before_install"
-# after_install = "periskope_connector.install.after_install"
+after_install = "periskope_connector.install.after_install"
 
 # Uninstallation
 # ------------
