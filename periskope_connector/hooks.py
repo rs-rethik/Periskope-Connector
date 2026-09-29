@@ -13,15 +13,15 @@ app_license = "mit"
 required_apps = ["crm"]
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "periskope_connector",
-# 		"logo": "/assets/periskope_connector/logo.png",
-# 		"title": "Periskope Connector",
-# 		"route": "/periskope_connector",
-# 		"has_permission": "periskope_connector.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "periskope_connector",
+		"logo": "/assets/periskope_connector/images/logo.svg",
+		"title": "Periskope Connector",
+		"route": "/app/periskope",
+		"has_permission": "periskope_connector.api.permission.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
