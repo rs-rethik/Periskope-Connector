@@ -74,6 +74,7 @@ class TestPeriskopeSettings(FrappeTestCase):
 		headers = {"x-periskope-signature": signature} if signature else {}
 		frappe.local.request = MagicMock()
 		frappe.local.request.get_data.return_value = body
+		frappe.local.request_ip = "203.0.113.7"  # documentation-range address; the rate limiter needs an IP
 		with patch.object(
 			webhook.frappe, "get_request_header", side_effect=lambda k, d=None: headers.get(k, d)
 		):
@@ -85,7 +86,36 @@ class TestPeriskopeSettings(FrappeTestCase):
 		log = frappe.get_last_doc("Periskope Webhook Log")
 		self.assertEqual((log.event_type, log.signature_valid), ("message.created", 1))
 
-	def test_webhook_bad_or_missing_signature(self):
+	def test_webhook_bad_or_missing_signature_writes_nothing(self):
 		body = b'{"event_type": "message.created"}'
+		before = frappe.db.count("Periskope Webhook Log")
 		self.assertRaises(frappe.AuthenticationError, self._call_receive, body, "bad")
 		self.assertRaises(frappe.AuthenticationError, self._call_receive, body, None)
+		self.assertRaises(frappe.AuthenticationError, self._call_receive, body, "")
+		self.assertEqual(frappe.db.count("Periskope Webhook Log"), before)
+
+	def test_webhook_rejects_everything_when_no_secret_is_configured(self):
+		body = b'{"event_type": "message.created"}'
+		before = frappe.db.count("Periskope Webhook Log")
+		with patch("frappe.model.document.Document.get_password", lambda self, f, **kw: None):
+			# even a signature computed with an empty secret must not get through
+			self.assertRaises(
+				frappe.AuthenticationError,
+				self._call_receive,
+				body,
+				hmac.new(b"", body, hashlib.sha256).hexdigest(),
+			)
+		self.assertEqual(frappe.db.count("Periskope Webhook Log"), before)
+
+	def test_webhook_accepts_the_signature_in_any_letter_case(self):
+		body = json.dumps({"event_type": "reaction.created", "data": {}}).encode()
+		self.assertEqual(self._call_receive(body, _sign(body).upper()), {"ok": True})
+
+	def test_webhook_only_queues_message_events(self):
+		body = json.dumps({"event_type": "reaction.created", "data": {}}).encode()
+		with patch.object(webhook.frappe, "enqueue") as enqueue:
+			self._call_receive(body, _sign(body))
+		enqueue.assert_not_called()
+
+	def test_webhook_endpoint_is_rate_limited(self):
+		self.assertTrue(hasattr(webhook.receive, "__wrapped__"), "receive() must be wrapped by rate_limit")
