@@ -3,6 +3,8 @@ import frappe
 from periskope_connector.text_rules import analysis_skip_reason
 
 
+# Frappe runs execute() by name from patches.txt on `bench migrate` (dynamic dispatch),
+# so nothing in this app calls it directly. Do not remove it: it would break migrations.
 def execute():
 	"""Messages still waiting for the AI that are too small to be worth the tokens ('ok', 'done',
 	emoji, one word) are marked skipped instead."""
