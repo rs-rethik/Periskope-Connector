@@ -1,14 +1,16 @@
 app_name = "periskope_connector"
 app_title = "Periskope Connector"
 app_publisher = "Aerele Technologies"
-app_description = "A Frappe connector for integrating and synchronizing WhatsApp communication through Periskope."
+app_description = (
+	"A Frappe connector for integrating and synchronizing WhatsApp communication through Periskope."
+)
 app_email = "hello@aerele.in"
 app_license = "mit"
 
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["crm"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -252,4 +254,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-
