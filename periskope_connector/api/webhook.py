@@ -3,6 +3,7 @@ import hmac
 import json
 
 import frappe
+from frappe import _
 from frappe.rate_limiter import rate_limit
 
 from periskope_connector.messages import MESSAGE_CREATED
@@ -65,7 +66,7 @@ def receive() -> dict:
 			f"(ip: {frappe.local.request_ip})"
 		)
 		frappe.local.response["http_status_code"] = 401
-		frappe.throw("Invalid signature", frappe.AuthenticationError)
+		frappe.throw(_("Invalid signature"), frappe.AuthenticationError)
 
 	try:
 		payload = json.loads(raw)

@@ -1,6 +1,6 @@
 import inspect
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -12,6 +12,37 @@ from periskope_connector.system import insert_as_system, save_as_system
 MACHINE_WRITTEN = ["Periskope Message", "Periskope Webhook Log", "Periskope Reply Reminder"]
 LOG_ROW = {"doctype": "Periskope Webhook Log", "event_type": "message.created", "signature_valid": 1}
 SYSTEM_MANAGER = "test@example.com"
+
+
+class TestTranslatableMessages(FrappeTestCase):
+	"""User-facing text must go through _() so it can be translated."""
+
+	def test_the_webhook_rejection_message_is_translatable(self):
+		from periskope_connector.api import webhook
+
+		frappe.local.request = MagicMock()
+		frappe.local.request.get_data.return_value = b"{}"
+		frappe.local.request_ip = "203.0.113.8"
+		with (
+			patch.object(webhook, "_", lambda text: f"[translated] {text}"),
+			patch.object(webhook, "_has_valid_signature", lambda raw: False),
+		):
+			with self.assertRaises(frappe.AuthenticationError) as raised:
+				webhook.receive()
+		self.assertIn("[translated] Invalid signature", str(raised.exception))
+
+	def test_ai_error_messages_are_translatable(self):
+		import anthropic
+
+		bad_key = anthropic.AuthenticationError("nope", response=MagicMock(status_code=401), body=None)
+		with patch.object(classifier, "_", lambda text: f"[translated] {text}"):
+			self.assertEqual(
+				classifier.describe_error(bad_key), "[translated] The AI provider rejected the API key"
+			)
+			server = anthropic.InternalServerError("oops", response=MagicMock(status_code=500), body=None)
+			self.assertEqual(
+				classifier.describe_error(server), "[translated] The AI provider returned HTTP 500: oops"
+			)
 
 
 class TestSystemWrites(FrappeTestCase):

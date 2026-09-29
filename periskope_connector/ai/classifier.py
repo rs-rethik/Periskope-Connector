@@ -290,15 +290,15 @@ def describe_error(e: Exception) -> str:
 	import anthropic
 
 	if isinstance(e, anthropic.AuthenticationError | anthropic.PermissionDeniedError):
-		return "The AI provider rejected the API key"
+		return _("The AI provider rejected the API key")
 	if isinstance(e, anthropic.NotFoundError):
-		return "The AI provider does not know this model name or address"
+		return _("The AI provider does not know this model name or address")
 	if isinstance(e, anthropic.RateLimitError):
-		return "AI provider rate limit or balance reached, will retry"
+		return _("AI provider rate limit or balance reached, will retry")
 	if isinstance(e, anthropic.APIConnectionError):
-		return "Could not reach the AI provider (check the AI API Address)"
+		return _("Could not reach the AI provider (check the AI API Address)")
 	if isinstance(e, anthropic.APIStatusError):
-		return f"The AI provider returned HTTP {e.status_code}: {str(e.message)[:150]}"
+		return _("The AI provider returned HTTP {0}: {1}").format(e.status_code, str(e.message)[:150])
 	return str(e)[:300]
 
 
