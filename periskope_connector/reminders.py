@@ -188,10 +188,34 @@ def close(reminder, now: datetime):
 		frappe.db.set_value("ToDo", reminder.todo, "status", "Closed")
 
 
-def run(now: datetime | None = None) -> dict:
-	"""Scheduler entry point (every 10 minutes). Returns counts, handy for testing."""
+def _check_chat(chat_id: str, messages: list, cfg, now: datetime, stats: dict):
+	"""Create, escalate or close the reminder of one chat."""
+	pending = unanswered(messages)
+	reminder = _open_reminder(chat_id)
+
+	if not pending:
+		if reminder:
+			close(reminder, now)
+			stats["closed"] += 1
+		return
+
+	if not reminder:
+		waited = working_seconds(pending[0].message_timestamp, now, cfg) / 3600
+		if waited >= cfg.remind_after:
+			rep = next((m.rep for m in reversed(messages) if m.rep), None)
+			create_reminder(chat_id, pending, rep, cfg, now, waited)
+			stats["todos"] += 1
+	elif reminder.status == "Open":
+		since_todo = working_seconds(get_datetime(reminder.reminded_on), now, cfg) / 3600
+		if since_todo >= cfg.escalate_after:
+			waited = working_seconds(get_datetime(reminder.waiting_since), now, cfg) / 3600
+			if escalate(reminder, cfg, now, waited):
+				stats["escalated"] += 1
+
+
+def _run(now: datetime | None) -> dict:
 	cfg = get_config()
-	stats = {"todos": 0, "escalated": 0, "closed": 0}
+	stats = {"todos": 0, "escalated": 0, "closed": 0, "errors": 0}
 	if not cfg.enabled:
 		return {**stats, "skipped": "reminders are off"}
 	now = now or now_datetime()
@@ -224,25 +248,26 @@ def run(now: datetime | None = None) -> dict:
 	for chat_id, messages in chats.items():
 		if messages[0].is_group and not cfg.groups:
 			continue
-		pending = unanswered(messages)
-		reminder = _open_reminder(chat_id)
-
-		if not pending:
-			if reminder:
-				close(reminder, now)
-				stats["closed"] += 1
-			continue
-
-		if not reminder:
-			waited = working_seconds(pending[0].message_timestamp, now, cfg) / 3600
-			if waited >= cfg.remind_after:
-				rep = next((m.rep for m in reversed(messages) if m.rep), None)
-				create_reminder(chat_id, pending, rep, cfg, now, waited)
-				stats["todos"] += 1
-		elif reminder.status == "Open":
-			since_todo = working_seconds(get_datetime(reminder.reminded_on), now, cfg) / 3600
-			if since_todo >= cfg.escalate_after:
-				waited = working_seconds(get_datetime(reminder.waiting_since), now, cfg) / 3600
-				if escalate(reminder, cfg, now, waited):
-					stats["escalated"] += 1
+		# One chat failing (for example the ToDo cannot be saved) must not stop the other chats,
+		# and must not leave half of its own work behind.
+		frappe.db.savepoint("periskope_reminder_chat")
+		try:
+			_check_chat(chat_id, messages, cfg, now, stats)
+		except Exception:
+			frappe.db.rollback(save_point="periskope_reminder_chat")
+			frappe.log_error(title=f"Periskope: reply reminder failed for chat {chat_id}")
+			stats["errors"] += 1
 	return stats
+
+
+def run(now: datetime | None = None) -> dict:
+	"""Scheduler entry point (every 10 minutes). Returns counts, handy for testing.
+
+	A failure is written to the Error Log with its traceback and then raised again, so it also
+	shows as failed in the Scheduled Job Log (and to the user on "Check Reply Reminders Now").
+	"""
+	try:
+		return _run(now)
+	except Exception:
+		frappe.log_error(title="Periskope: reply reminder check failed")
+		raise

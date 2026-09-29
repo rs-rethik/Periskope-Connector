@@ -190,6 +190,44 @@ class TestRun(FrappeTestCase):
 		self.config = cfg(groups=True)
 		self.assertEqual(reminders.run(at(0, 10, 30))["todos"], 1)
 
+	def test_one_failing_chat_does_not_stop_the_others_or_leave_half_its_work(self):
+		bad_chat, good_chat = "919600000001@c.us", "919600000002@c.us"
+		self.add(at(0, 9), chat=bad_chat)
+		self.add(at(0, 9), chat=good_chat)
+		real = reminders.create_reminder
+
+		def flaky(chat_id, *args, **kwargs):
+			if chat_id == bad_chat:
+				# save the ToDo, then fail before the reminder row: this half must be undone
+				frappe.get_doc(
+					{"doctype": "ToDo", "description": "half done", "reference_type": "Periskope Message"}
+				).insert(ignore_permissions=True)
+				raise RuntimeError("cannot save the reminder")
+			return real(chat_id, *args, **kwargs)
+
+		with (
+			patch.object(reminders, "create_reminder", flaky),
+			patch.object(frappe, "log_error") as log_error,
+		):
+			stats = reminders.run(at(0, 10, 30))
+
+		self.assertEqual((stats["todos"], stats["errors"]), (1, 1))
+		log_error.assert_called_once()
+		self.assertIn(bad_chat, log_error.call_args.kwargs["title"])
+		self.assertEqual(self.reminders(bad_chat), [])
+		self.assertEqual(len(self.reminders(good_chat)), 1)
+		self.assertFalse(frappe.db.exists("ToDo", {"description": "half done"}))
+
+	def test_an_unexpected_failure_is_logged_and_raised_again(self):
+		with (
+			patch.object(reminders, "get_config", side_effect=RuntimeError("settings unreadable")),
+			patch.object(frappe, "log_error") as log_error,
+		):
+			with self.assertRaises(RuntimeError):
+				reminders.run(at(0, 10))
+		log_error.assert_called_once()
+		self.assertIn("reply reminder check failed", log_error.call_args.kwargs["title"])
+
 	def test_disabled_does_nothing(self):
 		self.config = cfg(enabled=False)
 		self.add(at(0, 9))

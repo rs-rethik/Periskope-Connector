@@ -163,13 +163,18 @@ function check_reminders(frm) {
 					});
 					return;
 				}
+				let message = __(
+					"ToDos created: {0}<br>Managers emailed: {1}<br>Closed (rep replied): {2}",
+					[s.todos, s.escalated, s.closed]
+				);
+				if (s.errors) {
+					message +=
+						"<br>" + __("Chats that failed: {0}. See the Error Log.", [s.errors]);
+				}
 				frappe.msgprint({
 					title: __("Reply reminders checked"),
-					message: __(
-						"ToDos created: {0}<br>Managers emailed: {1}<br>Closed (rep replied): {2}",
-						[s.todos, s.escalated, s.closed]
-					),
-					indicator: "green",
+					message: message,
+					indicator: s.errors ? "orange" : "green",
 				});
 			},
 		});

@@ -533,11 +533,20 @@ def _classify_and_commit(name: str):
 
 
 def retry_failed_classifications():
-	"""Hourly scheduler: pick up Pending/Failed messages, a limited batch per run."""
-	if not _ready_to_run():
-		return
-	for name in _pending(RETRY_BATCH):
-		_classify_and_commit(name)
+	"""Hourly scheduler: pick up Pending/Failed messages, a limited batch per run.
+
+	A single failing message is handled by _classify_and_commit(). Anything else (for example
+	the database being unreachable) is written to the Error Log and raised again, so it also
+	shows as failed in the Scheduled Job Log.
+	"""
+	try:
+		if not _ready_to_run():
+			return
+		for name in _pending(RETRY_BATCH):
+			_classify_and_commit(name)
+	except Exception:
+		frappe.log_error(title="Periskope: hourly AI tagging retry failed")
+		raise
 
 
 def classify_pending(limit: int = 500):

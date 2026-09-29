@@ -327,6 +327,25 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(self._status(first.name).classification_status, "Failed")
 		self.assertEqual(self._status(second.name).classification_status, "Done")
 
+	def test_the_hourly_job_logs_and_raises_an_unexpected_failure(self):
+		with (
+			patch.object(classifier, "_ready_to_run", lambda: True),
+			patch.object(classifier, "_pending", side_effect=RuntimeError("database unreachable")),
+			patch.object(frappe, "log_error") as log_error,
+		):
+			with self.assertRaises(RuntimeError):
+				classifier.retry_failed_classifications()
+		log_error.assert_called_once()
+		self.assertIn("hourly AI tagging retry failed", log_error.call_args.kwargs["title"])
+
+	def test_the_hourly_job_does_nothing_when_tagging_is_off(self):
+		with (
+			patch.object(classifier, "_ready_to_run", lambda: False),
+			patch.object(classifier, "_pending") as pending,
+		):
+			classifier.retry_failed_classifications()
+		pending.assert_not_called()
+
 	def test_a_message_that_keeps_failing_stops_being_retried(self):
 		bad = self._message("Send the price list", message_id="keeps_failing")
 		self.assertIn(bad.name, classifier._pending(100000))
