@@ -10,6 +10,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
+from periskope_connector.system import save_as_system
 from periskope_connector.text_rules import analysis_skip_reason
 
 DEFAULT_MODEL = "claude-haiku-4-5"
@@ -429,7 +430,7 @@ def apply_result(doc, result: dict, tags: list[dict]):
 	doc.classification_status = "Done"
 	doc.classified_at = now_datetime()
 	doc.classification_error = ""
-	doc.save(ignore_permissions=True)
+	save_as_system(doc)
 
 
 def _mark(name: str, **values):

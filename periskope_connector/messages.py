@@ -6,6 +6,7 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
+from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason
 
 MESSAGE_CREATED = "message.created"
@@ -91,7 +92,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		}
 	)
 	try:
-		doc.insert(ignore_permissions=True)
+		insert_as_system(doc)
 	except frappe.DuplicateEntryError:
 		# Periskope can deliver the same event twice at once; the unique key catches it.
 		frappe.db.rollback()

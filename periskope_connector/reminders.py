@@ -17,6 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, flt, get_datetime, get_time, get_url_to_form, now_datetime, today
 
+from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import is_acknowledgement
 
 LOOKBACK_DAYS = 7
@@ -135,8 +136,8 @@ def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: date
 			"date": today(),
 			"status": "Open",
 		}
-	).insert(ignore_permissions=True)
-	return frappe.get_doc(
+	).insert()
+	return insert_as_system(
 		{
 			"doctype": "Periskope Reply Reminder",
 			"chat_id": chat_id,
@@ -150,7 +151,7 @@ def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: date
 			"message_preview": (last.body or "")[:300],
 			"todo": todo.name,
 		}
-	).insert(ignore_permissions=True)
+	)
 
 
 def escalate(reminder, cfg, now: datetime, hours: float) -> bool:

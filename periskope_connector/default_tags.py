@@ -98,9 +98,7 @@ LINK_FIELDS = {
 
 def _ensure_whatsapp_source():
 	if frappe.db.exists("DocType", "CRM Lead Source") and not frappe.db.exists("CRM Lead Source", "WhatsApp"):
-		frappe.get_doc({"doctype": "CRM Lead Source", "source_name": "WhatsApp"}).insert(
-			ignore_permissions=True
-		)
+		frappe.get_doc({"doctype": "CRM Lead Source", "source_name": "WhatsApp"}).insert()
 
 
 def _existing_link_values() -> dict[str, set[str]]:

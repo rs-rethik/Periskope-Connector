@@ -6,6 +6,7 @@ import frappe
 from frappe.rate_limiter import rate_limit
 
 from periskope_connector.messages import MESSAGE_CREATED
+from periskope_connector.system import insert_as_system
 
 # Far above what a few linked phones send, so it only stops floods.
 RATE_LIMIT = 3000
@@ -34,20 +35,17 @@ def _has_valid_signature(raw: bytes) -> bool:
 
 
 def _log(payload: dict, raw: bytes) -> str:
-	return (
-		frappe.get_doc(
-			{
-				"doctype": "Periskope Webhook Log",
-				"event_type": payload.get("event_type"),
-				"org_id": payload.get("org_id"),
-				"event_timestamp": str(payload.get("timestamp") or ""),
-				"signature_valid": 1,
-				"payload": raw.decode("utf-8", errors="replace")[:100000],
-			}
-		)
-		.insert(ignore_permissions=True)
-		.name
-	)
+	# Only reached after the HMAC signature has been verified; the caller is a guest.
+	return insert_as_system(
+		{
+			"doctype": "Periskope Webhook Log",
+			"event_type": payload.get("event_type"),
+			"org_id": payload.get("org_id"),
+			"event_timestamp": str(payload.get("timestamp") or ""),
+			"signature_valid": 1,
+			"payload": raw.decode("utf-8", errors="replace")[:100000],
+		}
+	).name
 
 
 @frappe.whitelist(allow_guest=True)
