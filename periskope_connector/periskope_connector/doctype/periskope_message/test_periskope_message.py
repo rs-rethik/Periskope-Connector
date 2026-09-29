@@ -37,6 +37,27 @@ class TestPeriskopeMessage(FrappeTestCase):
 		rep.start()
 		self.addCleanup(rep.stop)
 
+	def _indexes(self):
+		"""{index name: [columns in order]} for the message table."""
+		result = {}
+		for row in frappe.db.sql("show index from `tabPeriskope Message`", as_dict=True):
+			result.setdefault(row.Key_name, []).append((row.Seq_in_index, row.Column_name))
+		return {name: [c for _, c in sorted(cols)] for name, cols in result.items()}
+
+	def test_timestamp_and_chat_indexes_exist(self):
+		indexes = list(self._indexes().values())
+		self.assertIn(["message_timestamp"], indexes)  # reminders, list view, workspace card/chart
+		self.assertIn(["chat_id", "message_timestamp"], indexes)  # the AI's chat-history lookup
+
+	def test_index_hook_can_run_again_safely(self):
+		from periskope_connector.periskope_connector.doctype.periskope_message.periskope_message import (
+			on_doctype_update,
+		)
+
+		before = self._indexes()
+		on_doctype_update()  # migrate runs this every time
+		self.assertEqual(self._indexes(), before)
+
 	def test_incoming_one_to_one(self):
 		name = messages.create_message(_event())
 		doc = frappe.get_doc("Periskope Message", name)
