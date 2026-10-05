@@ -4,7 +4,15 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
-periskope_connector.patches.create_default_tags
 periskope_connector.patches.set_default_ai_instructions
 periskope_connector.patches.skip_non_text_messages
 periskope_connector.patches.skip_low_value_messages
+periskope_connector.patches.set_group_names
+periskope_connector.patches.link_messages_to_crm
+periskope_connector.patches.add_timeline_comments
+periskope_connector.patches.move_to_ai_categories
+periskope_connector.patches.align_ai_timing_and_severity
+periskope_connector.patches.setup_v2_and_backfill_phones
+periskope_connector.patches.migrate_settings_v2
+periskope_connector.patches.remove_legacy_tag_doctypes
+periskope_connector.patches.backfill_contacts

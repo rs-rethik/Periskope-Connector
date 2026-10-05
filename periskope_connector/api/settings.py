@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 
 from periskope_connector.client import request
@@ -80,9 +81,10 @@ def sync_phones() -> list[dict]:
 
 def _save_phones(phones: list[dict]) -> list[dict]:
 	settings = frappe.get_doc("Periskope Settings")
-	reps = {row.phone_id: row.rep for row in settings.phones}
+	assigned = {row.phone_id: (row.rep, row.sales_person) for row in settings.phones}
 	settings.set("phones", [])
 	for phone in phones:
+		rep, sales_person = assigned.get(phone.get("phone_id"), (None, None))
 		settings.append(
 			"phones",
 			{
@@ -91,8 +93,37 @@ def _save_phones(phones: list[dict]) -> list[dict]:
 				"number": (phone.get("org_phone") or "").split("@")[0],
 				"wa_state": phone.get("wa_state"),
 				"is_ready": 1 if phone.get("is_ready") else 0,
-				"rep": reps.get(phone.get("phone_id")),
+				"rep": rep,
+				"sales_person": sales_person,
 			},
 		)
 	settings.save()
 	return [row.as_dict() for row in settings.phones]
+
+
+CATEGORIES = [
+	"quality_complaint",
+	"delivery_delay",
+	"payment_issue",
+	"sample_request",
+	"order_or_enquiry",
+	"general",
+]
+
+
+@frappe.whitelist()
+def set_correct_category(message: str, category: str) -> None:
+	"""A sales manager marks the category the AI should have given. Kept for the later learning loop"""
+	frappe.only_for(("Sales Manager", "System Manager"))
+	if category not in CATEGORIES:
+		frappe.throw(_("Category must be one of: {0}").format(", ".join(CATEGORIES)))
+	frappe.db.set_value("Periskope Message", message, "correct_category", category)
+
+
+@frappe.whitelist()
+def get_health() -> dict:
+	"""The live figures for the Health tab of the settings page."""
+	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	from periskope_connector.health import get_health as figures
+
+	return figures()

@@ -1,4 +1,11 @@
 frappe.ui.form.on("Periskope Settings", {
+	onload(frm) {
+		// Offer Jarvis only when the Jarvis app is installed on this site.
+		const providers = (frm.doc.__onload && frm.doc.__onload.ai_providers) || ["Direct API"];
+		frm.set_df_property("ai_provider", "options", providers.join("\n"));
+		if (!providers.includes(frm.doc.ai_provider)) frm.set_value("ai_provider", providers[0]);
+	},
+
 	refresh(frm) {
 		// Phones come from Periskope via Sync Phones; users only pick the sales rep.
 		const grid = frm.get_field("phones").grid;
@@ -37,6 +44,8 @@ frappe.ui.form.on("Periskope Settings", {
 			() => frappe.utils.copy_to_clipboard(frm.doc.webhook_url),
 			__("Actions")
 		);
+
+		refresh_health(frm);
 	},
 });
 
@@ -164,8 +173,8 @@ function check_reminders(frm) {
 					return;
 				}
 				let message = __(
-					"ToDos created: {0}<br>Managers emailed: {1}<br>Closed (rep replied): {2}",
-					[s.todos, s.escalated, s.closed]
+					"Reps notified: {0}<br>ToDos + managers emailed: {1}<br>MD emailed: {2}<br>Closed (rep replied): {3}",
+					[s.notified, s.escalated, s.md_emailed, s.closed]
 				);
 				if (s.errors) {
 					message +=
@@ -181,12 +190,30 @@ function check_reminders(frm) {
 	});
 }
 
+// The Health tab's read-only fields are filled live, so they can never go stale.
+function refresh_health(frm) {
+	if (!frm.fields_dict.health_last_webhook) return;
+	frappe.call({
+		method: "periskope_connector.api.settings.get_health",
+		callback(r) {
+			const h = r.message || {};
+			frm.set_value("health_last_webhook", `${h.last_webhook || "-"}`);
+			frm.set_value("health_last_ai_run", `${h.last_ai_run || "-"}`);
+			frm.set_value("health_pending", `${h.pending ?? 0}`);
+			frm.set_value("health_failed", `${h.failed ?? 0}`);
+			frm.set_value("health_unprocessed", `${h.unprocessed ?? 0}`);
+			frm.set_value("health_month_tokens", `${h.month_tokens ?? 0}`);
+			frm.set_value("health_phones", h.phones || "-");
+		},
+	});
+}
+
 function test_ai(frm) {
 	with_saved(frm, () => {
 		frappe.call({
 			method: "periskope_connector.api.settings.test_ai_connection",
 			freeze: true,
-			freeze_message: __("Contacting Claude..."),
+			freeze_message: __("Contacting the AI..."),
 			callback(r) {
 				if (!r.message) return;
 				frappe.show_alert({

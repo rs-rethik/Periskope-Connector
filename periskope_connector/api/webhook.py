@@ -60,6 +60,14 @@ def receive() -> dict:
 	"""
 	raw = frappe.request.get_data() or b""
 
+	if not frappe.db.get_single_value("Periskope Settings", "enabled"):
+		# The master switch is off (or was never turned on). Fail the call with 503 rather than
+		# silently dropping: if the platform retries, the message is not lost, and the webhook
+		# dashboard shows why nothing is being stored.
+		frappe.logger("periskope_connector").info("Rejected a webhook call: integration is disabled")
+		frappe.local.response["http_status_code"] = 503
+		frappe.throw(_("Integration is disabled"), frappe.ValidationError)
+
 	if not _has_valid_signature(raw):
 		frappe.logger("periskope_connector").warning(
 			"Rejected a Periskope webhook call with a missing or invalid signature "
