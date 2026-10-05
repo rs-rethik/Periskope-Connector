@@ -18,7 +18,7 @@
 <div align="center">
 	<a target="_blank" href="#license" title="License: MIT"><img src="https://img.shields.io/badge/License-MIT-success.svg"></a>
 	<a target="_blank" href="https://www.python.org/downloads/" title="Python version"><img src="https://img.shields.io/badge/python-%3E=_3.10-success.svg"></a>
-	<a target="_blank" href="https://frappeframework.com" title="Frappe version"><img src="https://img.shields.io/badge/frappe-v15-success.svg"></a>
+	<a target="_blank" href="https://frappeframework.com" title="Frappe version"><img src="https://img.shields.io/badge/frappe-v15%20%7C%20v16-success.svg"></a>
 	<a target="_blank" href="https://docs.periskope.app" title="Periskope docs"><img src="https://img.shields.io/badge/docs-Periskope-success.svg"></a>
 </div>
 
@@ -73,7 +73,7 @@ The webhook endpoint accepts calls from anyone but only acts on a request whose 
 
 Requirements:
 
-- Frappe v15 with [Frappe CRM](https://github.com/frappe/crm) on the site (ERPNext optional: it only adds the Sales Person link and Supplier/Employee ignore lookups)
+- Frappe v15 or v16 with [Frappe CRM](https://github.com/frappe/crm) on the site (ERPNext optional: it only adds the Sales Person link and Supplier/Employee ignore lookups)
 - A [Periskope](https://periskope.app) account with at least one linked WhatsApp number
 - An [Anthropic API key](https://console.anthropic.com) for AI tagging (optional; capture, linking and escalation work without it)
 - A site that Periskope can reach over the internet for webhooks
