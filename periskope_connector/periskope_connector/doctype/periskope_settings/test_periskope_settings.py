@@ -75,8 +75,19 @@ class TestPeriskopeSettings(FrappeTestCase):
 		frappe.local.request = MagicMock()
 		frappe.local.request.get_data.return_value = body
 		frappe.local.request_ip = "203.0.113.7"  # documentation-range address; the rate limiter needs an IP
-		with patch.object(
-			webhook.frappe, "get_request_header", side_effect=lambda k, d=None: headers.get(k, d)
+		real_single = frappe.db.get_single_value
+
+		def single(doctype, field, *a, **kw):
+			# the master switch must not turn these signature tests into 503s on a fresh site
+			if doctype == "Periskope Settings" and field == "enabled":
+				return 1
+			return real_single(doctype, field, *a, **kw)
+
+		with (
+			patch.object(
+				webhook.frappe, "get_request_header", side_effect=lambda k, d=None: headers.get(k, d)
+			),
+			patch.object(frappe.db, "get_single_value", side_effect=single),
 		):
 			return webhook.receive()
 

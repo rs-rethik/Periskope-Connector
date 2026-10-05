@@ -1,0 +1,176 @@
+{
+ "actions": [],
+ "autoname": "field:phone",
+ "creation": "2026-10-01 09:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "phone",
+  "phone_key",
+  "column_activity",
+  "display_name",
+  "last_category",
+  "message_count",
+  "first_message_at",
+  "last_message_at",
+  "reps",
+  "section_link",
+  "linked_lead",
+  "linked_deal",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "New",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "New\nLinked\nLead Created\nIgnored (Personal)\nIgnored (Vendor)\nIgnored (Spam)\nIgnored (Internal)"
+  },
+  {
+   "description": "The customer's WhatsApp number with country code, no '+' (as WhatsApp stores it).",
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "WhatsApp Number",
+   "reqd": 1,
+   "set_only_once": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "phone_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Phone Key (last 10)",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_activity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_category",
+   "fieldtype": "Select",
+   "label": "Latest AI Category",
+   "options": "quality_complaint\ndelivery_delay\npayment_issue\nsample_request\norder_or_enquiry\ngeneral",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Messages",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_message_at",
+   "fieldtype": "Datetime",
+   "label": "First Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Message",
+   "read_only": 1
+  },
+  {
+   "description": "The rep(s) whose company number this customer wrote to.",
+   "fieldname": "reps",
+   "fieldtype": "Data",
+   "label": "Rep(s)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_link",
+   "fieldtype": "Section Break",
+   "label": "CRM Link"
+  },
+  {
+   "fieldname": "linked_lead",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Linked Lead",
+   "options": "CRM Lead",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_deal",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Linked Deal",
+   "options": "CRM Deal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-01 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Contact",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "WhatsApp Manager",
+   "share": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "display_name"
+}

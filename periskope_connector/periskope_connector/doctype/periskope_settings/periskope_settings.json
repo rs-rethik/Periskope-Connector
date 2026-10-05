@@ -20,6 +20,7 @@
   "tab_ai",
   "section_ai",
   "enable_classification",
+  "ai_provider",
   "anthropic_api_key",
   "ai_business_context",
   "section_prompt",
@@ -31,17 +32,63 @@
   "column_ai_options",
   "context_messages",
   "classify_group_chats",
+  "tab_capture",
+  "section_capture",
+  "create_leads_from_enquiries",
+  "section_ignore",
+  "ignore_numbers",
+  "column_ignore",
+  "ignore_suppliers",
+  "ignore_employees",
+  "section_digest",
+  "digest_recipients",
   "tab_reminders",
   "section_reminders",
   "enable_reply_reminders",
   "working_hours_start",
   "working_hours_end",
   "working_days",
+  "holiday_list",
   "column_reminders",
-  "remind_after_hours",
-  "escalate_after_hours",
+  "sla_l1_hours",
+  "sla_l2_hours",
+  "sla_l3_hours",
+  "high_severity_minutes",
   "alert_emails",
+  "escalation_emails",
   "remind_group_chats",
+  "section_ack",
+  "ack_words",
+  "tab_keywords",
+  "section_keywords",
+  "keyword_rules",
+  "column_keywords",
+  "keyword_dedupe_hours",
+  "tab_data",
+  "section_ai_cost",
+  "ai_max_tokens",
+  "min_length",
+  "column_budget",
+  "ai_monthly_budget_tokens",
+  "section_retention",
+  "raw_payload_retention_days",
+  "body_retention_days",
+  "download_media",
+  "tab_crm",
+  "section_crm",
+  "comment_mode",
+  "burst_minutes",
+  "reps_see_own_numbers",
+  "tab_health",
+  "section_health",
+  "health_last_webhook",
+  "health_last_ai_run",
+  "health_pending",
+  "health_failed",
+  "column_health",
+  "health_unprocessed",
+  "health_month_tokens",
+  "health_phones",
   "tab_advanced",
   "base_url"
  ],
@@ -53,6 +100,7 @@
   },
   {
    "default": "0",
+   "description": "The master switch. When off, the webhook still answers Periskope (so it does not retry) but nothing is stored.",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "label": "Enable Periskope Integration"
@@ -133,10 +181,18 @@
    "label": "Tag New Messages with AI"
   },
   {
+   "description": "<b>Direct API</b> sends messages to Anthropic (or Z.ai) with your own key. <b>Jarvis</b> (shown only when the Jarvis app is installed) uses the model already set up there, so no key is needed here.",
+   "fieldname": "ai_provider",
+   "fieldtype": "Select",
+   "label": "AI Provider",
+   "options": "Direct API\nJarvis"
+  },
+  {
    "description": "Paste the API key of your AI provider: Anthropic (console.anthropic.com) for Claude models, or Z.ai for GLM models. Message text is sent to that provider to be tagged. Then use <b>Actions &gt; Test AI Connection</b>. For GLM, also set <b>AI API Address</b> under AI Options to <b>https://api.z.ai/api/anthropic</b>.",
    "fieldname": "anthropic_api_key",
    "fieldtype": "Password",
-   "label": "AI API Key"
+   "label": "AI API Key",
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
   },
   {
    "fieldname": "ai_business_context",
@@ -160,29 +216,31 @@
    "label": "Improve Instructions with AI"
   },
   {
+   "collapsible": 1,
    "fieldname": "section_ai_options",
    "fieldtype": "Section Break",
-   "label": "AI Options",
-   "collapsible": 1
+   "label": "AI Options"
   },
   {
    "default": "claude-haiku-4-5",
    "fieldname": "ai_model",
    "fieldtype": "Select",
    "label": "AI Model",
-   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air"
+   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air",
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
   },
   {
    "fieldname": "ai_base_url",
    "fieldtype": "Data",
-   "label": "AI API Address"
+   "label": "AI API Address",
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
   },
   {
    "fieldname": "column_ai_options",
    "fieldtype": "Column Break"
   },
   {
-   "default": "10",
+   "default": "5",
    "fieldname": "context_messages",
    "fieldtype": "Int",
    "label": "Earlier Messages Given to the AI"
@@ -192,6 +250,64 @@
    "fieldname": "classify_group_chats",
    "fieldtype": "Check",
    "label": "Also Tag Group Chats"
+  },
+  {
+   "fieldname": "tab_capture",
+   "fieldtype": "Tab Break",
+   "label": "Lead Capture"
+  },
+  {
+   "fieldname": "section_capture",
+   "fieldtype": "Section Break",
+   "label": "New Enquiries from Unknown Numbers"
+  },
+  {
+   "default": "0",
+   "description": "When the AI tags a customer's message in a 1-to-1 chat as <b>New Enquiry</b> and the number is not on any lead or deal, a CRM Lead is created for the rep of that phone. Every unknown number appears in the <b>Periskope Contact</b> queue either way, where a manager can create or link a lead with one click.",
+   "fieldname": "create_leads_from_enquiries",
+   "fieldtype": "Check",
+   "label": "Create Leads from New Enquiries"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_ignore",
+   "fieldtype": "Section Break",
+   "label": "Numbers to Ignore"
+  },
+  {
+   "description": "One WhatsApp number per line (with country code). Personal, staff and vendor numbers here get no Contact queue entry and no lead.",
+   "fieldname": "ignore_numbers",
+   "fieldtype": "Small Text",
+   "label": "Ignore List"
+  },
+  {
+   "fieldname": "column_ignore",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Numbers found on an ERPNext Supplier's contact are ignored (needs ERPNext).",
+   "fieldname": "ignore_suppliers",
+   "fieldtype": "Check",
+   "label": "Ignore Supplier Numbers"
+  },
+  {
+   "default": "0",
+   "description": "Numbers found on an ERPNext Employee record are ignored (needs ERPNext).",
+   "fieldname": "ignore_employees",
+   "fieldtype": "Check",
+   "label": "Ignore Employee Numbers"
+  },
+  {
+   "fieldname": "section_digest",
+   "fieldtype": "Section Break",
+   "label": "Daily Digest"
+  },
+  {
+   "description": "Who gets the daily email of new unmatched contacts (comma-separated). Empty uses the Manager Emails on the Reply Reminders tab.",
+   "fieldname": "digest_recipients",
+   "fieldtype": "Small Text",
+   "label": "Digest Recipients"
   },
   {
    "fieldname": "tab_reminders",
@@ -229,31 +345,249 @@
    "options": "Monday to Saturday\nMonday to Friday\nEvery day"
   },
   {
+   "description": "Holidays (for example the Diwali shutdown) do not count as waiting time.",
+   "fieldname": "holiday_list",
+   "fieldtype": "Link",
+   "label": "Holiday List",
+   "options": "Holiday List"
+  },
+  {
    "fieldname": "column_reminders",
    "fieldtype": "Column Break"
   },
   {
    "default": "1",
-   "fieldname": "remind_after_hours",
+   "description": "L1: the rep gets a notification (bell).",
+   "fieldname": "sla_l1_hours",
    "fieldtype": "Float",
-   "label": "Create ToDo After (working hours)"
+   "label": "L1: Notify Rep After (working hours)"
   },
   {
-   "default": "2",
-   "fieldname": "escalate_after_hours",
+   "default": "3",
+   "description": "L2: the rep gets a ToDo and the managers an email.",
+   "fieldname": "sla_l2_hours",
    "fieldtype": "Float",
-   "label": "Email Managers After (more working hours)"
+   "label": "L2: ToDo + Managers Email After"
+  },
+  {
+   "default": "8",
+   "description": "L3: the escalation list (the MD) gets an email.",
+   "fieldname": "sla_l3_hours",
+   "fieldtype": "Float",
+   "label": "L3: Escalation Email After"
+  },
+  {
+   "default": "30",
+   "description": "A message tagged High severity that is still unanswered after this many minutes goes straight to L2 and the escalation list, without waiting for the SLA clock.",
+   "fieldname": "high_severity_minutes",
+   "fieldtype": "Int",
+   "label": "High-Severity Fast Path (minutes)"
   },
   {
    "fieldname": "alert_emails",
    "fieldtype": "Small Text",
-   "label": "Manager Emails"
+   "label": "Manager Emails (L2)"
+  },
+  {
+   "description": "Who is emailed at L3 (comma-separated). Empty uses the Manager Emails.",
+   "fieldname": "escalation_emails",
+   "fieldtype": "Small Text",
+   "label": "Escalation Emails (L3, the MD)"
   },
   {
    "default": "0",
    "fieldname": "remind_group_chats",
    "fieldtype": "Check",
    "label": "Include Group Chats"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_ack",
+   "fieldtype": "Section Break",
+   "label": "Messages That Need No Reply"
+  },
+  {
+   "description": "Comma-separated words that close a conversation ('ok', 'sari', 'seri', ...). Added to the built-in list.",
+   "fieldname": "ack_words",
+   "fieldtype": "Small Text",
+   "label": "Acknowledgement Words"
+  },
+  {
+   "fieldname": "tab_keywords",
+   "fieldtype": "Tab Break",
+   "label": "Keyword Alerts"
+  },
+  {
+   "fieldname": "section_keywords",
+   "fieldtype": "Section Break",
+   "label": "Alert Management on Keywords"
+  },
+  {
+   "description": "Checked on every incoming text message, independent of the AI. A rule sends nothing until it has recipients.",
+   "fieldname": "keyword_rules",
+   "fieldtype": "Table",
+   "label": "Keyword Rules",
+   "options": "Periskope Keyword Rule"
+  },
+  {
+   "fieldname": "column_keywords",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "6",
+   "description": "Two matches of the same rule in the same chat within this many hours send one alert.",
+   "fieldname": "keyword_dedupe_hours",
+   "fieldtype": "Int",
+   "label": "Dedupe Window (hours)"
+  },
+  {
+   "fieldname": "tab_data",
+   "fieldtype": "Tab Break",
+   "label": "Data & Cost"
+  },
+  {
+   "fieldname": "section_ai_cost",
+   "fieldtype": "Section Break",
+   "label": "AI Cost"
+  },
+  {
+   "default": "400",
+   "description": "Reply budget per classification. 400 fits the JSON answer with room; raise it (e.g. 4096) only for reasoning models.",
+   "fieldname": "ai_max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens per AI Call"
+  },
+  {
+   "default": "2",
+   "description": "Messages shorter than this are never sent to the AI.",
+   "fieldname": "min_length",
+   "fieldtype": "Int",
+   "label": "Minimum Message Length"
+  },
+  {
+   "fieldname": "column_budget",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Total tokens per calendar month. When reached, tagging pauses and the managers get an email. 0 = no budget.",
+   "fieldname": "ai_monthly_budget_tokens",
+   "fieldtype": "Int",
+   "label": "Monthly Token Budget"
+  },
+  {
+   "fieldname": "section_retention",
+   "fieldtype": "Section Break",
+   "label": "Retention & Media"
+  },
+  {
+   "default": "90",
+   "description": "The raw webhook payload of a message is cleared after this many days (0 = keep forever).",
+   "fieldname": "raw_payload_retention_days",
+   "fieldtype": "Int",
+   "label": "Keep Raw Payload (days)"
+  },
+  {
+   "default": "0",
+   "description": "Message text is cleared after this many days (0 = keep forever). Links, tags and summaries stay either way.",
+   "fieldname": "body_retention_days",
+   "fieldtype": "Int",
+   "label": "Keep Message Text (days)"
+  },
+  {
+   "default": "0",
+   "description": "Save WhatsApp attachments (images, documents, voice notes) as private Frappe Files, so they survive Periskope's expiring media paths.",
+   "fieldname": "download_media",
+   "fieldtype": "Check",
+   "label": "Download Attachments"
+  },
+  {
+   "fieldname": "tab_crm",
+   "fieldtype": "Tab Break",
+   "label": "CRM Visibility"
+  },
+  {
+   "fieldname": "section_crm",
+   "fieldtype": "Section Break",
+   "label": "WhatsApp in the Lead and Deal Timeline"
+  },
+  {
+   "default": "One per message",
+   "description": "'One per message' adds a comment to the lead or deal for every classified, non-general message. 'Burst' merges messages of the same chat within the window into one growing comment. 'Off' adds no comments.",
+   "fieldname": "comment_mode",
+   "fieldtype": "Select",
+   "label": "Timeline Comments",
+   "options": "One per message\nBurst\nOff"
+  },
+  {
+   "default": "30",
+   "depends_on": "eval:doc.comment_mode==\"Burst\"",
+   "fieldname": "burst_minutes",
+   "fieldtype": "Int",
+   "label": "Burst Window (minutes)"
+  },
+  {
+   "default": "0",
+   "description": "Let reps read the WhatsApp messages of the company numbers assigned to them in the phones table. Managers always see everything. Off keeps reps out (the pilot default).",
+   "fieldname": "reps_see_own_numbers",
+   "fieldtype": "Check",
+   "label": "Reps See Their Own Numbers"
+  },
+  {
+   "fieldname": "tab_health",
+   "fieldtype": "Tab Break",
+   "label": "Health"
+  },
+  {
+   "fieldname": "section_health",
+   "fieldtype": "Section Break",
+   "label": "System Health (live)"
+  },
+  {
+   "fieldname": "health_last_webhook",
+   "fieldtype": "Data",
+   "label": "Last Webhook Received",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_last_ai_run",
+   "fieldtype": "Data",
+   "label": "Last AI Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_pending",
+   "fieldtype": "Data",
+   "label": "Waiting to Be Tagged",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_failed",
+   "fieldtype": "Data",
+   "label": "Tagging Failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_health",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "health_unprocessed",
+   "fieldtype": "Data",
+   "label": "Unprocessed Webhook Logs",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_month_tokens",
+   "fieldtype": "Data",
+   "label": "AI Tokens This Month",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_phones",
+   "fieldtype": "Small Text",
+   "label": "Messages per Phone (24 h)",
+   "read_only": 1
   },
   {
    "fieldname": "tab_advanced",
@@ -271,7 +605,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-29 12:00:00.000000",
+ "modified": "2026-10-01 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",
@@ -284,6 +618,16 @@
    "print": 1,
    "read": 1,
    "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "WhatsApp Manager",
    "share": 1,
    "write": 1
   }

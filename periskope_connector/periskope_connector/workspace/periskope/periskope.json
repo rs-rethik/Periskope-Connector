@@ -6,8 +6,8 @@
    "label": "Messages per Day"
   },
   {
-   "chart_name": "Messages by Main Tag",
-   "label": "Messages by Main Tag"
+   "chart_name": "Messages by Category",
+   "label": "Messages by Category"
   },
   {
    "chart_name": "Messages by Sentiment",
@@ -18,7 +18,7 @@
    "label": "Messages by Severity"
   }
  ],
- "content": "[{\"id\":\"ph2HdrNum\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Overview</b></span>\",\"col\":12}},{\"id\":\"ph2Num0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Messages Today\",\"col\":4}},{\"id\":\"ph2Num1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Waiting for Rep Reply\",\"col\":4}},{\"id\":\"ph2Num2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"High and Critical Issues\",\"col\":4}},{\"id\":\"ph2Num3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Suggested New Leads\",\"col\":4}},{\"id\":\"ph2Num4\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Suggested Escalations\",\"col\":4}},{\"id\":\"ph2Num5\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"AI Tagging Failed\",\"col\":4}},{\"id\":\"ph2Sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph2Ch0\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages per Day\",\"col\":6}},{\"id\":\"ph2Ch1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Main Tag\",\"col\":6}},{\"id\":\"ph2Ch2\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Sentiment\",\"col\":6}},{\"id\":\"ph2Ch3\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Severity\",\"col\":6}},{\"id\":\"ph2Sp2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph1SHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"ph1ShSet1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Periskope Settings\",\"col\":3}},{\"id\":\"ph1ShTag1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Message Tags\",\"col\":3}},{\"id\":\"ph1ShMsg1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Messages\",\"col\":3}},{\"id\":\"ph3ShRem1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Reply Reminders\",\"col\":3}},{\"id\":\"ph1ShLog1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Webhook Logs\",\"col\":3}},{\"id\":\"ph1Space1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph1CHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Periskope</b></span>\",\"col\":12}},{\"id\":\"ph1CardSet\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup\",\"col\":6}},{\"id\":\"ph1CardMsg\",\"type\":\"card\",\"data\":{\"card_name\":\"WhatsApp Messages\",\"col\":6}}]",
+ "content": "[{\"id\":\"ph2HdrNum\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Overview</b></span>\",\"col\":12}},{\"id\":\"ph2Num0\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Messages Today\",\"col\":4}},{\"id\":\"ph2Num1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Waiting for Rep Reply\",\"col\":4}},{\"id\":\"ph2Num2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"High Severity Issues\",\"col\":4}},{\"id\":\"ph2Num3\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"New Enquiries\",\"col\":4}},{\"id\":\"ph2Num4\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Complaints and Payment Issues\",\"col\":4}},{\"id\":\"ph2Num5\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"AI Tagging Failed\",\"col\":4}},{\"id\":\"ph2Sp1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph2Ch0\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages per Day\",\"col\":6}},{\"id\":\"ph2Ch1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Category\",\"col\":6}},{\"id\":\"ph2Ch2\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Sentiment\",\"col\":6}},{\"id\":\"ph2Ch3\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Messages by Severity\",\"col\":6}},{\"id\":\"ph2Sp2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph1SHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"id\":\"ph1ShSet1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Periskope Settings\",\"col\":3}},{\"id\":\"ph1ShMsg1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Messages\",\"col\":3}},{\"id\":\"ph3ShRem1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Reply Reminders\",\"col\":3}},{\"id\":\"ph1ShLog1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Webhook Logs\",\"col\":3}},{\"id\":\"ph1Space1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"ph1CHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Periskope</b></span>\",\"col\":12}},{\"id\":\"ph1CardSet\",\"type\":\"card\",\"data\":{\"card_name\":\"Setup\",\"col\":6}},{\"id\":\"ph1CardMsg\",\"type\":\"card\",\"data\":{\"card_name\":\"WhatsApp Messages\",\"col\":6}}]",
  "creation": "2026-09-29 14:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -35,7 +35,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Setup",
-   "link_count": 2,
+   "link_count": 1,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -47,16 +47,6 @@
    "link_to": "Periskope Settings",
    "link_type": "DocType",
    "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope Message Tag",
-   "link_count": 0,
-   "link_to": "Periskope Message Tag",
-   "link_type": "DocType",
-   "onboard": 0,
    "type": "Link"
   },
   {
@@ -97,9 +87,48 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Follow-ups",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Periskope Contact",
+   "link_count": 0,
+   "link_to": "Periskope Contact",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Periskope Keyword Alert",
+   "link_count": 0,
+   "link_to": "Periskope Keyword Alert",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Periskope Unmatched Numbers",
+   "link_count": 0,
+   "link_to": "Periskope Unmatched Numbers",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-09-29 16:00:00.000000",
+ "modified": "2026-10-01 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope",
@@ -113,16 +142,16 @@
    "number_card_name": "Waiting for Rep Reply"
   },
   {
-   "label": "High and Critical Issues",
-   "number_card_name": "High and Critical Issues"
+   "label": "High Severity Issues",
+   "number_card_name": "High Severity Issues"
   },
   {
-   "label": "Suggested New Leads",
-   "number_card_name": "Suggested New Leads"
+   "label": "New Enquiries",
+   "number_card_name": "New Enquiries"
   },
   {
-   "label": "Suggested Escalations",
-   "number_card_name": "Suggested Escalations"
+   "label": "Complaints and Payment Issues",
+   "number_card_name": "Complaints and Payment Issues"
   },
   {
    "label": "AI Tagging Failed",
@@ -153,13 +182,6 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Message Tags",
-   "link_to": "Periskope Message Tag",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
    "label": "Messages",
    "link_to": "Periskope Message",
    "type": "DocType"
@@ -177,6 +199,34 @@
    "label": "Webhook Logs",
    "link_to": "Periskope Webhook Log",
    "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Unmatched Contacts",
+   "link_to": "Periskope Contact",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Tagging Review",
+   "link_to": "Periskope Tagging Review",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "AI Usage",
+   "link_to": "Periskope AI Usage",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "",
+   "label": "Open Escalations",
+   "link_to": "Periskope Open Escalations",
+   "type": "Report"
   }
  ],
  "title": "Periskope"

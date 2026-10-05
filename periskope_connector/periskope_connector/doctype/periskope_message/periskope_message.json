@@ -7,26 +7,32 @@
   "message_id",
   "direction",
   "message_type",
+  "periskope_type",
   "message_timestamp",
   "column_who",
   "rep",
   "org_phone",
+  "sales_person",
   "contact_number",
+  "customer_phone",
+  "sender_name",
   "is_group",
   "sender_phone",
   "section_content",
   "body",
   "quoted_message_id",
   "section_ai",
-  "primary_tag",
-  "tags",
+  "ai_category",
+  "correct_category",
   "ai_summary",
-  "suggested_action",
   "column_ai",
   "classification_status",
   "severity",
   "sentiment",
   "needs_reply",
+  "replied",
+  "escalated",
+  "high_alert_sent",
   "ai_confidence",
   "section_facts",
   "follow_up_on",
@@ -34,9 +40,16 @@
   "mentioned_amount",
   "column_facts",
   "competitor_name",
+  "mentioned_customer",
+  "contact_name",
   "language",
-  "section_suggestions",
-  "suggested_actions",
+  "section_crm",
+  "crm_deal",
+  "column_crm",
+  "crm_lead",
+  "link_status",
+  "link_method",
+  "timeline_comment",
   "section_ai_log",
   "classified_at",
   "classification_attempts",
@@ -50,6 +63,7 @@
   "media_size",
   "section_meta",
   "chat_id",
+  "chat_name",
   "ack",
   "performed_by",
   "column_meta",
@@ -78,10 +92,11 @@
   },
   {
    "fieldname": "message_type",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Message Type",
-   "read_only": 1
+   "read_only": 1,
+   "options": "\ntext\nimage\ndocument\naudio\nother"
   },
   {
    "fieldname": "message_timestamp",
@@ -109,7 +124,8 @@
    "fieldtype": "Data",
    "in_standard_filter": 1,
    "label": "Company WhatsApp Number",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "contact_number",
@@ -157,34 +173,9 @@
    "label": "AI Classification"
   },
   {
-   "fieldname": "primary_tag",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Main Tag",
-   "options": "Periskope Message Tag",
-   "read_only": 1
-  },
-  {
-   "fieldname": "tags",
-   "fieldtype": "Table MultiSelect",
-   "in_standard_filter": 1,
-   "label": "All Tags",
-   "options": "Periskope Message Tag Link",
-   "read_only": 1
-  },
-  {
    "fieldname": "ai_summary",
    "fieldtype": "Small Text",
    "label": "Summary",
-   "read_only": 1
-  },
-  {
-   "fieldname": "suggested_action",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Suggested CRM Action",
-   "options": "\nNone\nCreate Lead\nUpdate Lead Status\nUpdate Deal Status\nMark Lost\nCreate Task\nEscalate",
    "read_only": 1
   },
   {
@@ -205,7 +196,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Severity",
-   "options": "\nNone\nLow\nMedium\nHigh\nCritical",
+   "options": "\nLow\nMedium\nHigh",
    "read_only": 1
   },
   {
@@ -269,19 +260,6 @@
    "fieldname": "language",
    "fieldtype": "Data",
    "label": "Language",
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_suggestions",
-   "fieldtype": "Section Break",
-   "label": "Suggested CRM Actions"
-  },
-  {
-   "fieldname": "suggested_actions",
-   "fieldtype": "Code",
-   "label": "Suggested Actions (from the tags)",
-   "options": "JSON",
    "read_only": 1
   },
   {
@@ -360,6 +338,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "chat_name",
+   "fieldtype": "Data",
+   "label": "Group Name",
+   "read_only": 1,
+   "in_list_view": 0
+  },
+  {
    "fieldname": "ack",
    "fieldtype": "Data",
    "label": "Delivery Status Code",
@@ -388,11 +373,137 @@
    "label": "Raw Message Data",
    "options": "JSON",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_crm",
+   "fieldtype": "Section Break",
+   "label": "CRM Link"
+  },
+  {
+   "fieldname": "crm_deal",
+   "fieldtype": "Link",
+   "label": "CRM Deal",
+   "options": "CRM Deal",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_crm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crm_lead",
+   "fieldtype": "Link",
+   "label": "CRM Lead",
+   "options": "CRM Lead",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "link_status",
+   "fieldtype": "Select",
+   "label": "Link Status",
+   "options": "\nLinked\nAmbiguous\nNo Match\nInternal",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Ambiguous: several leads or deals matched and the newest was used. Internal: a team group where no customer could be identified."
+  },
+  {
+   "fieldname": "link_method",
+   "fieldtype": "Data",
+   "label": "Linked By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mentioned_customer",
+   "fieldtype": "Data",
+   "label": "Customer Named in Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact_name",
+   "fieldtype": "Data",
+   "label": "Contact Name Given by Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timeline_comment",
+   "fieldtype": "Data",
+   "label": "Timeline Comment",
+   "read_only": 1,
+   "description": "The comment that shows this message in the CRM timeline. Only tagged, linked messages get one."
+  },
+  {
+   "fieldname": "periskope_type",
+   "fieldtype": "Data",
+   "label": "Periskope Message Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "label": "Sales Person",
+   "options": "Sales Person",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "customer_phone",
+   "fieldtype": "Data",
+   "label": "Customer Phone (last 10 digits)",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The customer in a 1-to-1 chat, or the sender in a group."
+  },
+  {
+   "fieldname": "sender_name",
+   "fieldtype": "Data",
+   "label": "Sender Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "replied",
+   "fieldtype": "Check",
+   "label": "Replied",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when the rep replied in the same chat."
+  },
+  {
+   "fieldname": "escalated",
+   "fieldtype": "Check",
+   "label": "Escalated",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Set when the no-reply check emailed the managers."
+  },
+  {
+   "fieldname": "ai_category",
+   "fieldtype": "Select",
+   "label": "Category",
+   "options": "\nquality_complaint\ndelivery_delay\npayment_issue\nsample_request\norder_or_enquiry\ngeneral",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "correct_category",
+   "fieldtype": "Select",
+   "label": "Correct Category",
+   "options": "\nquality_complaint\ndelivery_delay\npayment_issue\nsample_request\norder_or_enquiry\ngeneral",
+   "read_only": 1,
+   "description": "Set by a sales manager, with the Correct Category button, only when the AI was wrong."
+  },
+  {
+   "fieldname": "high_alert_sent",
+   "fieldtype": "Check",
+   "label": "High Severity Alert Sent",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-29 13:00:00.000000",
+ "modified": "2026-09-30 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",
@@ -414,10 +525,20 @@
    "read": 1,
    "report": 1,
    "role": "Sales Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "WhatsApp Manager",
+   "share": 1
   }
  ],
  "sort_field": "message_timestamp",
  "sort_order": "DESC",
  "states": [],
- "title_field": "contact_number"
+ "title_field": "contact_number",
+ "track_changes": 1
 }

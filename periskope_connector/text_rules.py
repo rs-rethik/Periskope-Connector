@@ -22,15 +22,34 @@ def plain_text(body: str | None) -> str:
 	return re.sub(r"[^\w\s]", "", (body or "").lower(), flags=re.UNICODE).strip()
 
 
-def is_acknowledgement(body: str | None) -> bool:
-	"""'ok', 'thanks', emoji-only and 1-2 character texts: nothing to answer."""
+def is_acknowledgement(body: str | None, extra_words: list[str] | None = None) -> bool:
+	"""'ok', 'thanks', emoji-only and 1-2 character texts: nothing to answer. `extra_words` are
+	the site's own additions from Periskope Settings (e.g. Tamil 'sari', 'seri'). A short text
+	made only of such words counts too ('ok sir', 'sari sir')."""
 	plain = plain_text(body)
-	return not plain or len(plain) <= 2 or plain in ACKNOWLEDGEMENTS
+	words = ACKNOWLEDGEMENTS | {w.lower() for w in (extra_words or [])}
+	if not plain or len(plain) <= 2 or plain in words:
+		return True
+	tokens = plain.split()
+	return 1 <= len(tokens) <= 3 and all(t in words for t in tokens)
 
 
 def is_single_word_statement(body: str | None) -> bool:
 	"""One word and no question mark ('done', 'received'). 'Price?' is kept: it is a question."""
 	return "?" not in (body or "") and len(plain_text(body).split()) == 1
+
+
+# Skipped for these reasons, a message gets no category. Any other skipped message counts as general
+# with low severity, so it shows up in the counts and is never sent to the AI.
+NO_CATEGORY_SKIPS = {"Sent by the rep", "Group chat"}
+
+
+def skip_fields(reason: str) -> dict:
+	"""The values a skipped message is saved with."""
+	fields = {"classification_status": "Skipped", "classification_error": reason}
+	if reason not in NO_CATEGORY_SKIPS:
+		fields.update({"ai_category": "general", "severity": "Low"})
+	return fields
 
 
 def analysis_skip_reason(body: str | None) -> str | None:

@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "field:chat_id",
+ "creation": "2026-09-30 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "chat_id",
+  "group_name",
+  "column_type",
+  "group_type",
+  "section_crm",
+  "crm_lead",
+  "column_crm",
+  "crm_deal"
+ ],
+ "fields": [
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Chat ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "group_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Group Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_type",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Internal",
+   "description": "<b>Customer</b>: the group is about one customer, so its messages are linked by group name and phone number. <b>Internal</b>: a team group, so messages are linked by the customer name the AI finds in each message. Set when the group is first seen; change it here if it is wrong.",
+   "fieldname": "group_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Group Type",
+   "options": "Customer\nInternal"
+  },
+  {
+   "collapsible": 1,
+   "description": "Optional. Set a lead or deal here to link every message of this group to it, overriding the automatic match.",
+   "fieldname": "section_crm",
+   "fieldtype": "Section Break",
+   "label": "CRM Link"
+  },
+  {
+   "fieldname": "crm_lead",
+   "fieldtype": "Link",
+   "label": "CRM Lead",
+   "options": "CRM Lead"
+  },
+  {
+   "fieldname": "column_crm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crm_deal",
+   "fieldtype": "Link",
+   "label": "CRM Deal",
+   "options": "CRM Deal"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-30 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Group",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "WhatsApp Manager",
+   "share": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "group_name"
+}

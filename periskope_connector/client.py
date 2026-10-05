@@ -38,3 +38,29 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 	if not response.ok:
 		frappe.throw(_("Periskope returned HTTP {0}: {1}").format(response.status_code, response.text[:200]))
 	return response.json()
+
+
+def fetch_chat_name(chat_id: str, phone: str | None = None) -> str:
+	"""The name of a WhatsApp chat from Periskope (the group name, or a contact's name), or "".
+
+	Webhooks carry only the chat id, so the name is looked up once per group and remembered for a day.
+	Never raises: a missing name must not stop a message from being saved.
+	"""
+	if not chat_id:
+		return ""
+	cache = frappe.cache()
+	key = f"periskope_chat_name:{chat_id}"
+	name = cache.get_value(key)
+	if name is not None:
+		return name
+	try:
+		data = request("GET", f"chats?chat_id={chat_id}", phone=phone)
+		chats = data.get("chats", []) if isinstance(data, dict) else []
+		name = next((c.get("chat_name") for c in chats if c.get("chat_id") == chat_id), "") or ""
+	except frappe.ValidationError:
+		return ""  # not set up (no API key) or Periskope refused: nothing to report per message
+	except Exception:
+		frappe.log_error(title="Periskope: could not fetch the chat name")
+		return ""
+	cache.set_value(key, name, expires_in_sec=86400)
+	return name

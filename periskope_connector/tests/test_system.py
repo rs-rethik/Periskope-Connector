@@ -5,11 +5,17 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import default_tags, messages, reminders
+from periskope_connector import leads, messages, reminders
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system, save_as_system
 
-MACHINE_WRITTEN = ["Periskope Message", "Periskope Webhook Log", "Periskope Reply Reminder"]
+MACHINE_WRITTEN = [
+	"Periskope Message",
+	"Periskope Webhook Log",
+	"Periskope Reply Reminder",
+	"Periskope AI Usage",
+	"Periskope Keyword Alert",
+]
 LOG_ROW = {"doctype": "Periskope Webhook Log", "event_type": "message.created", "signature_valid": 1}
 SYSTEM_MANAGER = "test@example.com"
 
@@ -90,6 +96,8 @@ class TestSystemWrites(FrappeTestCase):
 				self.assertFalse(perm.write or perm.create, f"{perm.role} can write {doctype}")
 
 	def test_internal_writers_cannot_be_called_over_http(self):
+		from periskope_connector import contacts, keywords
+
 		internal = [
 			messages.create_message,
 			messages.process_webhook_log,
@@ -100,7 +108,10 @@ class TestSystemWrites(FrappeTestCase):
 			classifier._classify_and_commit,
 			insert_as_system,
 			save_as_system,
-			default_tags.create_default_tags,
+			leads.create_lead,
+			contacts.ensure_contact,
+			contacts.backfill_and_comment,
+			keywords.check_message,
 		]
 		for fn in internal:
 			self.assertNotIn(fn, frappe.whitelisted, f"{fn.__name__} must not be whitelisted")
@@ -115,7 +126,8 @@ class TestSystemWrites(FrappeTestCase):
 			if fn.__name__ == "receive":
 				self.assertIn("_has_valid_signature", source)  # guests allowed, signature required
 			else:
-				self.assertIn('frappe.only_for("System Manager")', source, fn.__name__)
+				# every other endpoint must gate the caller (System Manager, or a manager tuple/constant)
+				self.assertIn("frappe.only_for(", source, fn.__name__)
 
 	def test_the_whole_guest_ingest_chain_works_without_any_user(self):
 		"""Webhook log -> message -> AI tags: a queued job runs as the user who queued it, which
@@ -145,7 +157,7 @@ class TestSystemWrites(FrappeTestCase):
 		name = frappe.db.get_value("Periskope Message", {"message_id": "guest_chain_1"})
 		self.assertTrue(name)
 
-		result = {"tags": ["Pricing Request"], "primary_tag": "Pricing Request", "sentiment": "Neutral"}
+		result = {"category": "order_or_enquiry", "severity": "Low", "sentiment": "Neutral"}
 		with patch.object(classifier, "call_claude", lambda *a, **k: result):
 			classifier.classify(name)  # the job queued after that, also as Guest
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "classification_status"), "Done")
@@ -166,20 +178,25 @@ class TestSystemWrites(FrappeTestCase):
 			}
 		)
 		row = frappe.get_doc("Periskope Message", name)
-		row.message_timestamp = datetime(
-			2031, 1, 1, 9
-		)  # a plain object with the fields create_reminder reads
+		row.message_timestamp = datetime(2031, 1, 1, 9)
 
 		frappe.set_user(SYSTEM_MANAGER)  # what "Check Reply Reminders Now" runs as
-		reminder = reminders.create_reminder(
-			"919600000001@c.us", [row], SYSTEM_MANAGER, reminders.get_config(), datetime(2031, 1, 1, 10), 1.0
-		)
+		with patch.object(frappe, "sendmail"):
+			reminder = reminders.create_reminder(
+				"919600000001@c.us",
+				[row],
+				SYSTEM_MANAGER,
+				reminders.get_config(),
+				datetime(2031, 1, 1, 10),
+				1.0,
+			)
+			# the ToDo belongs to L2 now, so advance one level: this is what the engine does
+			reminders._to_level_2(reminder, reminders.get_config(), datetime(2031, 1, 1, 12), 3.0)
 		self.assertEqual(frappe.db.get_value("ToDo", reminder.todo, "allocated_to"), SYSTEM_MANAGER)
-		self.assertEqual(reminder.status, "Open")
+		self.assertEqual(reminder.status, "Escalated")
 
-	def test_the_whatsapp_lead_source_is_created_under_normal_permissions(self):
-		self._need_system_manager()
+	def test_the_whatsapp_lead_source_is_created_even_for_a_guest_job(self):
 		frappe.db.delete("CRM Lead Source", {"name": "WhatsApp"})
-		frappe.set_user(SYSTEM_MANAGER)
-		default_tags.create_default_tags()  # would fail here if it needed a permission bypass
+		frappe.set_user("Guest")
+		self.assertEqual(leads.ensure_lead_source(), "WhatsApp")
 		self.assertTrue(frappe.db.exists("CRM Lead Source", "WhatsApp"))
