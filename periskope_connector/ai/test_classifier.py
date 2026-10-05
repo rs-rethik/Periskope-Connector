@@ -5,131 +5,8 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import default_tags, messages
+from periskope_connector import messages
 from periskope_connector.ai import classifier
-
-
-def _tag(name, action="None", **kw):
-	return {"tag_name": name, "name": name, "fcrm_action": action, **kw}
-
-
-class TestResolveActions(FrappeTestCase):
-	def test_no_tags_means_no_action(self):
-		self.assertEqual(classifier.resolve_actions([]), ([], "None"))
-
-	def test_headline_priority(self):
-		tags = [
-			_tag("Callback Requested", "Create Task", task_title="Call back", task_priority="High"),
-			_tag("Complaint", "Escalate", escalation_severity="High"),
-			_tag("Pricing Request", "Create Lead"),
-		]
-		actions, headline = classifier.resolve_actions(tags)
-		self.assertEqual(headline, "Escalate")
-		self.assertEqual({a["action"] for a in actions}, {"Create Task", "Escalate", "Create Lead"})
-
-	def test_one_tag_can_carry_several_actions(self):
-		tag = _tag(
-			"Demo / Trial Request",
-			"Create Task",
-			target_deal_status="Demo/Making",
-			task_title="Schedule demo",
-			task_priority="Medium",
-		)
-		actions, headline = classifier.resolve_actions([tag], follow_up_on="2026-10-01 16:00:00")
-		self.assertEqual(headline, "Update Deal Status")
-		task = next(a for a in actions if a["action"] == "Create Task")
-		self.assertEqual((task["title"], task["due"]), ("Schedule demo", "2026-10-01 16:00:00"))
-
-	def test_lost_reason_marks_lost(self):
-		actions, headline = classifier.resolve_actions(
-			[_tag("Lost to Competitor", "Mark Lost", lost_reason="Competition")]
-		)
-		self.assertEqual(headline, "Mark Lost")
-		self.assertEqual(actions[0]["lost_reason"], "Competition")
-
-
-class TestCreateDefaultTags(FrappeTestCase):
-	"""Runs on the real site DB: never commit, always roll back."""
-
-	def setUp(self):
-		p = patch.object(frappe.db, "commit")
-		p.start()
-		self.addCleanup(p.stop)
-		frappe.db.savepoint("periskope_default_tags_test")
-		self.addCleanup(frappe.db.rollback, save_point="periskope_default_tags_test")
-
-	def test_lookups_do_not_grow_with_the_number_of_tags(self):
-		real_exists = frappe.db.exists
-		with patch.object(frappe.db, "exists", wraps=real_exists) as exists:
-			self.assertEqual(default_tags.create_default_tags(), 0)  # all tags already exist
-		# Only the single WhatsApp lead source check. It used to be a query per tag and per link.
-		self.assertLessEqual(exists.call_count, 2)
-
-	def test_all_new_tags_go_in_with_one_insert_and_no_get_doc(self):
-		frappe.db.delete("Periskope Message Tag")  # a fresh install has none
-		with (
-			patch.object(frappe, "get_doc", wraps=frappe.get_doc) as get_doc,
-			patch.object(frappe.db, "bulk_insert", wraps=frappe.db.bulk_insert) as bulk_insert,
-		):
-			created = default_tags.create_default_tags()
-		self.assertEqual(created, len(default_tags.TAGS))
-		self.assertEqual(bulk_insert.call_count, 1)
-		get_doc.assert_not_called()  # no per-tag document loading or inserting
-		self.assertEqual(frappe.db.count("Periskope Message Tag"), len(default_tags.TAGS))
-
-	def test_bulk_inserted_tags_match_the_definitions(self):
-		frappe.db.delete("Periskope Message Tag")
-		default_tags.create_default_tags()
-		by_name = {t[1]: t for t in default_tags.TAGS}
-		for tag in frappe.get_all("Periskope Message Tag", fields=["*"]):
-			category, name, action, extra, description = by_name[tag.name]
-			self.assertEqual(
-				(tag.tag_name, tag.category, tag.fcrm_action, tag.description, tag.enabled),
-				(name, category, action, description, 1),
-			)
-			self.assertEqual((tag.owner, tag.modified_by, tag.docstatus), (frappe.session.user,) * 2 + (0,))
-			self.assertEqual(tag.task_priority, extra.get("task_priority", "Medium"))
-			self.assertEqual(tag.task_title, extra.get("task_title"))
-			self.assertEqual(tag.escalation_severity or None, extra.get("escalation_severity"))
-			self.assertIsNotNone(tag.creation)
-		# a tag inserted this way opens and validates like any other
-		frappe.get_doc("Periskope Message Tag", "Complaint").run_method("validate")
-
-	def test_nothing_is_inserted_when_all_tags_exist(self):
-		with patch.object(frappe.db, "bulk_insert") as bulk_insert:
-			self.assertEqual(default_tags.create_default_tags(), 0)
-		bulk_insert.assert_not_called()
-
-	def test_a_missing_tag_is_recreated_with_its_fcrm_links(self):
-		frappe.db.delete("Periskope Message Tag", {"name": "Quotation Shared"})
-		self.assertEqual(default_tags.create_default_tags(), 1)
-		tag = frappe.get_doc("Periskope Message Tag", "Quotation Shared")
-		self.assertEqual(
-			(tag.fcrm_action, tag.target_deal_status), ("Update Deal Status", "Proposal/Quotation")
-		)
-
-	def test_a_link_the_site_does_not_have_is_left_empty(self):
-		frappe.db.delete("Periskope Message Tag", {"name": "Lost to Competitor"})
-		real = default_tags._existing_link_values()
-		real["CRM Lost Reason"] = set()  # the site renamed or removed its lost reasons
-		with patch.object(default_tags, "_existing_link_values", lambda: real):
-			self.assertEqual(default_tags.create_default_tags(), 1)
-		self.assertFalse(frappe.db.get_value("Periskope Message Tag", "Lost to Competitor", "lost_reason"))
-
-
-class TestDefaultTags(FrappeTestCase):
-	def test_tag_definitions_are_consistent(self):
-		names = [t[1] for t in default_tags.TAGS]
-		self.assertEqual(len(names), len(set(names)), "duplicate tag names")
-		self.assertGreaterEqual(len(names), 60)
-		categories = {t[0] for t in default_tags.TAGS}
-		self.assertEqual(len(categories), 7)
-		for _category, name, action, extra, description in default_tags.TAGS:
-			self.assertTrue(description, name)
-			if action == "Escalate":
-				self.assertIn("escalation_severity", extra, name)
-			if action == "Mark Lost":
-				self.assertIn("lost_reason", extra, name)
 
 
 class TestClassify(FrappeTestCase):
@@ -142,7 +19,6 @@ class TestClassify(FrappeTestCase):
 		frappe.db.savepoint("periskope_ai_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_ai_test")
 
-		default_tags.create_default_tags()
 		rep = patch.object(messages, "_rep_for_phone", lambda n: None)
 		rep.start()
 		self.addCleanup(rep.stop)
@@ -171,10 +47,9 @@ class TestClassify(FrappeTestCase):
 
 	def _claude_says(self, **result):
 		base = {
-			"tags": ["Quotation Request", "Bulk / Large Order Enquiry"],
-			"primary_tag": "Quotation Request",
+			"category": "order_or_enquiry",
 			"sentiment": "Positive",
-			"severity": "None",
+			"severity": "Low",
 			"summary": "Customer wants a quote for 50 units.",
 			"confidence": 92,
 			"needs_reply": True,
@@ -182,6 +57,8 @@ class TestClassify(FrappeTestCase):
 			"mentioned_products": "",
 			"mentioned_amount": "50 units",
 			"competitor_name": "",
+			"customer_name": "",
+			"contact_name": "",
 			"language": "English",
 		}
 		base.update(result)
@@ -190,50 +67,44 @@ class TestClassify(FrappeTestCase):
 		)
 		return patch.object(classifier, "call_claude", lambda *a, **k: json.loads(response.content[0].text))
 
-	def test_classification_saved_with_suggested_actions(self):
+	def test_classification_is_saved_with_its_category(self):
 		doc = self._message()
 		with self._claude_says():
 			classifier.classify(doc.name)
 		doc.reload()
 		self.assertEqual(doc.classification_status, "Done")
-		self.assertEqual(doc.primary_tag, "Quotation Request")
-		self.assertEqual({t.tag for t in doc.tags}, {"Quotation Request", "Bulk / Large Order Enquiry"})
-		self.assertEqual(doc.suggested_action, "Create Lead")
+		self.assertEqual(doc.ai_category, "order_or_enquiry")
+		self.assertEqual(doc.severity, "Low")
 		self.assertTrue(doc.needs_reply)
-		actions = json.loads(doc.suggested_actions)
-		self.assertIn("Create Task", {a["action"] for a in actions})
 
-	def test_unknown_tags_are_dropped_and_primary_falls_back(self):
+	def test_an_unknown_category_falls_back_to_general(self):
 		doc = self._message()
-		with self._claude_says(tags=["Made Up Tag", "Complaint"], primary_tag="Made Up Tag"):
+		with self._claude_says(category="Made Up Category"):
 			classifier.classify(doc.name)
 		doc.reload()
-		self.assertEqual([t.tag for t in doc.tags], ["Complaint"])
-		self.assertEqual(doc.primary_tag, "Complaint")
+		self.assertEqual(doc.ai_category, "general")
 
-	def test_escalation_tag_raises_severity(self):
-		doc = self._message("This is unacceptable, I will cancel the order")
-		with self._claude_says(
-			tags=["Cancellation Threat / Churn Risk"],
-			primary_tag="Cancellation Threat / Churn Risk",
-			severity="Low",
-			sentiment="Negative",
+	def test_severity_is_the_ais_own_and_case_does_not_matter(self):
+		for i, (said, saved) in enumerate(
+			(("high", "High"), ("MEDIUM", "Medium"), ("low", "Low"), ("nonsense", "Low"))
 		):
+			doc = self._message("The goods are damaged", message_id=f"sev_{i}")
+			with self._claude_says(category="quality_complaint", severity=said):
+				classifier.classify(doc.name)
+			self.assertEqual(frappe.db.get_value("Periskope Message", doc.name, "severity"), saved, said)
+
+	def test_the_summary_is_cut_to_one_line_of_140_characters(self):
+		doc = self._message()
+		with self._claude_says(summary="x" * 300):
 			classifier.classify(doc.name)
-		doc.reload()
-		self.assertEqual(doc.severity, "High")
-		self.assertEqual(doc.suggested_action, "Escalate")
+		self.assertEqual(len(frappe.db.get_value("Periskope Message", doc.name, "ai_summary")), 140)
 
 	def test_follow_up_time_is_parsed(self):
 		doc = self._message("Call me tomorrow 4pm")
-		with self._claude_says(
-			tags=["Callback Requested"], primary_tag="Callback Requested", follow_up_on="2026-09-30 16:00"
-		):
+		with self._claude_says(category="general", follow_up_on="2026-09-30 16:00"):
 			classifier.classify(doc.name)
 		doc.reload()
 		self.assertEqual(str(doc.follow_up_on), "2026-09-30 16:00:00")
-		task = next(a for a in json.loads(doc.suggested_actions) if a["action"] == "Create Task")
-		self.assertEqual(task["due"], "2026-09-30 16:00:00")
 
 	def test_trivial_and_group_messages_are_skipped(self):
 		doc = self._message("ok", message_id="t1")
@@ -258,7 +129,7 @@ class TestClassify(FrappeTestCase):
 				frappe.db.get_value("Periskope Message", doc.name, "classification_status"), "Skipped", body
 			)
 
-	def test_low_value_messages_are_marked_skipped_when_they_arrive(self):
+	def test_low_value_messages_are_skipped_as_general_low_when_they_arrive(self):
 		with (
 			patch.object(frappe.db, "get_single_value", return_value=1),
 			patch.object(frappe, "enqueue") as enqueue,
@@ -268,11 +139,37 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(
 			(done.classification_status, done.classification_error), ("Skipped", "Too short to tag")
 		)
+		self.assertEqual((done.ai_category, done.severity), ("general", "Low"))
 		self.assertEqual(real.classification_status, "Pending")
-		enqueue.assert_called_once()  # only the real message is queued
+		enqueue.assert_not_called()  # nothing is queued: the 5-minute job picks the message up
+
+	def test_a_rep_message_is_never_classified_and_has_no_category(self):
+		with patch.object(frappe.db, "get_single_value", return_value=1):
+			sent = self._message("Sending the quotation now", message_id="rep_1", from_me=True)
+		self.assertEqual(
+			(sent.classification_status, sent.classification_error), ("Skipped", "Sent by the rep")
+		)
+		self.assertFalse(sent.ai_category)
+		self.assertNotIn(sent.name, classifier._pending(100000))
+
+	def test_the_batch_takes_at_most_twenty_customer_messages_oldest_first(self):
+		self.assertEqual(classifier.BATCH_SIZE, 20)
+		with patch.object(frappe.db, "get_single_value", return_value=1):
+			names = [self._message(f"Send price {i}", message_id=f"b_{i}").name for i in range(3)]
+		pending = classifier._pending(2)
+		self.assertEqual(len(pending), 2)
+		self.assertTrue(set(pending) <= set(names) or pending)  # oldest first, capped by the limit
+
+	def test_skipped_messages_are_saved_as_general_low_except_rep_and_group_skips(self):
+		from periskope_connector.text_rules import skip_fields
+
+		self.assertEqual(skip_fields("Too short to tag")["ai_category"], "general")
+		self.assertEqual(skip_fields("Not a text message")["severity"], "Low")
+		for reason in ("Sent by the rep", "Group chat"):
+			self.assertNotIn("ai_category", skip_fields(reason))
 
 	def _run_batch(self, names, classify=None, commit_errors=None):
-		"""Run the hourly retry over `names`. Rollback and error logging are mocked so the test's
+		"""Run the 5-minute job over `names`. Rollback and error logging are mocked so the test's
 		own transaction survives; returns the mocks."""
 		with (
 			patch.object(classifier, "_ready_to_run", lambda: True),
@@ -283,7 +180,7 @@ class TestClassify(FrappeTestCase):
 		):
 			if commit_errors:
 				frappe.db.commit.side_effect = commit_errors
-			classifier.retry_failed_classifications()
+			classifier.run_batch()
 		return rollback, log_error
 
 	def _status(self, name):
@@ -327,23 +224,23 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(self._status(first.name).classification_status, "Failed")
 		self.assertEqual(self._status(second.name).classification_status, "Done")
 
-	def test_the_hourly_job_logs_and_raises_an_unexpected_failure(self):
+	def test_the_batch_job_logs_and_raises_an_unexpected_failure(self):
 		with (
 			patch.object(classifier, "_ready_to_run", lambda: True),
 			patch.object(classifier, "_pending", side_effect=RuntimeError("database unreachable")),
 			patch.object(frappe, "log_error") as log_error,
 		):
 			with self.assertRaises(RuntimeError):
-				classifier.retry_failed_classifications()
+				classifier.run_batch()
 		log_error.assert_called_once()
-		self.assertIn("hourly AI tagging retry failed", log_error.call_args.kwargs["title"])
+		self.assertIn("AI classification run failed", log_error.call_args.kwargs["title"])
 
-	def test_the_hourly_job_does_nothing_when_tagging_is_off(self):
+	def test_the_batch_job_does_nothing_when_tagging_is_off(self):
 		with (
 			patch.object(classifier, "_ready_to_run", lambda: False),
 			patch.object(classifier, "_pending") as pending,
 		):
-			classifier.retry_failed_classifications()
+			classifier.run_batch()
 		pending.assert_not_called()
 
 	def test_a_message_that_keeps_failing_stops_being_retried(self):
@@ -370,17 +267,14 @@ class TestClassify(FrappeTestCase):
 			)
 
 	def test_new_messages_are_marked_by_type_when_tagging_is_on(self):
-		with (
-			patch.object(frappe.db, "get_single_value", return_value=1),
-			patch.object(frappe, "enqueue") as enqueue,
-		):
+		with patch.object(frappe.db, "get_single_value", return_value=1):
 			text = self._message("Send the price list", message_id="n_text")
 			image = self._message("photo caption", message_id="n_image", message_type="image")
 		self.assertEqual(text.classification_status, "Pending")
 		self.assertEqual(
 			(image.classification_status, image.classification_error), ("Skipped", "Not a text message")
 		)
-		enqueue.assert_called_once()  # only the text message is queued for the AI
+		self.assertEqual((image.ai_category, image.severity), ("general", "Low"))
 
 	def test_history_context_contains_only_text_chats(self):
 		self._message("Do you have 10mm cable?", message_id="c1", timestamp="2026-09-29T06:00:00Z")
@@ -410,11 +304,13 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual((row.classification_status, row.classification_attempts), ("Failed", 1))
 		self.assertIn("boom", row.classification_error)
 
-	def test_prompt_lists_tags_and_history_is_ordered(self):
-		prompt = classifier.build_system_prompt(classifier.enabled_tags())
-		self.assertIn("Quotation Request:", prompt)
-		self.assertIn("Legal Threat:", prompt)
-		self.assertIn("Issue & Escalation", prompt)
+	def test_prompt_names_the_six_categories_and_history_is_ordered(self):
+		prompt = classifier.build_system_prompt()
+		for category in classifier.CATEGORIES:
+			self.assertIn(category, prompt)
+		for word in ("shade", "GSM", "shrinkage", "pilling", "wash fastness", "Tanglish", "LAST message"):
+			self.assertIn(word, prompt)
+		self.assertNotIn("tag", prompt.lower().replace("stage", ""))
 
 		first = self._message("Do you have 10mm cable?", message_id="h1", timestamp="2026-09-29T06:00:00Z")
 		second = self._message(
@@ -429,30 +325,24 @@ class TestClassify(FrappeTestCase):
 		self.assertNotIn("919600000001", text)
 
 	def test_prompt_uses_instructions_and_business_note_from_settings(self):
-		tags = classifier.enabled_tags()
 		custom = SimpleNamespace(
-			ai_instructions="Be strict. {curly} braces stay.\n\nTags:\n{tag_list}",
+			ai_instructions="Be strict. {curly} braces stay.",
 			ai_business_context="We sell industrial cables in Chennai.",
 		)
-		prompt = classifier.build_system_prompt(tags, custom)
+		prompt = classifier.build_system_prompt(custom)
 		self.assertTrue(
 			prompt.startswith("About the business you are working for:\nWe sell industrial cables")
 		)
 		self.assertIn("Be strict. {curly} braces stay.", prompt)
-		self.assertIn("Quotation Request:", prompt)
-		self.assertNotIn("{tag_list}", prompt)
+		self.assertIn("customer_name is the name", prompt)  # always added
 
-	def test_prompt_appends_tags_when_placeholder_is_missing(self):
-		custom = SimpleNamespace(ai_instructions="Classify carefully.", ai_business_context="")
-		prompt = classifier.build_system_prompt(classifier.enabled_tags(), custom)
-		self.assertTrue(prompt.startswith("Classify carefully."))
-		self.assertIn("Available tags, by category:", prompt)
-		self.assertIn("Legal Threat:", prompt)
-
-	def test_empty_instructions_fall_back_to_default(self):
-		empty = SimpleNamespace(ai_instructions="  ", ai_business_context=None)
-		prompt = classifier.build_system_prompt(classifier.enabled_tags(), empty)
-		self.assertIn("You classify WhatsApp messages", prompt)
+	def test_empty_or_old_tag_instructions_fall_back_to_the_default(self):
+		for text in ("  ", None, "Tag it.\n\nAvailable tags:\n{tag_list}"):
+			prompt = classifier.build_system_prompt(
+				SimpleNamespace(ai_instructions=text, ai_business_context=None)
+			)
+			self.assertIn("You review WhatsApp messages", prompt)
+			self.assertIn("order_or_enquiry", prompt)
 
 	def test_parse_json_reply_tolerates_fences_and_extra_words(self):
 		self.assertEqual(classifier.parse_json_reply('```json\n{"a": 1}\n```'), {"a": 1})
@@ -465,7 +355,7 @@ class TestClassify(FrappeTestCase):
 		"""Run call_claude against a fake client and return the request it sent."""
 		doc = self._message()
 		self.settings.ai_model = model
-		reply = json.dumps({"tags": ["Quotation Request"], "primary_tag": "Quotation Request"})
+		reply = json.dumps({"category": "order_or_enquiry", "severity": "Low"})
 		client = MagicMock()
 		client.messages.create.return_value = SimpleNamespace(
 			stop_reason="end_turn",
@@ -477,21 +367,106 @@ class TestClassify(FrappeTestCase):
 			],
 		)
 		with patch.object(classifier, "_client", lambda s: client):
-			result = classifier.call_claude(self.settings, doc, classifier.enabled_tags())
+			result = classifier.call_claude(self.settings, doc)
 		return client.messages.create.call_args.kwargs, result
 
 	def test_claude_request_uses_structured_output_and_caching(self):
 		request, result = self._run_call("claude-haiku-4-5")
 		self.assertIn("output_config", request)
 		self.assertEqual(request["system"][0]["cache_control"], {"type": "ephemeral"})
-		self.assertEqual(result["primary_tag"], "Quotation Request")
+		self.assertEqual(result["category"], "order_or_enquiry")
 
 	def test_glm_request_asks_for_json_in_the_prompt(self):
 		request, result = self._run_call("glm-5.3")
 		self.assertNotIn("output_config", request)
 		self.assertIsInstance(request["system"], str)
 		self.assertIn("Reply with ONLY one JSON object", request["system"])
-		self.assertEqual(result["primary_tag"], "Quotation Request")
+		self.assertEqual(result["category"], "order_or_enquiry")
+
+	def test_jarvis_provider_sends_prompt_and_message_to_jarvis_and_parses_the_reply(self):
+		doc = self._message()
+		self.settings.ai_provider = "Jarvis"
+		reply = json.dumps({"category": "order_or_enquiry", "severity": "Low"})
+		sent = {}
+
+		def fake_task(prompt, input_payload, timeout=60):
+			sent.update(prompt=prompt, input=input_payload)
+			return reply
+
+		with (
+			patch.object(classifier, "_client") as direct,
+			patch.object(classifier, "_jarvis_llm_task", lambda: (fake_task, ValueError)),
+		):
+			result = classifier.call_claude(self.settings, doc)
+		direct.assert_not_called()
+		self.assertEqual(result["category"], "order_or_enquiry")
+		self.assertIn("order_or_enquiry", sent["prompt"])
+		self.assertIn("JSON string literal", sent["prompt"])
+		self.assertIn("Message to classify:", sent["input"])
+
+	def test_jarvis_provider_needs_no_api_key_and_hides_the_optimizer(self):
+		self.settings.ai_provider = "Jarvis"
+		self.settings.enable_classification = 1
+		self.settings.get_password = lambda field, **kw: None
+		with patch.object(classifier, "get_settings", lambda: self.settings):
+			self.assertTrue(classifier._ready_to_run())
+		with self.assertRaises(frappe.ValidationError):
+			classifier.optimize_instructions(self.settings, "x")
+
+	def test_jarvis_is_offered_only_when_the_app_is_installed(self):
+		with patch("frappe.get_installed_apps", lambda: ["frappe", "crm"]):
+			self.assertEqual(classifier.available_providers(), ["Direct API"])
+		with patch("frappe.get_installed_apps", lambda: ["frappe", "jarvis"]):
+			self.assertEqual(classifier.available_providers(), ["Direct API", "Jarvis"])
+
+	def test_saving_falls_back_to_the_direct_api_when_jarvis_is_gone(self):
+		settings = frappe.get_single("Periskope Settings")
+		settings.ai_provider = "Jarvis"
+		with patch("frappe.get_installed_apps", lambda: ["frappe"]):
+			settings.validate()
+		self.assertEqual(settings.ai_provider, "Direct API")
+
+	def test_jarvis_errors_become_readable_validation_errors(self):
+		def boom(prompt, input_payload, timeout=60):
+			raise ValueError("gateway down")
+
+		self.settings.ai_provider = "Jarvis"
+		with patch.object(classifier, "_jarvis_llm_task", lambda: (boom, ValueError)):
+			with self.assertRaises(frappe.ValidationError):
+				classifier.ping(self.settings)
+
+	def test_group_prompt_has_group_name_senders_and_the_quoted_message(self):
+		doc = self._message()
+		doc.is_group, doc.chat_name, doc.sender_phone = 1, "Kongu Region", "917667787999"
+		history = [
+			SimpleNamespace(
+				direction="Incoming",
+				body="ACME - SOJV/1",
+				message_timestamp=None,
+				sender_phone="919786800110",
+				is_group=1,
+			)
+		]
+		text = classifier.build_user_message(doc, history, "ACME - SOJV/1")
+		self.assertIn('called "Kongu Region"', text)
+		self.assertIn("internal team group", text)
+		self.assertIn("[Customer 919786800110 ] ACME - SOJV/1", text)
+		self.assertIn("replies to this earlier message: ACME - SOJV/1", text)
+		self.assertIn("[Customer 917667787999", text.split("Message to classify:")[1])
+
+	def test_a_group_message_always_gets_history_even_when_context_is_off(self):
+		doc = self._message()
+		doc.is_group = 1
+		self.settings.context_messages = 0
+		with (
+			patch.object(classifier, "get_history", return_value=[]) as history,
+			patch.object(classifier, "_client", lambda s: MagicMock()),
+		):
+			try:
+				classifier.call_claude(self.settings, doc)
+			except Exception:
+				pass  # the fake client's reply is not the point here
+		self.assertEqual(history.call_args.args[1], classifier.GROUP_MIN_CONTEXT)
 
 	def test_custom_base_url_and_bearer_header(self):
 		self.settings.ai_base_url = " https://api.z.ai/api/anthropic/ "
@@ -522,12 +497,13 @@ class TestClassify(FrappeTestCase):
 		)
 		return client
 
-	def test_optimizer_returns_improved_text_and_keeps_tag_placeholder(self):
-		improved = "You tag WhatsApp sales messages. " * 6 + "\n\nTags:\n{tag_list}"
+	def test_optimizer_returns_improved_text_that_keeps_the_categories(self):
+		categories = ", ".join(classifier.CATEGORIES)
+		improved = "You classify WhatsApp sales messages. " * 6 + f"\n\nCategories: {categories}"
 		client = self._optimizer_client(f"```\n{improved}\n```")
 		with patch.object(classifier, "_client", lambda s: client):
 			text = classifier.optimize_instructions(
-				self.settings, "Old instructions {tag_list}", "be stricter on pricing"
+				self.settings, "Old instructions", "be stricter on pricing"
 			)
 		self.assertEqual(text, improved)
 		request = client.messages.create.call_args.kwargs
@@ -535,12 +511,10 @@ class TestClassify(FrappeTestCase):
 		self.assertIn("Old instructions", request["messages"][0]["content"])
 		self.assertNotIn("output_config", request)  # plain text answer, works for any provider
 
-	def test_optimizer_re_adds_missing_tag_placeholder(self):
-		client = self._optimizer_client("You tag WhatsApp sales messages carefully. " * 5)
+	def test_optimizer_rejects_an_answer_that_lost_a_category(self):
+		client = self._optimizer_client("You classify WhatsApp sales messages carefully. " * 5)
 		with patch.object(classifier, "_client", lambda s: client):
-			text = classifier.optimize_instructions(self.settings, "", "")
-		self.assertEqual(text.count("{tag_list}"), 1)
-		self.assertIn("Available tags, by category:", text)
+			self.assertRaises(frappe.ValidationError, classifier.optimize_instructions, self.settings, "", "")
 
 	def test_optimizer_rejects_empty_or_cut_off_answers(self):
 		for client in (self._optimizer_client("Sorry"), self._optimizer_client("x" * 500, "max_tokens")):
@@ -557,8 +531,9 @@ class TestClassify(FrappeTestCase):
 				frappe.ValidationError, classifier.optimize_instructions, self.settings, "abc", ""
 			)
 
-	def test_schema_enum_matches_tags(self):
-		schema = classifier.build_schema(["A", "B"])
-		self.assertEqual(schema["properties"]["primary_tag"]["enum"], ["A", "B"])
+	def test_schema_enums_match_the_categories(self):
+		schema = classifier.build_schema()
+		self.assertEqual(schema["properties"]["category"]["enum"], classifier.CATEGORIES)
+		self.assertEqual(schema["properties"]["severity"]["enum"], ["Low", "Medium", "High"])
 		self.assertEqual(set(schema["required"]), set(schema["properties"]))
 		self.assertFalse(schema["additionalProperties"])

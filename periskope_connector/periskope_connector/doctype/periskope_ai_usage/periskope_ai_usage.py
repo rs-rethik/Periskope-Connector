@@ -1,5 +1,6 @@
+import frappe
 from frappe.model.document import Document
 
 
-class PeriskopeMessageTagLink(Document):
+class PeriskopeAIUsage(Document):
 	pass
