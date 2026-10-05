@@ -14,6 +14,9 @@
   "reminded_on",
   "escalated_on",
   "closed_on",
+  "column_sla",
+  "level",
+  "first_response_secs",
   "section_msg",
   "message_preview",
   "last_message",
@@ -85,6 +88,27 @@
    "read_only": 1
   },
   {
+   "fieldname": "column_sla",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "The highest escalation level reached in this waiting period: 1 rep notified, 2 ToDo + managers emailed, 3 escalation email.",
+   "fieldname": "level",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "SLA Level",
+   "read_only": 1
+  },
+  {
+   "description": "Working hours between the customer's first unanswered message and the rep's reply.",
+   "fieldname": "first_response_secs",
+   "fieldtype": "Int",
+   "label": "First Response (working seconds)",
+   "read_only": 1
+  },
+  {
    "fieldname": "section_msg",
    "fieldtype": "Section Break",
    "label": "Chat"
@@ -140,6 +164,15 @@
    "read": 1,
    "report": 1,
    "role": "Sales Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "WhatsApp Manager",
+   "share": 1
   }
  ],
  "sort_field": "creation",
