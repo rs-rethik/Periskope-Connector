@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "creation": "2026-10-01 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "rule_name",
+  "keywords",
+  "recipients",
+  "enabled"
+ ],
+ "fields": [
+  {
+   "fieldname": "rule_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rule Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Words or phrases, separated by commas. Matched as whole words, case-insensitive, anywhere in the message text.",
+   "fieldname": "keywords",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Keywords",
+   "reqd": 1
+  },
+  {
+   "description": "Email addresses (comma-separated). Until this is filled in the rule matches but sends nothing.",
+   "fieldname": "recipients",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Alert To"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-01 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Keyword Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
