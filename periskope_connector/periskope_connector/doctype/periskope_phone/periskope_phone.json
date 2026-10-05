@@ -10,7 +10,8 @@
   "number",
   "wa_state",
   "is_ready",
-  "rep"
+  "rep",
+  "sales_person"
  ],
  "fields": [
   {
@@ -55,6 +56,13 @@
    "in_list_view": 1,
    "label": "Sales Rep",
    "options": "User"
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sales Person",
+   "options": "Sales Person"
   }
  ],
  "istable": 1,
