@@ -12,9 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime
 
-from periskope_connector import tags
-from periskope_connector.alerts import send_high_severity_alert
-from periskope_connector.leads import create_lead_for_message
+from periskope_connector import actions, tags
 from periskope_connector.linking import link_message
 from periskope_connector.system import insert_as_system, save_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
@@ -512,8 +510,7 @@ def apply_result(doc, result: dict):
 	doc.classification_error = ""
 	save_as_system(doc)
 	link_message(doc.name)
-	create_lead_for_message(doc.name)
-	send_high_severity_alert(doc.name)
+	actions.run(doc.name)
 
 
 def _mark(name: str, **values):
