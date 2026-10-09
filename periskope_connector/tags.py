@@ -27,6 +27,18 @@ DEFAULT_TAGS = [
 FALLBACK_DEFAULT = "general"
 
 
+def default_actions(tag_name: str) -> list[dict]:
+	"""The starting actions of a tag: the behaviour the app had before actions were configurable.
+	Every tag emails the managers about High severity messages; every tag but the default one
+	shows on the CRM timeline; an enquiry from an unknown 1-to-1 number can become a lead."""
+	rows = [{"action": "Email Alert", "min_severity": "High", "chat_type": "Any"}]
+	if tag_name != FALLBACK_DEFAULT:
+		rows.append({"action": "Timeline Comment", "min_severity": "Low", "chat_type": "Any"})
+	if tag_name == "order_or_enquiry":
+		rows.append({"action": "Create Lead", "min_severity": "Low", "chat_type": "1-to-1"})
+	return rows
+
+
 def active_tags() -> list[dict]:
 	"""The active tags in the order the team set, each with its name, description and default flag."""
 	rows = frappe.get_all(

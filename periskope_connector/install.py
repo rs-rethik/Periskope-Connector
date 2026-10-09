@@ -161,7 +161,7 @@ def _ensure_webhook_events():
 
 def _ensure_tags():
 	"""Create the starting tags on a site that has none. After that the team owns the list."""
-	from periskope_connector.tags import DEFAULT_TAGS, FALLBACK_DEFAULT
+	from periskope_connector.tags import DEFAULT_TAGS, FALLBACK_DEFAULT, default_actions
 
 	if frappe.db.count("Periskope Tag"):
 		return
@@ -174,5 +174,6 @@ def _ensure_tags():
 				"active": 1,
 				"is_default": 1 if name == FALLBACK_DEFAULT else 0,
 				"sort_order": order * 10,
+				"actions": default_actions(name),
 			}
 		).insert(ignore_permissions=True)

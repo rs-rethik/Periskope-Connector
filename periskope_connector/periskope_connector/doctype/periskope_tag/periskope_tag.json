@@ -9,7 +9,9 @@
   "active",
   "is_default",
   "sort_order",
-  "description"
+  "description",
+  "section_actions",
+  "actions"
  ],
  "fields": [
   {
@@ -52,6 +54,18 @@
    "label": "Description for the AI",
    "reqd": 1,
    "description": "When this tag applies. This text is given to the AI, so be specific."
+  },
+  {
+   "fieldname": "section_actions",
+   "fieldtype": "Section Break",
+   "label": "Actions"
+  },
+  {
+   "fieldname": "actions",
+   "fieldtype": "Table",
+   "label": "When a Message Gets This Tag",
+   "options": "Periskope Tag Action",
+   "description": "What the app does for each message with this tag. No rows means the tag only labels the message."
   }
  ],
  "index_web_pages_for_search": 1,
