@@ -13,7 +13,7 @@ import requests
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
 
-from periskope_connector import health, messages, reminders, webhooks
+from periskope_connector import flow, health, install, messages, reminders, webhooks
 from periskope_connector.ai import classifier
 from periskope_connector.api import settings as settings_api
 from periskope_connector.api import webhook
@@ -425,3 +425,111 @@ class TestDisabledIntegration(FrappeTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				self._receive(body)
 		self.assertEqual(frappe.db.count("Periskope Webhook Log"), before)
+
+
+class TestFlowTab(FrappeTestCase):
+	"""The figures and edits behind the Flow tab. Runs on the real site DB: always rolls back."""
+
+	def setUp(self):
+		p = patch.object(frappe.db, "commit")
+		p.start()
+		self.addCleanup(p.stop)
+		frappe.db.savepoint("periskope_flow_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_flow_test")
+		install._ensure_tags()
+
+	def test_every_step_has_a_health_and_a_headline(self):
+		data = flow.get_flow()
+		steps = {
+			"periskope",
+			"capture",
+			"link",
+			"queue",
+			"keywords",
+			"ai",
+			"tags",
+			"actions",
+			"waiting",
+			"sla",
+			"people",
+		}
+		self.assertEqual(set(data), steps)
+		for name in steps - {"actions"}:
+			self.assertIn(data[name]["status"], ("ok", "warn", "bad", "off"), name)
+			self.assertTrue(data[name]["headline"], name)
+
+	def test_a_feature_that_is_switched_off_shows_as_off(self):
+		frappe.db.set_single_value("Periskope Settings", "enable_classification", 0)
+		frappe.db.set_single_value("Periskope Settings", "enable_reply_reminders", 0)
+		data = flow.get_flow()
+		self.assertEqual(
+			(data["ai"]["status"], data["waiting"]["status"], data["sla"]["status"]), ("off",) * 3
+		)
+
+	def test_a_keyword_rule_without_recipients_needs_a_look(self):
+		settings = frappe.get_doc("Periskope Settings")
+		settings.set("keyword_rules", [])
+		settings.append(
+			"keyword_rules", {"rule_name": "Silent", "keywords": "legal", "recipients": "", "enabled": 1}
+		)
+		settings.flags.ignore_permissions = True
+		settings.save()
+		self.assertEqual(flow.get_flow()["keywords"]["status"], "warn")
+
+	def test_the_tag_matrix_lists_each_tags_actions(self):
+		tags = {t["name"]: t for t in flow.get_flow()["tags"]["tags"]}
+		self.assertTrue(tags["order_or_enquiry"]["actions"]["Create Lead"])
+		self.assertFalse(tags["general"]["actions"]["Create Lead"])
+		self.assertTrue(tags["general"]["actions"]["Email Alert"])
+
+	def test_a_tick_adds_the_usual_row_and_an_untick_removes_it(self):
+		flow.set_tag_action("general", "ToDo for Rep", True)
+		rows = [r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
+		self.assertEqual([(r.min_severity, r.chat_type) for r in rows], [("Low", "Any")])
+		flow.set_tag_action("general", "ToDo for Rep", True)  # a second tick adds nothing
+		self.assertEqual(
+			len(
+				[r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
+			),
+			1,
+		)
+		flow.set_tag_action("general", "ToDo for Rep", False)
+		self.assertFalse(
+			[r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
+		)
+
+	def test_a_tick_for_an_email_alert_starts_at_high_severity(self):
+		flow.set_tag_action("sample_request", "Email Alert", False)
+		flow.set_tag_action("sample_request", "Email Alert", True)
+		row = next(
+			r for r in frappe.get_doc("Periskope Tag", "sample_request").actions if r.action == "Email Alert"
+		)
+		self.assertEqual(row.min_severity, "High")
+
+	def test_an_unknown_action_is_refused(self):
+		with self.assertRaises(frappe.ValidationError):
+			flow.set_tag_action("general", "Send Pigeon", True)
+
+	def test_a_tag_can_be_switched_off_but_not_the_default(self):
+		flow.set_tag_active("sample_request", False)
+		self.assertEqual(frappe.db.get_value("Periskope Tag", "sample_request", "active"), 0)
+		flow.set_tag_active("sample_request", True)
+		self.assertEqual(frappe.db.get_value("Periskope Tag", "sample_request", "active"), 1)
+		with self.assertRaises(frappe.ValidationError):
+			flow.set_tag_active("general", False)
+
+	def test_only_managers_can_use_the_flow_api(self):
+		original = frappe.session.user
+		self.addCleanup(frappe.set_user, original)
+		frappe.set_user("Guest")
+		# only_for() lets everything through while the test runner is on; switch that off here.
+		was_testing = frappe.flags.in_test
+		frappe.flags.in_test = False
+		self.addCleanup(setattr, frappe.flags, "in_test", was_testing)
+		for call in (
+			settings_api.get_flow,
+			lambda: settings_api.set_tag_active("general", 1),
+			lambda: settings_api.set_tag_action("general", "ToDo for Rep", 1),
+		):
+			with self.assertRaises(frappe.PermissionError):
+				call()
