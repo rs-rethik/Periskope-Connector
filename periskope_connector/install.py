@@ -107,12 +107,10 @@ def setup():
 def before_uninstall():
 	"""Remove what the app added to other doctypes. Data doctypes are left for the admin."""
 	try:
-		from frappe.custom.doctype.custom_field.custom_field import delete_custom_field
+		from frappe.custom.doctype.custom_field.custom_field import delete_custom_fields
 
-		for doctype, fields in CUSTOM_FIELDS.items():
-			for field in fields:
-				if frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": field["fieldname"]}):
-					delete_custom_field(doctype, field["fieldname"])
+		# Frappe's own helper takes the same {doctype: [fields]} shape the install uses.
+		delete_custom_fields(CUSTOM_FIELDS)
 	except Exception:
 		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
 
