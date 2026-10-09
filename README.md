@@ -373,7 +373,7 @@ On **Reply Reminders**, the **SLA Levels** table is the escalation ladder. Each 
 
 ### The Flow tab
 
-The **Flow** tab of Periskope Settings draws the whole pipeline: capture, linking, AI tagging, tags and their actions, the contact queue, and the reply escalation. Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel under the diagram.
+The **Flow** tab of Periskope Settings draws the whole pipeline: capture, linking, AI tagging, tags and their actions, the contact queue, and the reply escalation. Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel. The panel sits to the right of the diagram, or under it when the page is narrow (hide the sidebar and the comments to make room).
 
 ![The Flow tab with the SLA ladder open](docs/manual/31-flow-tab-sla-ladder.jpg)
 *The Flow tab with the SLA ladder open. The waiting times are the shortened ones from the test site; a new install starts at 60, 180 and 480 minutes.*

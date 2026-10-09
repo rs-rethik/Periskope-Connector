@@ -1,6 +1,6 @@
 {
  "actions": [],
- "creation": "2026-09-29 10:00:00.000000",
+ "creation": "2026-09-29 10:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -112,7 +112,7 @@
    "label": "1. Connect to Periskope"
   },
   {
-   "description": "Paste the API key from Periskope (console.periskope.app > Settings > Integrations > API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
+   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "Periskope API Key"
@@ -149,7 +149,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Paste the signing secret from Periskope (Settings > Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions > Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
+   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions &gt; Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
    "fieldname": "webhook_signing_secret",
    "fieldtype": "Password",
    "label": "Webhook Signing Secret"
@@ -196,11 +196,11 @@
    "options": "Direct API\nJarvis"
   },
   {
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
    "description": "Paste the API key of your AI provider: Anthropic (console.anthropic.com) for Claude models, or Z.ai for GLM models. Message text is sent to that provider to be tagged. Then use <b>Actions &gt; Test AI Connection</b>. For GLM, also set <b>AI API Address</b> under AI Options to <b>https://api.z.ai/api/anthropic</b>.",
    "fieldname": "anthropic_api_key",
    "fieldtype": "Password",
-   "label": "AI API Key",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
+   "label": "AI API Key"
   },
   {
    "fieldname": "ai_business_context",
@@ -231,17 +231,17 @@
   },
   {
    "default": "claude-haiku-4-5",
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
    "fieldname": "ai_model",
    "fieldtype": "Select",
    "label": "AI Model",
-   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
+   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air"
   },
   {
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
    "fieldname": "ai_base_url",
    "fieldtype": "Data",
-   "label": "AI API Address",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
+   "label": "AI API Address"
   },
   {
    "fieldname": "column_ai_options",
@@ -381,10 +381,10 @@
    "label": "Include Group Chats"
   },
   {
+   "description": "What happens, and when, for a customer who is waiting for a reply. Rows run in order of waiting time; each action runs once per waiting period.",
    "fieldname": "section_sla",
    "fieldtype": "Section Break",
-   "label": "SLA Levels",
-   "description": "What happens, and when, for a customer who is waiting for a reply. Rows run in order of waiting time; each action runs once per waiting period."
+   "label": "SLA Levels"
   },
   {
    "fieldname": "sla_levels",
@@ -590,6 +590,7 @@
    "default": "https://api.periskope.app/v1",
    "fieldname": "base_url",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Periskope API Address",
    "reqd": 1
   },
@@ -605,10 +606,11 @@
    "options": "<div class=\"periskope-flow\"></div>"
   }
  ],
+ "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-01 09:00:00.000000",
+ "modified": "2026-10-09 16:35:13.170353",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",
@@ -635,6 +637,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

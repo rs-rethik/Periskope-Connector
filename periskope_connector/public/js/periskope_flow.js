@@ -3,6 +3,7 @@
 // Tags and their actions are separate records, so those switches save at once.
 
 (() => {
+	const WIDE_AT = 1180; // px of tab width from which the panel sits to the right
 	const COL = { A: 24, B: 272, C: 520, D: 768 };
 	const ROW = { 1: 60, 2: 255, 3: 450 };
 	const NODES = [
@@ -98,9 +99,8 @@
 
 	const CSS = `
 .pf{display:block;margin:8px 0}
-.pf-body{column-count:2;column-gap:24px}
-.pf-body>*{break-inside:avoid}
-@media (max-width:820px){.pf-body{column-count:1}}
+.pf.wide{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
+.pf.wide .pf-panel{margin-top:0;position:sticky;top:12px}
 .pf-note{background:var(--bg-orange,#fdf3d8);color:var(--text-on-orange,#8a5b00);border-radius:6px;padding:7px 12px;font-size:12.5px;margin-bottom:10px}
 .pf-legend{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--text-muted);font-size:12px;margin-bottom:8px;align-items:center}
 .pf-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
@@ -700,10 +700,13 @@
 		}
 		const panel = PANELS[st.selected](frm, data);
 		const dirty = frm.is_dirty();
+		st.wide = $w[0].clientWidth >= WIDE_AT;
 		$w.html(`<div class="pf-note" ${dirty ? "" : "hidden"}>${__(
 			"You have unsaved changes. Press Save to keep them."
 		)}</div>
-<div class="pf"><div><div class="pf-legend"><span><i style="background:var(--green-500,#2f9e5c)"></i>${__(
+<div class="pf${
+			st.wide ? " wide" : ""
+		}"><div><div class="pf-legend"><span><i style="background:var(--green-500,#2f9e5c)"></i>${__(
 			"Working"
 		)}</span><span><i style="background:var(--orange-500,#d98b00)"></i>${__(
 			"Needs a look"
@@ -719,6 +722,17 @@
 			panel.p
 		)}</p>${panel.body}</aside></div>`);
 		bind(frm, $w);
+		watchWidth(frm, $w[0]);
+	}
+
+	// With the sidebar hidden the tab is wide enough for the panel to sit beside the diagram; on a
+	// narrower page it goes under it.
+	function watchWidth(frm, el) {
+		if (frm._pf.watch || !window.ResizeObserver) return;
+		frm._pf.watch = new ResizeObserver(() => {
+			if (frm._pf.data && el.clientWidth >= WIDE_AT !== !!frm._pf.wide) render(frm);
+		});
+		frm._pf.watch.observe(el);
 	}
 
 	function load(frm) {
