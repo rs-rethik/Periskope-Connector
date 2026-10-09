@@ -197,13 +197,20 @@ function refresh_health(frm) {
 		method: "periskope_connector.api.settings.get_health",
 		callback(r) {
 			const h = r.message || {};
-			frm.set_value("health_last_webhook", `${h.last_webhook || "-"}`);
-			frm.set_value("health_last_ai_run", `${h.last_ai_run || "-"}`);
-			frm.set_value("health_pending", `${h.pending ?? 0}`);
-			frm.set_value("health_failed", `${h.failed ?? 0}`);
-			frm.set_value("health_unprocessed", `${h.unprocessed ?? 0}`);
-			frm.set_value("health_month_tokens", `${h.month_tokens ?? 0}`);
-			frm.set_value("health_phones", h.phones || "-");
+			// Shown, not edited: assigning directly keeps the form from being marked unsaved.
+			const values = {
+				health_last_webhook: `${h.last_webhook || "-"}`,
+				health_last_ai_run: `${h.last_ai_run || "-"}`,
+				health_pending: `${h.pending ?? 0}`,
+				health_failed: `${h.failed ?? 0}`,
+				health_unprocessed: `${h.unprocessed ?? 0}`,
+				health_month_tokens: `${h.month_tokens ?? 0}`,
+				health_phones: h.phones || "-",
+			};
+			Object.entries(values).forEach(([field, value]) => {
+				frm.doc[field] = value;
+				frm.refresh_field(field);
+			});
 		},
 	});
 }
