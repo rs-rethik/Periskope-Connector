@@ -167,3 +167,33 @@ class TestSlaLevels(FrappeTestCase):
 		settings.append("sla_levels", {"wait_minutes": -5, "action": "Notify Rep"})
 		with self.assertRaises(frappe.ValidationError):
 			settings.validate_reminders()
+
+
+class TestWorkingHoursSettings(FrappeTestCase):
+	def test_install_stores_the_usual_working_hours_once(self):
+		from periskope_connector import install
+
+		frappe.db.set_single_value("Periskope Settings", "working_hours_start", None)
+		frappe.db.set_single_value("Periskope Settings", "working_hours_end", None)
+		install._ensure_working_hours()
+		self.assertEqual(
+			str(frappe.db.get_single_value("Periskope Settings", "working_hours_start")), "9:00:00"
+		)
+		frappe.db.set_single_value("Periskope Settings", "working_hours_end", "18:30:00")
+		install._ensure_working_hours()  # an existing value is kept
+		self.assertEqual(
+			str(frappe.db.get_single_value("Periskope Settings", "working_hours_end")), "18:30:00"
+		)
+
+	def test_a_window_that_is_too_short_is_rejected(self):
+		settings = frappe.get_doc("Periskope Settings")
+		for start, end in (
+			("12:43:41.565946", "12:43:41.565995"),
+			("09:00:00", "09:10:00"),
+			("10:00:00", "09:00:00"),
+		):
+			settings.working_hours_start, settings.working_hours_end = start, end
+			with self.assertRaises(frappe.ValidationError, msg=f"{start}-{end}"):
+				settings.validate_reminders()
+		settings.working_hours_start, settings.working_hours_end = "09:00:00", "19:00:00"
+		settings.validate_reminders()

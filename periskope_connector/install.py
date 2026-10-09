@@ -96,6 +96,7 @@ def setup():
 		_ensure_tags()
 		_ensure_sla_levels()
 		_ensure_ai_instructions()
+		_ensure_working_hours()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 	except Exception:
@@ -209,3 +210,11 @@ def _ensure_ai_instructions():
 	if (frappe.db.get_single_value("Periskope Settings", "ai_instructions") or "").strip():
 		return
 	frappe.db.set_single_value("Periskope Settings", "ai_instructions", DEFAULT_INSTRUCTIONS)
+
+
+def _ensure_working_hours():
+	"""A Time field's default is not applied to a new single doctype: the form fills in the current
+	time instead, which made the working window zero-length. Store the usual hours up front."""
+	for field, value in (("working_hours_start", "09:00:00"), ("working_hours_end", "19:00:00")):
+		if not frappe.db.get_single_value("Periskope Settings", field):
+			frappe.db.set_single_value("Periskope Settings", field, value)
