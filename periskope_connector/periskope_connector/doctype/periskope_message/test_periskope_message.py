@@ -102,6 +102,10 @@ def _message(message_id, days_old=0, body="hello", raw='{"data": {}}'):
 
 
 class TestPeriskopeMessage(FrappeTestCase):
+	def test_the_customer_number_is_indexed_because_every_lookup_filters_on_it(self):
+		self.assertTrue(frappe.get_meta("Periskope Message").get_field("contact_number").search_index)
+		self.assertTrue(frappe.db.has_index("tabPeriskope Message", "contact_number_index"))
+
 	"""Runs on the real site DB: never commit, always roll back."""
 
 	def setUp(self):
