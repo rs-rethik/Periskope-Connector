@@ -172,7 +172,8 @@ def get_health() -> dict:
 	phones = phone_counts()
 	return {
 		"last_webhook": str(
-			frappe.db.get_value("Periskope Webhook Log", None, "max(creation)") or _("never")
+			frappe.db.get_value("Periskope Webhook Log", {"creation": ["is", "set"]}, "max(creation)")
+			or _("never")
 		),
 		"last_ai_run": str(
 			frappe.db.get_value("Periskope Message", {"classified_at": ["is", "set"]}, "max(classified_at)")
