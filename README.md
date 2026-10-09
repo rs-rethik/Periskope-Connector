@@ -38,7 +38,7 @@ Sales conversations usually live on each rep's phone, so management cannot see t
 
 ## Features
 
-- **Message capture:** every message on a linked number, sent or received, is saved as a **Periskope Message** with its direction, sales rep, customer number and attachment details. Duplicate events are ignored; a background sweep recovers deliveries whose job was lost; a daily sync-health check emails you when a normally busy number goes silent.
+- **Message capture:** every message on a linked number, sent or received, is saved as a **Periskope Message** with its direction, sales rep, customer number and attachment details. Duplicate events are ignored; a background sweep recovers deliveries whose job was lost; an hourly back-fill reads each active chat's history from Periskope and saves messages a missed webhook never delivered (older ones with `periskope_connector.backfill.run --kwargs '{"days": 7}'`); a daily sync-health check emails you when a normally busy number goes silent.
 - **AI classification:** each text message is put in one of six categories by Claude (`quality_complaint`, `delivery_delay`, `payment_issue`, `sample_request`, `order_or_enquiry`, `general`), with severity, sentiment, a one-line summary and details such as a promised follow-up time, the customer's name or a competitor's name. Only the customer's text messages are analysed (20 per 5-minute run, chat history as context); acknowledgements, emoji and one-worders are skipped. A sales manager can record the correct category when the AI was wrong — the latest corrections are fed back into the prompt, and the **Periskope Tagging Review** report shows the correction rate. Every call's tokens are logged (**Periskope AI Usage**), an optional monthly budget pauses tagging when reached, and the instructions are editable (with an **Improve Instructions with AI** button).
 - **CRM linking:** 1-to-1 chats match the customer's number against CRM Lead and Deal (indexed normalised fields, E.164 first so foreign buyers cannot collide; open deals before closed ones). Customer groups match by group name, sender number, the customer name the AI finds, or a lead/deal set by hand on the **Periskope Group**. Classified messages appear on the lead/deal timeline as comments (one per message, burst-merged, or off — your choice; Desk's connections sidebar links the history either way).
 - **Lead capture:** unknown 1-to-1 numbers land in the **Periskope Contact** queue with one-click *Create Lead*, *Link to existing* and *Ignore* (personal/vendor/spam/internal) actions, a daily digest to the sales head, dedupe against existing leads, deals and contacts, and an ignore list (optionally fed by ERPNext Supplier/Employee numbers). Automatic lead creation for new enquiries is a switch (off by default).
@@ -89,7 +89,7 @@ bench --site $SITE_NAME migrate
 
 ## Setup
 
-Open **Periskope Settings**. The tabs walk you through it: **Connection** (API key, webhook URL + signing secret, phone-to-rep assignment), **AI Tagging** (provider, key, model, instructions, business context), **Lead Capture** (auto-create switch, ignore list, digest recipients), **Reply Reminders** (working hours, holiday list, SLA levels, manager and MD emails, acknowledgement words), **Keyword Alerts** (rules and dedupe window — a rule sends nothing until it has recipients), **Data & Cost** (token budget, max tokens, retention, media download), **CRM Visibility** (comment mode, rep self-visibility) and **Health** (live figures).
+Open **Periskope Settings**. The tabs walk you through it: **Connection** (API key, webhook events, signing secret, phone-to-rep assignment; **Test Connection** creates the webhook in Periskope for the selected events, so only the signing secret is pasted by hand), **AI Tagging** (provider, key, model, instructions, business context), **Lead Capture** (auto-create switch, ignore list, digest recipients), **Reply Reminders** (working hours, holiday list, SLA levels, manager and MD emails, acknowledgement words), **Keyword Alerts** (rules and dedupe window — a rule sends nothing until it has recipients), **Data & Cost** (token budget, max tokens, retention, media download), **CRM Visibility** (comment mode, rep self-visibility) and **Health** (live figures).
 
 ## Privacy
 
@@ -102,7 +102,8 @@ Message text is sent to the AI provider you configure — Anthropic by default; 
 - [x] Link messages to CRM leads and deals; lead capture via the contact queue
 - [x] SLA escalation with working hours and holidays; keyword and high-severity alerts
 - [x] Health monitoring, reports, retention
-- [ ] Edit/delete webhook events and history back-fill — waiting on real Periskope payload samples and API docs
+- [x] History back-fill and webhook creation through the Periskope API
+- [ ] Handle edited and deleted messages — only `message.created` is stored; other events are logged
 - [ ] Callyzer SIM call logging (a later project, reusing the same linking pattern)
 
 ## Development
