@@ -1,0 +1,65 @@
+"""Helpers shared by the doctype tests."""
+
+from datetime import datetime, timedelta
+from types import SimpleNamespace
+
+import frappe
+
+from periskope_connector import reminders
+
+# A team group, used by the tests that need a chat with no single customer.
+GROUP_CHAT = "1203639999@g.us"
+
+# A Tuesday far in the future, so the site's real messages are outside the reminder look-back window.
+TUE = datetime(2031, 9, 1)
+while TUE.weekday() != 1:
+	TUE += timedelta(days=1)
+
+
+def event(**data):
+	"""A Periskope message.created webhook payload; pass fields of `data` to override."""
+	base = {
+		"message_id": "link_1",
+		"chat_id": "919600000001@c.us",
+		"from_me": False,
+		"org_phone": "919786387999@c.us",
+		"sender_phone": "919600000001@c.us",
+		"message_type": "chat",
+		"body": "Hi, what is the price?",
+		"timestamp": "2026-09-29T06:30:00Z",
+	}
+	base.update(data)
+	return {"event_type": "message.created", "data": base}
+
+
+def at(day_offset: int, hour: int, minute: int = 0) -> datetime:
+	return TUE + timedelta(days=day_offset, hours=hour, minutes=minute)
+
+
+def cfg(**kw):
+	"""A reminder config for a test: working hours 09:00-19:00 Monday to Saturday, the usual SLA ladder."""
+	base = {
+		"enabled": True,
+		"start": datetime(2000, 1, 1, 9, 0).time(),
+		"end": datetime(2000, 1, 1, 19, 0).time(),
+		"days": reminders.WEEKDAYS["Monday to Saturday"],
+		"holidays": set(),
+		"emails": ["boss@example.com"],
+		"md_emails": ["md@example.com"],
+		"groups": False,
+		"ack_words": [],
+	}
+	base.update(kw)
+	base.setdefault("levels", reminders.default_levels())
+	return SimpleNamespace(**base)
+
+
+def msg(body="", message_type="text", needs_reply=0, status="", severity=None):
+	"""A message-like record for the pure reply-needed checks."""
+	return frappe._dict(
+		body=body,
+		message_type=message_type,
+		needs_reply=needs_reply,
+		classification_status=status,
+		severity=severity,
+	)

@@ -1,3 +1,5 @@
+"""Tests for the Periskope Reply Reminder doctype and the code that works on it."""
+
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -6,42 +8,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import messages, reminders
-
-# A Tuesday far in the future, so the site's real messages are outside the look-back window.
-TUE = datetime(2031, 9, 1)
-while TUE.weekday() != 1:
-	TUE += timedelta(days=1)
-
-
-def at(day_offset: int, hour: int, minute: int = 0) -> datetime:
-	return TUE + timedelta(days=day_offset, hours=hour, minutes=minute)
-
-
-def cfg(**kw):
-	base = {
-		"enabled": True,
-		"start": datetime(2000, 1, 1, 9, 0).time(),
-		"end": datetime(2000, 1, 1, 19, 0).time(),
-		"days": reminders.WEEKDAYS["Monday to Saturday"],
-		"holidays": set(),
-		"emails": ["boss@example.com"],
-		"md_emails": ["md@example.com"],
-		"groups": False,
-		"ack_words": [],
-	}
-	base.update(kw)
-	base.setdefault("levels", reminders.default_levels())
-	return SimpleNamespace(**base)
-
-
-def msg(body="", message_type="text", needs_reply=0, status="", severity=None):
-	return frappe._dict(
-		body=body,
-		message_type=message_type,
-		needs_reply=needs_reply,
-		classification_status=status,
-		severity=severity,
-	)
+from periskope_connector.tests.utils import at, cfg, msg
 
 
 class TestWorkingHours(FrappeTestCase):

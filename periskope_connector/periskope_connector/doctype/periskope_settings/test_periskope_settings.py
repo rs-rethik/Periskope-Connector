@@ -1,14 +1,24 @@
+"""Tests for the Periskope Settings doctype and the code that works on it."""
+
 import hashlib
 import hmac
 import json
+import time
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import frappe
 import requests
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, now_datetime
 
+from periskope_connector import health, messages, reminders, webhooks
+from periskope_connector.ai import classifier
 from periskope_connector.api import settings as settings_api
 from periskope_connector.api import webhook
+from periskope_connector.system import insert_as_system
+from periskope_connector.tests.utils import at, cfg
 
 SECRET = "test-secret"
 
@@ -24,6 +34,16 @@ def _response(status=200, body=None):
 	r.text = json.dumps(body)
 	r.json.return_value = body
 	return r
+
+
+URL = "https://crm.example.com/api/method/periskope_connector.api.webhook.receive"
+
+
+def _hook(event, url=URL, subscribed=True):
+	return {"integration_name": event, "hook_url": url, "is_subscribed": subscribed}
+
+
+APP = Path(frappe.get_app_path("periskope_connector"))
 
 
 class TestPeriskopeSettings(FrappeTestCase):
@@ -148,3 +168,260 @@ class TestPeriskopeSettings(FrappeTestCase):
 
 	def test_webhook_endpoint_is_rate_limited(self):
 		self.assertTrue(hasattr(webhook.receive, "__wrapped__"), "receive() must be wrapped by rate_limit")
+
+
+class TestWorkingHoursSettings(FrappeTestCase):
+	def test_install_stores_the_usual_working_hours_once(self):
+		from periskope_connector import install
+
+		frappe.db.set_single_value("Periskope Settings", "working_hours_start", None)
+		frappe.db.set_single_value("Periskope Settings", "working_hours_end", None)
+		install._ensure_working_hours()
+		self.assertEqual(
+			str(frappe.db.get_single_value("Periskope Settings", "working_hours_start")), "9:00:00"
+		)
+		frappe.db.set_single_value("Periskope Settings", "working_hours_end", "18:30:00")
+		install._ensure_working_hours()  # an existing value is kept
+		self.assertEqual(
+			str(frappe.db.get_single_value("Periskope Settings", "working_hours_end")), "18:30:00"
+		)
+
+	def test_a_window_that_is_too_short_is_rejected(self):
+		settings = frappe.get_doc("Periskope Settings")
+		for start, end in (
+			("12:43:41.565946", "12:43:41.565995"),
+			("09:00:00", "09:10:00"),
+			("10:00:00", "09:00:00"),
+		):
+			settings.working_hours_start, settings.working_hours_end = start, end
+			with self.assertRaises(frappe.ValidationError, msg=f"{start}-{end}"):
+				settings.validate_reminders()
+		settings.working_hours_start, settings.working_hours_end = "09:00:00", "19:00:00"
+		settings.validate_reminders()
+
+
+class TestEnsureWebhooks(FrappeTestCase):
+	def setUp(self):
+		for target in (
+			patch.object(webhooks, "webhook_url", lambda: URL),
+			patch.object(webhooks, "selected_events", lambda: ["message.created", "message.updated"]),
+		):
+			target.start()
+			self.addCleanup(target.stop)
+
+	def _run(self, existing):
+		"""Run with Periskope's current webhooks; returns the result and the POST bodies sent."""
+		posted = []
+
+		def fake(method, path, phone=None, json=None):
+			if method == "GET":
+				return existing
+			posted.append(json)
+			return [{"integration_name": name} for name in json["integrationName"]]
+
+		with patch.object(webhooks, "request", fake):
+			return webhooks.ensure_webhooks(), posted
+
+	def test_all_selected_events_are_created_when_none_exist(self):
+		result, posted = self._run([])
+		self.assertEqual(
+			posted, [{"hookUrl": URL, "integrationName": ["message.created", "message.updated"]}]
+		)
+		self.assertEqual(result["created"], ["message.created", "message.updated"])
+
+	def test_only_the_missing_event_is_created(self):
+		result, posted = self._run([_hook("message.created")])
+		self.assertEqual(posted[0]["integrationName"], ["message.updated"])
+		self.assertEqual(result["existing"], ["message.created"])
+
+	def test_nothing_is_created_when_everything_exists(self):
+		result, posted = self._run([_hook("message.created"), _hook("message.updated")])
+		self.assertEqual(posted, [])
+		self.assertEqual(result["created"], [])
+
+	def test_an_unsubscribed_webhook_does_not_count(self):
+		_, posted = self._run([_hook("message.created", subscribed=False), _hook("message.updated")])
+		self.assertEqual(posted[0]["integrationName"], ["message.created"])
+
+	def test_a_webhook_on_another_address_does_not_count_and_is_reported(self):
+		old = "https://old-tunnel.ngrok-free.app/api/method/periskope_connector.api.webhook.receive"
+		result, posted = self._run([_hook("message.created", url=old), _hook("message.updated", url=old)])
+		self.assertEqual(len(posted[0]["integrationName"]), 2)
+		self.assertEqual(result["stale"], [old])
+
+	def test_the_response_may_be_wrapped(self):
+		_, posted = self._run({"webhooks": [_hook("message.created"), _hook("message.updated")]})
+		self.assertEqual(posted, [])
+
+	def test_it_refuses_an_address_periskope_cannot_reach(self):
+		for bad in ("http://pranera.site:8002/x", "https://localhost/x", "https://mysite/x"):
+			with patch.object(webhooks, "webhook_url", lambda bad=bad: bad):
+				with patch.object(webhooks, "request", side_effect=AssertionError("must not call Periskope")):
+					with self.assertRaises(frappe.ValidationError, msg=bad):
+						webhooks.ensure_webhooks()
+
+	def test_it_asks_for_an_event_when_none_is_selected(self):
+		with patch.object(webhooks, "selected_events", lambda: []):
+			with patch.object(webhooks, "request", side_effect=AssertionError("must not call Periskope")):
+				with self.assertRaises(frappe.ValidationError):
+					webhooks.ensure_webhooks()
+
+
+class TestSelectedEvents(FrappeTestCase):
+	def setUp(self):
+		frappe.db.savepoint("periskope_events_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_events_test")
+		with patch.object(frappe.db, "commit"):
+			settings = frappe.get_doc("Periskope Settings")
+			settings.set("webhook_events", [])
+			for event in ("message.deleted", "message.created", "message.deleted"):
+				settings.append("webhook_events", {"event": event})
+			settings.flags.ignore_permissions = True
+			settings.save()
+
+	def test_events_come_from_the_settings_without_duplicates_in_order(self):
+		self.assertEqual(webhooks.selected_events(), ["message.deleted", "message.created"])
+
+
+class TestSiteUrl(FrappeTestCase):
+	def test_a_configured_host_name_is_used_as_it_is_without_the_dev_port(self):
+		with patch.dict(frappe.local.conf, {"host_name": "https://abc.ngrok-free.app/"}):
+			self.assertEqual(webhooks.site_url(), "https://abc.ngrok-free.app")
+			self.assertEqual(
+				webhooks.webhook_url(),
+				"https://abc.ngrok-free.app/api/method/periskope_connector.api.webhook.receive",
+			)
+
+	def test_a_host_name_without_a_scheme_gets_http(self):
+		with patch.dict(frappe.local.conf, {"host_name": "crm.example.com"}):
+			self.assertEqual(webhooks.site_url(), "http://crm.example.com")
+
+	def test_without_a_host_name_frappe_decides(self):
+		with patch.dict(frappe.local.conf, {"host_name": None}):
+			self.assertEqual(webhooks.site_url(), frappe.utils.get_url())
+
+
+class TestSyncCheck(FrappeTestCase):
+	def setUp(self):
+		for target in (
+			patch.object(frappe.db, "commit"),
+			patch.object(health, "_manager_emails", lambda: ["boss@example.com"]),
+		):
+			target.start()
+			self.addCleanup(target.stop)
+		frappe.db.savepoint("periskope_sync_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_sync_test")
+		frappe.cache().delete_keys("periskope_alert:*")
+
+	def _phones(self, **columns):
+		defaults = {"phone_name": "Sales A", "rep": "Administrator"}
+		defaults.update(columns)
+		settings = frappe.get_doc("Periskope Settings")
+		settings.append("phones", {"phone_id": "health-1", "number": "919600000001", **defaults})
+		settings.flags.ignore_permissions = True
+		settings.save()
+
+	def test_a_normally_busy_number_that_goes_silent_alerts(self):
+		self._phones()
+		counts = {"919600000001": SimpleNamespace(today=0, baseline=5.2)}
+		with (
+			patch.object(frappe.db, "get_single_value", lambda *a, **k: 1),
+			patch.object(health, "phone_counts", lambda: counts),
+			patch.object(frappe, "sendmail") as sendmail,
+		):
+			self.assertEqual(health.sync_check(), ["919600000001"])
+			self.assertEqual(health.sync_check(), [])  # once a day, not once a run
+			self.assertEqual(sendmail.call_count, 1)
+			self.assertIn("unlinked", sendmail.call_args.kwargs["subject"].lower())
+
+	def test_a_quiet_number_is_not_a_problem(self):
+		self._phones()
+		counts = {"919600000001": SimpleNamespace(today=0, baseline=0.3)}
+		with (
+			patch.object(frappe.db, "get_single_value", lambda *a, **k: 1),
+			patch.object(health, "phone_counts", lambda: counts),
+			patch.object(frappe, "sendmail"),
+		):
+			self.assertEqual(health.sync_check(), [])
+
+	def test_a_number_with_traffic_today_is_fine(self):
+		self._phones()
+		counts = {"919600000001": SimpleNamespace(today=12, baseline=5.2)}
+		with (
+			patch.object(frappe.db, "get_single_value", lambda *a, **k: 1),
+			patch.object(health, "phone_counts", lambda: counts),
+			patch.object(frappe, "sendmail"),
+		):
+			self.assertEqual(health.sync_check(), [])
+
+
+class TestGetHealth(FrappeTestCase):
+	def test_the_figures_come_back_with_the_expected_keys(self):
+		figures = health.get_health()
+		for key in (
+			"last_webhook",
+			"last_ai_run",
+			"pending",
+			"failed",
+			"unprocessed",
+			"month_tokens",
+			"phones",
+		):
+			self.assertIn(key, figures)
+
+
+class TestHealthFigures(FrappeTestCase):
+	def setUp(self):
+		frappe.db.savepoint("periskope_health_figures_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_health_figures_test")
+
+	def test_the_last_webhook_is_the_newest_log(self):
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Webhook Log",
+				"event_type": "message.created",
+				"signature_valid": 1,
+				"payload": "{}",
+			}
+		).insert(ignore_permissions=True)
+		latest = frappe.db.sql("select max(creation) from `tabPeriskope Webhook Log`")[0][0]
+		self.assertEqual(health.get_health()["last_webhook"], str(latest))
+		self.assertNotEqual(health.get_health()["last_webhook"], "never")
+
+
+class TestNoOutboundMessaging(FrappeTestCase):
+	"""The hard boundary: nothing in this app may send a WhatsApp message, ever."""
+
+	# Periskope's send-message REST surface; none of these may appear anywhere in the app.
+	SEND_MARKERS = ("messages/send", "send_message", "send-message", "chats/send", "/sendmessage")
+
+	def test_no_send_message_call_exists_in_the_app(self):
+		for path in APP.rglob("*.py"):
+			if "__pycache__" in str(path) or path.name.startswith("test_"):
+				continue
+			source = path.read_text()
+			for marker in self.SEND_MARKERS:
+				self.assertNotIn(marker, source, f"{path} looks like it sends messages")
+
+	def test_the_periskope_client_never_posts(self):
+		source = (APP / "client.py").read_text()
+		self.assertIn('"GET"', source)  # reads chats and phones only
+		for method in ('"POST"', '"PUT"', '"PATCH"', '"DELETE"'):
+			self.assertNotIn(method, source)
+
+
+class TestDisabledIntegration(FrappeTestCase):
+	def _receive(self, body: bytes):
+		frappe.local.request = MagicMock()
+		frappe.local.request.get_data.return_value = body
+		frappe.local.request_ip = "203.0.113.9"
+		with patch.object(webhook.frappe, "get_request_header", side_effect=lambda k, d=None: None):
+			return webhook.receive()
+
+	def test_a_disabled_integration_stores_nothing_and_fails_loudly(self):
+		body = json.dumps({"event_type": "message.created", "data": {}}).encode()
+		before = frappe.db.count("Periskope Webhook Log")
+		with patch.object(frappe.db, "get_single_value", lambda *a, **k: 0):
+			with self.assertRaises(frappe.ValidationError):
+				self._receive(body)
+		self.assertEqual(frappe.db.count("Periskope Webhook Log"), before)
