@@ -336,8 +336,8 @@ class TestClassify(FrappeTestCase):
 		self.assertIn("Be strict. {curly} braces stay.", prompt)
 		self.assertIn("customer_name is the name", prompt)  # always added
 
-	def test_empty_or_old_tag_instructions_fall_back_to_the_default(self):
-		for text in ("  ", None, "Tag it.\n\nAvailable tags:\n{tag_list}"):
+	def test_empty_instructions_fall_back_to_the_default(self):
+		for text in ("  ", None):
 			prompt = classifier.build_system_prompt(
 				SimpleNamespace(ai_instructions=text, ai_business_context=None)
 			)

@@ -95,17 +95,3 @@ class TestTags(FrappeTestCase):
 		frappe.db.set_value("Periskope Tag", "sample_request", "active", 0)
 		with self.assertRaises(frappe.ValidationError):
 			settings_api.set_correct_category("any", "sample_request")
-
-	def test_the_patch_removes_the_category_list_from_saved_instructions(self):
-		from periskope_connector.patches import use_tags_in_ai_instructions as patch_module
-
-		old = (
-			"Rules:\n- category is exactly one of:\n  - general: anything else.\n"
-			'- Messages labelled "Rep" are sent by us.'
-		)
-		frappe.db.set_single_value("Periskope Settings", "ai_instructions", old)
-		patch_module.execute()
-		new = frappe.db.get_single_value("Periskope Settings", "ai_instructions")
-		self.assertNotIn("general: anything else", new)
-		self.assertIn("listed under Categories below", new)
-		self.assertIn('Messages labelled "Rep"', new)

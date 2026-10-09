@@ -1,6 +1,5 @@
 """The tags the AI can give a message. They are records (Periskope Tag), so the team edits them in
-Desk instead of in code. The six below are the starting set, created on install and used as a
-fallback if the table is ever empty."""
+Desk instead of in code. The six below are the starting set, created on install."""
 
 import frappe
 
@@ -47,12 +46,7 @@ def active_tags() -> list[dict]:
 		fields=["name", "description", "is_default"],
 		order_by="sort_order asc, creation asc",
 	)
-	if rows:
-		return rows
-	return [
-		{"name": name, "description": description, "is_default": 1 if name == FALLBACK_DEFAULT else 0}
-		for name, description in DEFAULT_TAGS
-	]
+	return rows
 
 
 def names() -> list[str]:

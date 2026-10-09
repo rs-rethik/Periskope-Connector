@@ -49,17 +49,18 @@ ACTION_LEVEL = {
 SEVERITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
 
 
-def default_levels(l1=1.0, l2=3.0, l3=8.0, high_minutes=30.0) -> list[SimpleNamespace]:
-	"""The starting SLA levels, from the hours the settings used to hold."""
+def default_levels() -> list[SimpleNamespace]:
+	"""The starting SLA levels: a bell at 1 working hour, a ToDo and the managers at 3, the
+	escalation list at 8, and all four after 30 minutes for a High severity message."""
 	rows = [
-		(l1 * 60, "Low", NOTIFY_REP),
-		(l2 * 60, "Low", TODO_FOR_REP),
-		(l2 * 60, "Low", EMAIL_MANAGERS),
-		(l3 * 60, "Low", EMAIL_ESCALATION),
-		(high_minutes, "High", NOTIFY_REP),
-		(high_minutes, "High", TODO_FOR_REP),
-		(high_minutes, "High", EMAIL_MANAGERS),
-		(high_minutes, "High", EMAIL_ESCALATION),
+		(60, "Low", NOTIFY_REP),
+		(180, "Low", TODO_FOR_REP),
+		(180, "Low", EMAIL_MANAGERS),
+		(480, "Low", EMAIL_ESCALATION),
+		(30, "High", NOTIFY_REP),
+		(30, "High", TODO_FOR_REP),
+		(30, "High", EMAIL_MANAGERS),
+		(30, "High", EMAIL_ESCALATION),
 	]
 	return [
 		SimpleNamespace(wait_minutes=minutes, min_severity=severity, action=action, recipients="")
@@ -98,17 +99,7 @@ def get_config(settings=None) -> SimpleNamespace:
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),
 		holidays=_holiday_dates(settings.holiday_list),
-		l1=flt(settings.sla_l1_hours) or 1.0,
-		l2=flt(settings.sla_l2_hours) or 3.0,
-		l3=flt(settings.sla_l3_hours) or 8.0,
-		high_minutes=flt(settings.high_severity_minutes) or 30.0,
-		levels=levels
-		or default_levels(
-			flt(settings.sla_l1_hours) or 1.0,
-			flt(settings.sla_l2_hours) or 3.0,
-			flt(settings.sla_l3_hours) or 8.0,
-			flt(settings.high_severity_minutes) or 30.0,
-		),
+		levels=levels,
 		emails=emails,
 		md_emails=emails_of(settings.escalation_emails) or emails,
 		groups=bool(settings.remind_group_chats),
@@ -213,17 +204,8 @@ def _key(row) -> str:
 
 
 def _done(reminder) -> set[str]:
-	"""The steps already taken in this waiting period. A reminder from before the levels were
-	configurable only has its level number, which is turned into the steps that level meant."""
-	if reminder.fired_rows:
-		return {k for k in reminder.fired_rows.split("\n") if k}
-	level = reminder.level or (2 if reminder.status == "Escalated" else 1)
-	steps = [f"{NOTIFY_REP}|"]
-	if level >= 2:
-		steps += [f"{TODO_FOR_REP}|", f"{EMAIL_MANAGERS}|"]
-	if level >= 3:
-		steps.append(f"{EMAIL_ESCALATION}|")
-	return set(steps)
+	"""The steps already taken in this waiting period."""
+	return {key for key in (reminder.fired_rows or "").split("\n") if key}
 
 
 def _bell(rep: str | None, last, hours: float):

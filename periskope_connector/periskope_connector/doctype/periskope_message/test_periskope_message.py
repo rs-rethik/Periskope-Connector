@@ -171,11 +171,10 @@ class TestPeriskopeMessage(FrappeTestCase):
 	def test_a_sales_manager_can_set_the_correct_category_but_only_a_real_one(self):
 		from periskope_connector import tags
 		from periskope_connector.api import settings as settings_api
-		from periskope_connector.patches.move_to_ai_categories import TAG_TO_CATEGORY
 
 		name = messages.create_message(_event(message_id="cc1"))
 		settings_api.set_correct_category(name, "delivery_delay")
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "correct_category"), "delivery_delay")
 		with self.assertRaises(frappe.ValidationError):
 			settings_api.set_correct_category(name, "not_a_category")
-		self.assertTrue(set(TAG_TO_CATEGORY.values()) <= set(tags.names()))
+		self.assertIn("delivery_delay", tags.names())

@@ -109,15 +109,10 @@ class TestSlaLevels(FrappeTestCase):
 		self.assertEqual(self.sendmail.call_count, 2)
 		self.assertIn(reminders.EMAIL_MANAGERS, self._reminder()[0].fired_rows)
 
-	def test_a_reminder_from_before_the_levels_were_configurable_is_not_repeated(self):
-		old = SimpleNamespace(fired_rows="", level=2, status="Escalated")
-		self.assertEqual(
-			reminders._done(old),
-			{"Notify Rep|", "ToDo for Rep|", "Email Managers|"},
-		)
-		self.assertEqual(
-			reminders._done(SimpleNamespace(fired_rows="", level=1, status="Open")), {"Notify Rep|"}
-		)
+	def test_the_steps_done_are_read_from_the_reminder(self):
+		reminder = SimpleNamespace(fired_rows="Notify Rep|\nEmail Managers|")
+		self.assertEqual(reminders._done(reminder), {"Notify Rep|", "Email Managers|"})
+		self.assertEqual(reminders._done(SimpleNamespace(fired_rows="")), set())
 
 	def test_the_ladder_is_read_from_the_settings_in_order_of_waiting_time(self):
 		settings = frappe._dict(
@@ -140,26 +135,25 @@ class TestSlaLevels(FrappeTestCase):
 		config = reminders.get_config(settings)
 		self.assertEqual([row.action for row in config.levels], ["Notify Rep", "Email Managers"])
 
-	def test_an_empty_table_falls_back_to_the_usual_ladder(self):
-		settings = frappe._dict(
-			sla_l1_hours=2, sla_l2_hours=4, sla_l3_hours=9, high_severity_minutes=20, sla_levels=[]
-		)
-		for key, value in {
-			"alert_emails": "",
-			"ack_words": "",
-			"working_hours_start": "09:00:00",
-			"working_hours_end": "19:00:00",
-			"working_days": "Monday to Saturday",
-			"holiday_list": None,
-			"enable_reply_reminders": 1,
-			"remind_group_chats": 0,
-			"escalation_emails": "",
-		}.items():
-			settings[key] = value
-		config = reminders.get_config(settings)
-		self.assertEqual(len(config.levels), 8)
-		self.assertEqual(config.levels[0].wait_minutes, 120)
-		self.assertEqual(config.levels[-1].wait_minutes, 20)
+	def test_an_empty_table_means_no_actions(self):
+		self._use()
+		self._add(at(0, 9), severity="High")
+		reminders.run(at(0, 12))
+		self.assertEqual(self._reminder(), [])
+
+	def test_install_creates_the_usual_ladder_once(self):
+		from periskope_connector import install
+
+		with patch.object(frappe.db, "commit"):
+			settings = frappe.get_doc("Periskope Settings")
+			settings.set("sla_levels", [])
+			settings.save()
+			install._ensure_sla_levels()
+			install._ensure_sla_levels()
+		rows = frappe.get_doc("Periskope Settings").sla_levels
+		self.assertEqual(len(rows), 8)
+		self.assertEqual((rows[0].wait_minutes, rows[0].action), (60, "Notify Rep"))
+		self.assertEqual((rows[-1].wait_minutes, rows[-1].min_severity), (30, "High"))
 
 	def test_the_settings_reject_a_bad_row(self):
 		settings = frappe.get_doc("Periskope Settings")

@@ -95,6 +95,7 @@ def setup():
 		_ensure_lead_source()
 		_ensure_tags()
 		_ensure_sla_levels()
+		_ensure_ai_instructions()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 	except Exception:
@@ -182,6 +183,29 @@ def _ensure_tags():
 
 def _ensure_sla_levels():
 	"""Start a new site with the usual SLA ladder; the team edits it afterwards."""
-	from periskope_connector.patches.seed_sla_levels import execute
+	from periskope_connector.reminders import default_levels
 
-	execute()
+	settings = frappe.get_doc("Periskope Settings")
+	if settings.sla_levels:
+		return
+	for row in default_levels():
+		settings.append(
+			"sla_levels",
+			{
+				"wait_minutes": row.wait_minutes,
+				"min_severity": row.min_severity,
+				"action": row.action,
+				"recipients": row.recipients,
+			},
+		)
+	settings.flags.ignore_permissions = True
+	settings.save()
+
+
+def _ensure_ai_instructions():
+	"""Show the default AI instructions in the settings so they can be edited."""
+	from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS
+
+	if (frappe.db.get_single_value("Periskope Settings", "ai_instructions") or "").strip():
+		return
+	frappe.db.set_single_value("Periskope Settings", "ai_instructions", DEFAULT_INSTRUCTIONS)

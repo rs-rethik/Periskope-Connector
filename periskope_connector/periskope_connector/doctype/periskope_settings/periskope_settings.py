@@ -40,12 +40,6 @@ class PeriskopeSettings(Document):
 				listed = [e.strip() for e in re.split(r"[,\n;]", row.recipients or "") if e.strip()]
 				if not listed or not all(validate_email_address(e) for e in listed):
 					frappe.throw(_("Row {0}: Email Recipients needs valid email addresses").format(row.idx))
-		for field, default in (("remind_after_hours", 1), ("escalate_after_hours", 2)):
-			if not flt(self.get(field)):
-				self.set(field, default)  # never saved yet, or cleared
-			elif flt(self.get(field)) < 0:
-				frappe.throw(_("{0} cannot be negative").format(self.meta.get_label(field)))
-
 		emails = [e.strip() for e in re.split(r"[,\n;]", self.alert_emails or "") if e.strip()]
 		for email in emails:
 			if not validate_email_address(email):

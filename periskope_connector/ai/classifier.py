@@ -84,7 +84,7 @@ def skip_reason(doc, settings) -> str | None:
 # --- Prompt and schema -------------------------------------------------------------------------
 
 
-# Added to every prompt, so an older edited copy of the instructions still asks for it.
+# Added to every prompt, so edited instructions still ask for it.
 CUSTOMER_NAME_NOTE = (
 	"customer_name is the name of the customer company or person the message is about, exactly as "
 	"written in the message or the earlier messages (for example the name before an order number in a "
@@ -97,8 +97,7 @@ CUSTOMER_NAME_NOTE = (
 
 def build_system_prompt(settings=None) -> str:
 	instructions = (getattr(settings, "ai_instructions", None) or "").strip()
-	if not instructions or "{tag_list}" in instructions:
-		# Empty, or a copy written for the old tag system: use the current default.
+	if not instructions:
 		instructions = DEFAULT_INSTRUCTIONS.strip()
 	prompt = f"{instructions}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}"
 
