@@ -89,9 +89,7 @@
   "health_month_tokens",
   "health_phones",
   "tab_advanced",
-  "base_url",
-  "tab_flow",
-  "flow_html"
+  "base_url"
  ],
  "fields": [
   {
@@ -593,17 +591,6 @@
    "in_list_view": 1,
    "label": "Periskope API Address",
    "reqd": 1
-  },
-  {
-   "fieldname": "tab_flow",
-   "fieldtype": "Tab Break",
-   "label": "Flow"
-  },
-  {
-   "fieldname": "flow_html",
-   "fieldtype": "HTML",
-   "label": "How a message moves",
-   "options": "<div class=\"periskope-flow\"></div>"
   }
  ],
  "hide_toolbar": 1,

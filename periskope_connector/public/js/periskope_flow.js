@@ -1,9 +1,9 @@
-// The Flow tab of Periskope Settings: the pipeline as a diagram, with an edit panel for each step.
-// Changes to the settings form (switches, SLA rows, emails) are saved with the form's Save button.
-// Tags and their actions are separate records, so those switches save at once.
+// The Flow dialog of Periskope Settings: the pipeline as a diagram, with an edit panel for each step.
+// Every change made in the dialog is saved as it is made: switches, SLA rows, emails and so on save the
+// settings form, and tags and their actions (separate records) save through their own calls.
 
 (() => {
-	const WIDE_AT = 1180; // px of tab width from which the panel sits to the right
+	const WIDE_AT = 1120; // px of dialog width from which the panel sits to the right
 	const COL = { A: 24, B: 272, C: 520, D: 768 };
 	const ROW = { 1: 60, 2: 255, 3: 450 };
 	const NODES = [
@@ -135,6 +135,7 @@
 .pf-t .c{text-align:center}
 .pf-t input,.pf-t select,.pf-box textarea,.pf-box input,.pf-box select{width:100%;font-size:12.5px;padding:3px 6px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg,#fff);color:var(--text-color)}
 .pf-box textarea{min-height:46px}
+.pf-dialog .modal-dialog{max-width:min(1500px,96vw)}
 .pf-sw{display:inline-block;width:30px;height:16px;border-radius:9px;background:var(--gray-400,#bbb);position:relative;border:0;padding:0;vertical-align:middle;cursor:pointer}
 .pf-sw::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .12s}
 .pf-sw.on{background:var(--primary)}.pf-sw.on::after{left:16px}
@@ -626,7 +627,7 @@
 				k: __("Step 8"),
 				h: __("SLA ladder"),
 				p: __(
-					"What happens as a customer keeps waiting, in working time. High severity can jump ahead. Edit the rows, then press Save."
+					"What happens as a customer keeps waiting, in working time. High severity can jump ahead. Changes save as you make them."
 				),
 				body:
 					kv([
@@ -690,32 +691,25 @@
 
 	function render(frm) {
 		const st = frm._pf;
-		const $w = frm.fields_dict.flow_html && frm.fields_dict.flow_html.$wrapper;
-		if (!$w || !st) return;
-		ensureCss();
+		const $w = st && st.$body;
+		if (!$w) return;
 		const data = st.data;
 		if (!data) {
 			$w.html(`<div class="pf"><div class="text-muted">${__("Loading...")}</div></div>`);
 			return;
 		}
 		const panel = PANELS[st.selected](frm, data);
-		const dirty = frm.is_dirty();
 		st.wide = $w[0].clientWidth >= WIDE_AT;
-		$w.html(`<div class="pf-note" ${dirty ? "" : "hidden"}>${__(
-			"You have unsaved changes. Press Save to keep them."
-		)}</div>
-<div class="pf${
-			st.wide ? " wide" : ""
-		}"><div><div class="pf-legend"><span><i style="background:var(--green-500,#2f9e5c)"></i>${__(
-			"Working"
-		)}</span><span><i style="background:var(--orange-500,#d98b00)"></i>${__(
-			"Needs a look"
-		)}</span><span><i style="background:var(--red-500,#d6433a)"></i>${__(
-			"Not working"
-		)}</span><span><i style="background:var(--gray-400,#aaa)"></i>${__(
-			"Off"
-		)}</span><span>${__(
-			"Click a step to see it and change it"
+		const dot = (color, label) => `<span><i style="background:${color}"></i>${label}</span>`;
+		$w.html(`<div class="pf${st.wide ? " wide" : ""}"><div>
+<div class="pf-legend">${dot("var(--green-500,#2f9e5c)", __("Working"))}${dot(
+			"var(--orange-500,#d98b00)",
+			__("Needs a look")
+		)}${dot("var(--red-500,#d6433a)", __("Not working"))}${dot(
+			"var(--gray-400,#aaa)",
+			__("Off")
+		)}<span>${__(
+			"Click a step to see it and change it. Changes save as you make them."
 		)}</span><a href="#" data-refresh="1">${__("Refresh figures")}</a></div>
 <div class="pf-canvas">${drawSvg(data, st.selected)}</div></div>
 <aside class="pf-panel"><div class="kick">${e(panel.k)}</div><h3>${e(panel.h)}</h3><p>${e(
@@ -725,8 +719,7 @@
 		watchWidth(frm, $w[0]);
 	}
 
-	// With the sidebar hidden the tab is wide enough for the panel to sit beside the diagram; on a
-	// narrower page it goes under it.
+	// A wide dialog has room for the panel beside the diagram; a narrow one puts it under.
 	function watchWidth(frm, el) {
 		if (frm._pf.watch || !window.ResizeObserver) return;
 		frm._pf.watch = new ResizeObserver(() => {
@@ -737,7 +730,6 @@
 
 	function load(frm) {
 		frm._pf = frm._pf || { selected: "periskope", data: null };
-		if (frm.is_new()) return;
 		frappe.call({
 			method: "periskope_connector.api.settings.get_flow",
 			callback(r) {
@@ -747,165 +739,179 @@
 		});
 	}
 
+	function openFlow(frm) {
+		ensureCss();
+		frm._pf = frm._pf || { selected: "periskope", data: null };
+		const st = frm._pf;
+		if (!st.dialog) {
+			const d = new frappe.ui.Dialog({
+				title: __("How a message moves"),
+				size: "extra-large",
+				fields: [{ fieldtype: "HTML", fieldname: "flow" }],
+			});
+			d.$wrapper.addClass("pf-dialog");
+			d.onhide = () => {
+				if (st.watch) st.watch.disconnect();
+				st.watch = null;
+			};
+			st.dialog = d;
+			st.$body = d.fields_dict.flow.$wrapper;
+		}
+		st.dialog.show();
+		render(frm);
+		load(frm);
+	}
+
+	// Save the settings form after a change made in the dialog, one save at a time.
+	function autosave(frm) {
+		const st = frm._pf;
+		st.saving = (st.saving || Promise.resolve()).then(
+			() =>
+				new Promise((resolve) => {
+					if (!frm.is_dirty()) return resolve();
+					Promise.resolve(frm.save())
+						.then(() =>
+							frappe.show_alert({ message: __("Saved"), indicator: "green" })
+						)
+						.finally(resolve);
+				})
+		);
+		return st.saving;
+	}
+
 	function setValue(frm, name, value) {
-		return frm.set_value(name, value).then(() => render(frm));
+		return frm.set_value(name, value).then(() => {
+			render(frm);
+			return autosave(frm);
+		});
 	}
 
 	function rowOf(frm, table, rowname) {
 		return (frm.doc[table] || []).find((r) => r.name === rowname);
 	}
 
-	function withSaved(frm, fn) {
-		if (frm.is_dirty()) frm.save().then(fn);
-		else fn();
+	function setRow(frm, table, name, fieldname, value) {
+		const row = rowOf(frm, table, name);
+		if (!row) return;
+		frappe.model.set_value(row.doctype, row.name, fieldname, value);
+		frm.dirty();
+		render(frm);
+		autosave(frm);
+	}
+
+	// Leave the dialog before going to another page or tab.
+	function leave(frm, go) {
+		frm._pf.dialog.hide();
+		go();
 	}
 
 	function bind(frm, $w) {
 		const root = $w[0];
-		root.querySelectorAll("[data-node]").forEach((n) => {
-			const pick = () => {
+		const on = (selector, event, fn) =>
+			root
+				.querySelectorAll(selector)
+				.forEach((el) => el.addEventListener(event, (ev) => fn(el, ev)));
+		on("[data-node]", "click", (n) => {
+			frm._pf.selected = n.dataset.node;
+			render(frm);
+		});
+		on("[data-node]", "keydown", (n, ev) => {
+			if (ev.key === "Enter" || ev.key === " ") {
+				ev.preventDefault();
 				frm._pf.selected = n.dataset.node;
 				render(frm);
-			};
-			n.addEventListener("click", pick);
-			n.addEventListener("keydown", (ev) => {
-				if (ev.key === "Enter" || ev.key === " ") {
-					ev.preventDefault();
-					pick();
-				}
+			}
+		});
+		on("[data-field]", "click", (b) =>
+			setValue(frm, b.dataset.field, field(frm, b.dataset.field) ? 0 : 1)
+		);
+		on("[data-select]", "change", (s) => setValue(frm, s.dataset.select, s.value));
+		on(
+			"[data-time]",
+			"change",
+			(s) => s.value && setValue(frm, s.dataset.time, s.value + ":00")
+		);
+		on("[data-text]", "change", (s) => setValue(frm, s.dataset.text, s.value));
+		on("[data-row]", "change", (i) => {
+			const [table, name, fieldname] = i.dataset.row.split("|");
+			setRow(frm, table, name, fieldname, i.type === "number" ? +i.value : i.value);
+		});
+		on("[data-rowsw]", "click", (b) => {
+			const [table, name, fieldname] = b.dataset.rowsw.split("|");
+			const row = rowOf(frm, table, name);
+			if (row) setRow(frm, table, name, fieldname, row[fieldname] ? 0 : 1);
+		});
+		on("[data-sla-del]", "click", (b) => {
+			const idx = (frm.doc.sla_levels || []).findIndex((r) => r.name === b.dataset.slaDel);
+			if (idx < 0) return;
+			frm.get_field("sla_levels").grid.grid_rows[idx].remove();
+			frm.dirty();
+			render(frm);
+			autosave(frm);
+		});
+		on("[data-sla-add]", "click", () => {
+			frm.add_child("sla_levels", {
+				wait_minutes: 60,
+				min_severity: "Low",
+				action: "Notify Rep",
+			});
+			frm.refresh_field("sla_levels");
+			frm.dirty();
+			render(frm);
+			autosave(frm);
+		});
+		on("[data-tag-active]", "click", (b) =>
+			frappe.call({
+				method: "periskope_connector.api.settings.set_tag_active",
+				args: { tag: b.dataset.tagActive, active: b.classList.contains("on") ? 0 : 1 },
+				callback: () => load(frm),
+			})
+		);
+		on("[data-tag-action]", "click", (b) => {
+			const [tag, action] = b.dataset.tagAction.split("|");
+			frappe.call({
+				method: "periskope_connector.api.settings.set_tag_action",
+				args: { tag, action, on: b.classList.contains("on") ? 0 : 1 },
+				callback: () => load(frm),
 			});
 		});
-		root.querySelectorAll("[data-field]").forEach((b) =>
-			b.addEventListener("click", () =>
-				setValue(frm, b.dataset.field, field(frm, b.dataset.field) ? 0 : 1)
-			)
-		);
-		root.querySelectorAll("[data-select]").forEach((s) =>
-			s.addEventListener("change", () => setValue(frm, s.dataset.select, s.value))
-		);
-		root.querySelectorAll("[data-time]").forEach((s) =>
-			s.addEventListener(
-				"change",
-				() => s.value && setValue(frm, s.dataset.time, s.value + ":00")
-			)
-		);
-		root.querySelectorAll("[data-text]").forEach((s) =>
-			s.addEventListener("change", () => setValue(frm, s.dataset.text, s.value))
-		);
-		root.querySelectorAll("[data-row]").forEach((i) =>
-			i.addEventListener("change", () => {
-				const [table, name, fieldname] = i.dataset.row.split("|");
-				const row = rowOf(frm, table, name);
-				if (row)
-					frappe.model.set_value(
-						row.doctype,
-						row.name,
-						fieldname,
-						i.type === "number" ? +i.value : i.value
-					);
-				render(frm);
-			})
-		);
-		root.querySelectorAll("[data-rowsw]").forEach((b) =>
-			b.addEventListener("click", () => {
-				const [table, name, fieldname] = b.dataset.rowsw.split("|");
-				const row = rowOf(frm, table, name);
-				if (row)
-					frappe.model.set_value(
-						row.doctype,
-						row.name,
-						fieldname,
-						row[fieldname] ? 0 : 1
-					);
-				render(frm);
-			})
-		);
-		root.querySelectorAll("[data-sla-del]").forEach((b) =>
-			b.addEventListener("click", () => {
-				const idx = (frm.doc.sla_levels || []).findIndex(
-					(r) => r.name === b.dataset.slaDel
-				);
-				if (idx >= 0) frm.get_field("sla_levels").grid.grid_rows[idx].remove();
-				render(frm);
-			})
-		);
-		root.querySelectorAll("[data-sla-add]").forEach((b) =>
-			b.addEventListener("click", () => {
-				frm.add_child("sla_levels", {
-					wait_minutes: 60,
-					min_severity: "Low",
-					action: "Notify Rep",
-				});
-				frm.refresh_field("sla_levels");
-				render(frm);
-			})
-		);
-		root.querySelectorAll("[data-tag-active]").forEach((b) =>
-			b.addEventListener("click", () => {
-				const on = !b.classList.contains("on");
-				frappe.call({
-					method: "periskope_connector.api.settings.set_tag_active",
-					args: { tag: b.dataset.tagActive, active: on ? 1 : 0 },
-					callback: () => load(frm),
-				});
-			})
-		);
-		root.querySelectorAll("[data-tag-action]").forEach((b) =>
-			b.addEventListener("click", () => {
-				const [tag, action] = b.dataset.tagAction.split("|");
-				const on = !b.classList.contains("on");
-				frappe.call({
-					method: "periskope_connector.api.settings.set_tag_action",
-					args: { tag, action, on: on ? 1 : 0 },
-					callback: () => load(frm),
-				});
-			})
-		);
-		root.querySelectorAll("[data-tab]").forEach((b) =>
-			b.addEventListener("click", () =>
+		on("[data-tab]", "click", (b) =>
+			leave(frm, () =>
 				$(frm.wrapper)
 					.find(`.form-tabs .nav-link[data-fieldname="${b.dataset.tab}"]`)
 					.trigger("click")
 			)
 		);
-		root.querySelectorAll("[data-list]").forEach((b) =>
-			b.addEventListener("click", () => frappe.set_route("List", b.dataset.list))
+		on("[data-list]", "click", (b) =>
+			leave(frm, () => frappe.set_route("List", b.dataset.list))
 		);
-		root.querySelectorAll("[data-report]").forEach((b) =>
-			b.addEventListener("click", () => frappe.set_route("query-report", b.dataset.report))
+		on("[data-report]", "click", (b) =>
+			leave(frm, () => frappe.set_route("query-report", b.dataset.report))
 		);
-		root.querySelectorAll("[data-new]").forEach((b) =>
-			b.addEventListener("click", () => frappe.new_doc(b.dataset.new))
-		);
-		root.querySelectorAll("[data-open]").forEach((a) =>
-			a.addEventListener("click", (ev) => {
-				ev.preventDefault();
-				const [doctype, name] = a.dataset.open.split("|");
-				frappe.set_route("Form", doctype, name);
-			})
-		);
-		root.querySelectorAll("[data-refresh]").forEach((a) =>
-			a.addEventListener("click", (ev) => {
-				ev.preventDefault();
-				load(frm);
-			})
-		);
-		root.querySelectorAll("[data-call]").forEach((b) =>
-			b.addEventListener("click", () =>
-				withSaved(frm, () => {
-					frappe.call({
-						method: `periskope_connector.api.settings.${b.dataset.call}`,
-						freeze: true,
-						callback(r) {
-							frappe.show_alert({ message: __("Done"), indicator: "green" });
-							if (r.message && r.message.model)
-								frappe.show_alert({
-									message: __("AI connected ({0})", [r.message.model]),
-									indicator: "green",
-								});
-							load(frm);
-						},
-					});
+		on("[data-new]", "click", (b) => leave(frm, () => frappe.new_doc(b.dataset.new)));
+		on("[data-open]", "click", (a, ev) => {
+			ev.preventDefault();
+			const [doctype, name] = a.dataset.open.split("|");
+			leave(frm, () => frappe.set_route("Form", doctype, name));
+		});
+		on("[data-refresh]", "click", (a, ev) => {
+			ev.preventDefault();
+			load(frm);
+		});
+		on("[data-call]", "click", (b) =>
+			autosave(frm).then(() =>
+				frappe.call({
+					method: `periskope_connector.api.settings.${b.dataset.call}`,
+					freeze: true,
+					callback(r) {
+						frappe.show_alert({ message: __("Done"), indicator: "green" });
+						if (r.message && r.message.model)
+							frappe.show_alert({
+								message: __("AI connected ({0})", [r.message.model]),
+								indicator: "green",
+							});
+						load(frm);
+					},
 				})
 			)
 		);
@@ -913,10 +919,13 @@
 
 	frappe.ui.form.on("Periskope Settings", {
 		refresh(frm) {
-			load(frm);
+			if (frm.is_new()) return;
+			frm.add_custom_button(__("Flow"), () => openFlow(frm))
+				.removeClass("btn-default")
+				.addClass("btn-primary");
 		},
 		after_save(frm) {
-			load(frm);
+			if (frm._pf && frm._pf.dialog && frm._pf.dialog.display) load(frm);
 		},
 	});
 })();
