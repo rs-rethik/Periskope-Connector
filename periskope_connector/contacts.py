@@ -206,11 +206,32 @@ def backfill_and_comment(contact):
 		)
 
 
+CONTACT_FIELDS = [
+	"status",
+	"phone",
+	"display_name",
+	"reps",
+	"linked_lead",
+	"linked_deal",
+	"message_count",
+	"first_message_at",
+	"last_message_at",
+]
+
+
+def _contact(contact: str) -> frappe._dict:
+	"""The fields of a queue row that the actions read. Nothing here changes the row."""
+	values = frappe.db.get_value("Periskope Contact", contact, CONTACT_FIELDS, as_dict=True)
+	if not values:
+		frappe.throw(_("Contact {0} does not exist").format(contact), frappe.DoesNotExistError)
+	return values
+
+
 def create_lead_for_contact(contact: str) -> str | None:
 	"""Queue action: create a CRM Lead from the contact. Returns the lead's name."""
 	from periskope_connector.leads import ensure_lead_source
 
-	doc = frappe.get_doc("Periskope Contact", contact)
+	doc = _contact(contact)
 	if doc.status in IGNORED_STATUSES:
 		frappe.throw(_("This number is ignored. Remove the ignore to create a lead."))
 	if doc.linked_lead or doc.linked_deal:
@@ -229,13 +250,13 @@ def create_lead_for_contact(contact: str) -> str | None:
 	name = lead.name
 
 	frappe.db.set_value("Periskope Contact", contact, {"status": "Lead Created", "linked_lead": name})
-	backfill_and_comment(frappe.get_doc("Periskope Contact", contact))
+	backfill_and_comment(_contact(contact))
 	return name
 
 
 def link_contact(contact: str, lead: str | None = None, deal: str | None = None) -> None:
 	"""Queue action: link the contact's history to an existing lead or deal."""
-	doc = frappe.get_doc("Periskope Contact", contact)
+	doc = _contact(contact)
 	if doc.status in IGNORED_STATUSES:
 		frappe.throw(_("This number is ignored. Remove the ignore to link it."))
 	if doc.linked_lead or doc.linked_deal:
@@ -259,7 +280,7 @@ def link_contact(contact: str, lead: str | None = None, deal: str | None = None)
 		contact,
 		{"status": "Linked", "linked_lead": lead, "linked_deal": deal},
 	)
-	backfill_and_comment(frappe.get_doc("Periskope Contact", contact))
+	backfill_and_comment(_contact(contact))
 
 
 def ignore_contact(contact: str, reason: str) -> None:

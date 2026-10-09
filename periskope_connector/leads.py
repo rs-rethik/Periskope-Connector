@@ -19,6 +19,17 @@ from periskope_connector.linking import by_mobile, link_message, number_key, pho
 
 DEFAULT_SOURCE = "WhatsApp"
 
+# The message fields that decide a lead and fill it in.
+MESSAGE_FIELDS = [
+	"direction",
+	"is_group",
+	"contact_number",
+	"contact_name",
+	"ai_category",
+	"severity",
+	"rep",
+]
+
 
 def enabled() -> bool:
 	# Read the stored value itself: get_single_value would turn "never saved" into 0 (off).
@@ -135,7 +146,9 @@ def create_lead_for_message(message: str) -> str | None:
 	try:
 		frappe.db.savepoint("periskope_new_lead")
 		try:
-			return create_lead(frappe.get_doc("Periskope Message", message))
+			return create_lead(
+				frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
+			)
 		except Exception:
 			frappe.db.rollback(save_point="periskope_new_lead")
 			raise

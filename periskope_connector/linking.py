@@ -266,11 +266,14 @@ def ensure_group(chat_id: str, phone: str | None = None):
 	"""The Periskope Group of this chat, created on first sight with its name and type."""
 	name = frappe.db.get_value("Periskope Group", {"chat_id": chat_id})
 	if name:
-		group = frappe.get_doc("Periskope Group", name)
+		group = frappe.db.get_value(
+			"Periskope Group", name, ["name", "chat_id", "group_name", "group_type"], as_dict=True
+		)
 		if not group.group_name:
 			group_name = fetch_chat_name(chat_id, phone)
 			if group_name:
-				group.db_set("group_name", group_name)
+				frappe.db.set_value("Periskope Group", name, "group_name", group_name)
+				group.group_name = group_name
 		return group
 
 	group_name = fetch_chat_name(chat_id, phone)
@@ -287,11 +290,20 @@ def ensure_group(chat_id: str, phone: str | None = None):
 		insert_as_system(group)
 	except frappe.DuplicateEntryError:
 		frappe.db.rollback()
-		return frappe.get_doc("Periskope Group", {"chat_id": chat_id})
+		return frappe.db.get_value(
+			"Periskope Group",
+			{"chat_id": chat_id},
+			["name", "chat_id", "group_name", "group_type"],
+			as_dict=True,
+		)
 	return group
 
 
 # --- Linking -----------------------------------------------------------------------------------------
+
+
+# The message fields that decide its CRM link.
+LINK_FIELDS = ["is_group", "contact_number", "chat_id", "sender_phone", "mentioned_customer"]
 
 
 def find_link(doc) -> tuple[str | None, str | None, str, str]:
@@ -329,7 +341,7 @@ def link_message(message: str) -> str:
 
 	Never raises: a problem here must not stop a message from being saved or tagged."""
 	try:
-		doc = frappe.get_doc("Periskope Message", message)
+		doc = frappe.db.get_value("Periskope Message", message, LINK_FIELDS, as_dict=True)
 		lead, deal, status, method = find_link(doc)
 		frappe.db.set_value(
 			"Periskope Message",

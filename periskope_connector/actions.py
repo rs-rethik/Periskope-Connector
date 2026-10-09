@@ -19,6 +19,10 @@ EMAIL_ALERT = "Email Alert"
 TIMELINE_COMMENT = "Timeline Comment"
 TODO_FOR_REP = "ToDo for Rep"
 
+# The message fields each step reads. The message is only read here, so no document is built.
+TAG_FIELDS = ["ai_category", "severity", "is_group"]
+TODO_FIELDS = ["rep", "severity", "ai_summary", "body", "ai_category"]
+
 SEVERITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
 ONE_TO_ONE, GROUP = "1-to-1", "Group"
 
@@ -53,7 +57,9 @@ def run(message: str):
 	from periskope_connector.alerts import send_alert
 	from periskope_connector.leads import create_lead_for_message
 
-	doc = frappe.get_doc("Periskope Message", message)
+	doc = frappe.db.get_value("Periskope Message", message, TAG_FIELDS, as_dict=True)
+	if not doc:
+		return
 	if matching(doc, CREATE_LEAD):
 		create_lead_for_message(message)
 	rows = matching(doc, EMAIL_ALERT)
@@ -66,8 +72,8 @@ def run(message: str):
 def create_rep_todo(message: str) -> str | None:
 	"""A ToDo for the rep to look at this message. Never raises; one per message."""
 	try:
-		doc = frappe.get_doc("Periskope Message", message)
-		if not doc.rep or not frappe.db.get_value("User", doc.rep, "enabled"):
+		doc = frappe.db.get_value("Periskope Message", message, TODO_FIELDS, as_dict=True)
+		if not doc or not doc.rep or not frappe.db.get_value("User", doc.rep, "enabled"):
 			return None
 		if frappe.db.exists(
 			"ToDo",
