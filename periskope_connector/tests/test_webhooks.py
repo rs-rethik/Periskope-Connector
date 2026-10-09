@@ -95,3 +95,21 @@ class TestSelectedEvents(FrappeTestCase):
 
 	def test_events_come_from_the_settings_without_duplicates_in_order(self):
 		self.assertEqual(webhooks.selected_events(), ["message.deleted", "message.created"])
+
+
+class TestSiteUrl(FrappeTestCase):
+	def test_a_configured_host_name_is_used_as_it_is_without_the_dev_port(self):
+		with patch.dict(frappe.local.conf, {"host_name": "https://abc.ngrok-free.app/"}):
+			self.assertEqual(webhooks.site_url(), "https://abc.ngrok-free.app")
+			self.assertEqual(
+				webhooks.webhook_url(),
+				"https://abc.ngrok-free.app/api/method/periskope_connector.api.webhook.receive",
+			)
+
+	def test_a_host_name_without_a_scheme_gets_http(self):
+		with patch.dict(frappe.local.conf, {"host_name": "crm.example.com"}):
+			self.assertEqual(webhooks.site_url(), "http://crm.example.com")
+
+	def test_without_a_host_name_frappe_decides(self):
+		with patch.dict(frappe.local.conf, {"host_name": None}):
+			self.assertEqual(webhooks.site_url(), frappe.utils.get_url())

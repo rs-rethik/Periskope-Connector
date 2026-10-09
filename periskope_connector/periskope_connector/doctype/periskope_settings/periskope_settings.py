@@ -3,9 +3,11 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt, get_url
+from frappe.utils import flt
 
-WEBHOOK_METHOD = "periskope_connector.api.webhook.receive"
+from periskope_connector.webhooks import webhook_url
+
+MIN_WORKING_MINUTES = 30
 
 
 class PeriskopeSettings(Document):
@@ -31,8 +33,13 @@ class PeriskopeSettings(Document):
 		from frappe.utils import get_time, validate_email_address
 
 		if self.working_hours_start and self.working_hours_end:
-			if get_time(self.working_hours_start) >= get_time(self.working_hours_end):
-				frappe.throw(_("Working Hours End must be after Working Hours Start"))
+			start, end = get_time(self.working_hours_start), get_time(self.working_hours_end)
+			if (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute) < MIN_WORKING_MINUTES:
+				frappe.throw(
+					_("Working Hours End must be at least {0} minutes after Working Hours Start").format(
+						MIN_WORKING_MINUTES
+					)
+				)
 		for row in self.get("sla_levels") or []:
 			if flt(row.wait_minutes) < 0:
 				frappe.throw(_("Row {0}: Waiting minutes cannot be negative").format(row.idx))
@@ -53,4 +60,4 @@ class PeriskopeSettings(Document):
 				),
 				indicator="orange",
 			)
-		self.webhook_url = f"{get_url()}/api/method/{WEBHOOK_METHOD}"
+		self.webhook_url = webhook_url()
