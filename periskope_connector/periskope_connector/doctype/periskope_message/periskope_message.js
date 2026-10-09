@@ -8,9 +8,10 @@ frappe.ui.form.on("Periskope Message", {
 				frappe.prompt(
 					{
 						fieldname: "category",
-						fieldtype: "Select",
+						fieldtype: "Link",
 						label: __("The category the AI should have given"),
-						options: frm.fields_dict.ai_category.df.options,
+						options: "Periskope Tag",
+						get_query: () => ({ filters: { active: 1 } }),
 						default: frm.doc.correct_category || frm.doc.ai_category,
 						reqd: 1,
 					},

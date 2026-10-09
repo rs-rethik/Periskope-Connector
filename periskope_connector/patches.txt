@@ -16,3 +16,4 @@ periskope_connector.patches.setup_v2_and_backfill_phones
 periskope_connector.patches.migrate_settings_v2
 periskope_connector.patches.remove_legacy_tag_doctypes
 periskope_connector.patches.backfill_contacts
+periskope_connector.patches.use_tags_in_ai_instructions

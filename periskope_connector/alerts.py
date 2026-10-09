@@ -10,6 +10,7 @@ from frappe import _
 from frappe.utils import escape_html, get_url_to_form
 
 from periskope_connector.reminders import get_config
+from periskope_connector.tags import default_tag
 
 
 def _users(emails: list[str]) -> list[str]:
@@ -34,7 +35,7 @@ def send_high_severity_alert(message: str) -> bool:
 		if not emails:
 			return False
 
-		category = (doc.ai_category or "general").replace("_", " ")
+		category = (doc.ai_category or default_tag()).replace("_", " ")
 		summary = doc.ai_summary or ""
 		rep = doc.rep or doc.org_phone or _("no rep assigned")
 		link = get_url_to_form("Periskope Message", doc.name)

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import messages
+from periskope_connector import messages, tags
 from periskope_connector.ai import classifier
 
 
@@ -304,9 +304,9 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual((row.classification_status, row.classification_attempts), ("Failed", 1))
 		self.assertIn("boom", row.classification_error)
 
-	def test_prompt_names_the_six_categories_and_history_is_ordered(self):
+	def test_prompt_names_the_categories_and_history_is_ordered(self):
 		prompt = classifier.build_system_prompt()
-		for category in classifier.CATEGORIES:
+		for category in tags.names():
 			self.assertIn(category, prompt)
 		for word in ("shade", "GSM", "shrinkage", "pilling", "wash fastness", "Tanglish", "LAST message"):
 			self.assertIn(word, prompt)
@@ -498,7 +498,7 @@ class TestClassify(FrappeTestCase):
 		return client
 
 	def test_optimizer_returns_improved_text_that_keeps_the_categories(self):
-		categories = ", ".join(classifier.CATEGORIES)
+		categories = ", ".join(tags.names())
 		improved = "You classify WhatsApp sales messages. " * 6 + f"\n\nCategories: {categories}"
 		client = self._optimizer_client(f"```\n{improved}\n```")
 		with patch.object(classifier, "_client", lambda s: client):
@@ -511,10 +511,12 @@ class TestClassify(FrappeTestCase):
 		self.assertIn("Old instructions", request["messages"][0]["content"])
 		self.assertNotIn("output_config", request)  # plain text answer, works for any provider
 
-	def test_optimizer_rejects_an_answer_that_lost_a_category(self):
+	def test_optimizer_text_needs_no_category_list_because_tags_are_added_separately(self):
 		client = self._optimizer_client("You classify WhatsApp sales messages carefully. " * 5)
 		with patch.object(classifier, "_client", lambda s: client):
-			self.assertRaises(frappe.ValidationError, classifier.optimize_instructions, self.settings, "", "")
+			text = classifier.optimize_instructions(self.settings, "", "")
+		self.assertNotIn("Categories", text)
+		self.assertIn("Categories", classifier.build_system_prompt())
 
 	def test_optimizer_rejects_empty_or_cut_off_answers(self):
 		for client in (self._optimizer_client("Sorry"), self._optimizer_client("x" * 500, "max_tokens")):
@@ -533,7 +535,7 @@ class TestClassify(FrappeTestCase):
 
 	def test_schema_enums_match_the_categories(self):
 		schema = classifier.build_schema()
-		self.assertEqual(schema["properties"]["category"]["enum"], classifier.CATEGORIES)
+		self.assertEqual(schema["properties"]["category"]["enum"], tags.names())
 		self.assertEqual(schema["properties"]["severity"]["enum"], ["Low", "Medium", "High"])
 		self.assertEqual(set(schema["required"]), set(schema["properties"]))
 		self.assertFalse(schema["additionalProperties"])
