@@ -4,6 +4,7 @@ All of them are for managers: a rep has no access to the queue in the pilot.
 """
 
 import frappe
+from frappe import _
 
 MANAGERS = ("System Manager", "Sales Manager", "WhatsApp Manager")
 
@@ -38,7 +39,9 @@ def ignore(contact: str, reason: str) -> None:
 def find_matches(contact: str) -> list[dict]:
 	"""Search leads and deals by this number and name, for the 'link to existing' dialog."""
 	frappe.only_for(MANAGERS)
-	doc = frappe.get_doc("Periskope Contact", contact)
+	doc = frappe.db.get_value("Periskope Contact", contact, ["phone", "display_name"], as_dict=True)
+	if not doc:
+		frappe.throw(_("Contact {0} does not exist").format(contact), frappe.DoesNotExistError)
 	number = doc.phone or ""
 	key = number[-10:] if len(number) >= 10 else number
 	name = (doc.display_name or "").strip()

@@ -14,6 +14,24 @@ from frappe.utils import escape_html, get_url_to_form
 from periskope_connector.reminders import get_config
 from periskope_connector.tags import default_tag
 
+# The message fields the alert email reads.
+MESSAGE_FIELDS = [
+	"name",
+	"high_alert_sent",
+	"ai_category",
+	"ai_summary",
+	"severity",
+	"rep",
+	"org_phone",
+	"is_group",
+	"chat_name",
+	"sender_name",
+	"contact_number",
+	"body",
+	"crm_lead",
+	"crm_deal",
+]
+
 
 def _users(emails: list[str]) -> list[str]:
 	return frappe.get_all("User", filters={"email": ["in", emails], "enabled": 1}, pluck="name")
@@ -40,8 +58,8 @@ def send_alert(message: str, rows: list) -> bool:
 
 	Never raises: a problem here must not undo the message's classification."""
 	try:
-		doc = frappe.get_doc("Periskope Message", message)
-		if doc.high_alert_sent:
+		doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
+		if not doc or doc.high_alert_sent:
 			return False
 		emails = _recipients(rows)
 		if not emails:

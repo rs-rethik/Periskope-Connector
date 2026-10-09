@@ -17,6 +17,22 @@ from periskope_connector.system import insert_as_system
 
 DEFAULT_DEDUPE_HOURS = 6
 
+# The message fields the check and the alert email read.
+MESSAGE_FIELDS = [
+	"name",
+	"direction",
+	"body",
+	"chat_id",
+	"chat_name",
+	"sender_name",
+	"contact_number",
+	"ai_category",
+	"rep",
+	"org_phone",
+	"crm_lead",
+	"crm_deal",
+]
+
 
 def _words(text: str | None) -> list[str]:
 	seen: set[str] = set()
@@ -149,8 +165,8 @@ def check_message(message: str) -> int:
 
 	Never raises: an alerting problem must not stop the message flow."""
 	try:
-		doc = frappe.get_doc("Periskope Message", message)
-		if doc.direction != "Incoming" or not (doc.body or "").strip():
+		doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
+		if not doc or doc.direction != "Incoming" or not (doc.body or "").strip():
 			return 0
 		window = (
 			frappe.db.get_single_value("Periskope Settings", "keyword_dedupe_hours") or DEFAULT_DEDUPE_HOURS

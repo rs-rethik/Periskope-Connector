@@ -132,6 +132,11 @@ class TestTagActions(FrappeTestCase):
 		)
 		return frappe.get_doc("Periskope Message", name)
 
+	def test_actions_for_a_message_that_does_not_exist_do_nothing(self):
+		actions.run("no-such-message")
+		self.assertIsNone(actions.create_rep_todo("no-such-message"))
+		self.mail.assert_not_called()
+
 	def test_the_starting_actions_match_the_old_behaviour(self):
 		def rows(tag):
 			return {

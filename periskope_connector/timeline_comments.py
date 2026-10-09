@@ -20,6 +20,27 @@ from periskope_connector.system import insert_as_system
 MODE_PER_MESSAGE = "One per message"
 MODE_BURST = "Burst"
 MODE_OFF = "Off"
+# The message fields the comment is built from.
+MESSAGE_FIELDS = [
+	"name",
+	"direction",
+	"is_group",
+	"chat_id",
+	"chat_name",
+	"contact_number",
+	"sender_phone",
+	"message_timestamp",
+	"message_type",
+	"body",
+	"media_filename",
+	"ai_summary",
+	"ai_category",
+	"severity",
+	"rep",
+	"crm_lead",
+	"crm_deal",
+	"timeline_comment",
+]
 MAX_COMMENT_CHARS = 12000  # start a new burst comment rather than grow an endless one
 
 
@@ -96,7 +117,9 @@ def _burst_comment(doc, minutes: int) -> str | None:
 
 def add_comment(message: str) -> str | None:
 	"""Add the timeline comment of a linked, tagged message. Returns its name, or None."""
-	doc = frappe.get_doc("Periskope Message", message)
+	doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
+	if not doc:
+		return None
 	target = _target(doc)
 	if doc.timeline_comment or not target or not actions.matching(doc, actions.TIMELINE_COMMENT):
 		return None
