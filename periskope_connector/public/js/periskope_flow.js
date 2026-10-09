@@ -232,7 +232,9 @@
 					.join("");
 				s += `<rect class="chip" x="165" y="56" width="26" height="20" rx="10"/><text class="chip-t" x="171" y="70">+1</text>`;
 			} else {
-				s += `<text class="m" x="18" y="72">${e(nodeMetric(n.id, data))}</text>`;
+				s += `<text class="m" data-metric="${n.id}" x="18" y="72">${e(
+					nodeMetric(n.id, data)
+				)}</text>`;
 			}
 			s += `</g>`;
 		});
@@ -242,6 +244,28 @@
 	// ---- panels -------------------------------------------------------------------------------
 
 	const goTab = (tab, label) => btn(label, `data-tab="${tab}"`);
+
+	// The dots and labels of the SLA ladder timeline, from the rows now in the form.
+	function slaMarks(frm) {
+		const rows = frm.doc.sla_levels || [];
+		const waits = [...new Set(rows.map((r) => +r.wait_minutes))].sort((a, b) => a - b);
+		return waits
+			.map((w, i) => {
+				const left = waits.length > 1 ? 4 + (92 * i) / (waits.length - 1) : 50;
+				const names = rows.filter((r) => +r.wait_minutes === w);
+				const hi = names.some((r) => r.min_severity === "High");
+				const up = i % 2 === 0;
+				const labels = names
+					.map((r) => r.action)
+					.filter((v, j, arr) => arr.indexOf(v) === j);
+				return `<i class="${hi ? "hi" : ""}" style="left:${left}%"></i><b class="${
+					up ? "up" : ""
+				}" style="left:${left}%">${e(minutes(w))}<small>${e(
+					labels.slice(0, 2).join(", ")
+				)}</small></b>`;
+			})
+			.join("");
+	}
 
 	const PANELS = {
 		periskope(frm, d) {
@@ -388,12 +412,12 @@
 				.map(
 					(r) =>
 						`<tr><td>${e(r.rule_name)}</td><td><input data-row="keyword_rules|${
-							r.name
+							r.idx
 						}|recipients" value="${e(r.recipients || "")}" placeholder="${e(
 							__("emails, comma separated")
 						)}"></td><td class="c">${sw(
 							!!r.enabled,
-							`data-rowsw="keyword_rules|${r.name}|enabled"`
+							`data-rowsw="keyword_rules|${r.idx}|enabled"`
 						)}</td></tr>`
 				)
 				.join("");
@@ -581,24 +605,7 @@
 		},
 		sla(frm, d) {
 			const rows = frm.doc.sla_levels || [];
-			const waits = [...new Set(rows.map((r) => +r.wait_minutes))].sort((a, b) => a - b);
-			const marks = waits
-				.map((w, i) => {
-					const left = waits.length > 1 ? 4 + (92 * i) / (waits.length - 1) : 50;
-					const names = rows.filter((r) => +r.wait_minutes === w);
-					const hi = names.some((r) => r.min_severity === "High");
-					const up = i % 2 === 0;
-					return `<i class="${hi ? "hi" : ""}" style="left:${left}%"></i><b class="${
-						up ? "up" : ""
-					}" style="left:${left}%">${e(minutes(w))}<small>${e(
-						names
-							.map((r) => r.action)
-							.filter((v, j, a) => a.indexOf(v) === j)
-							.slice(0, 2)
-							.join(", ")
-					)}</small></b>`;
-				})
-				.join("");
+			const marks = slaMarks(frm);
 			const sel = (name, value, options) =>
 				`<select data-row="sla_levels|${name}|${value.field}">${options
 					.map((o) => `<option${o === value.v ? " selected" : ""}>${o}</option>`)
@@ -607,19 +614,19 @@
 				.map(
 					(r) =>
 						`<tr><td style="width:70px"><input type="number" min="0" data-row="sla_levels|${
-							r.name
+							r.idx
 						}|wait_minutes" value="${e(r.wait_minutes)}"></td><td>${sel(
-							r.name,
+							r.idx,
 							{ field: "min_severity", v: r.min_severity },
 							["Low", "Medium", "High"]
-						)}</td><td>${sel(r.name, { field: "action", v: r.action }, SLA_ACTIONS)}${
+						)}</td><td>${sel(r.idx, { field: "action", v: r.action }, SLA_ACTIONS)}${
 							r.action === "Email Recipients"
-								? `<input data-row="sla_levels|${r.name}|recipients" value="${e(
+								? `<input data-row="sla_levels|${r.idx}|recipients" value="${e(
 										r.recipients || ""
 								  )}" placeholder="${e(__("emails"))}" style="margin-top:3px">`
 								: ""
 						}</td><td class="c"><button type="button" class="btn btn-xs btn-default" data-sla-del="${
-							r.name
+							r.idx
 						}" aria-label="${e(__("Remove"))}">&times;</button></td></tr>`
 				)
 				.join("");
@@ -688,7 +695,11 @@
 	};
 
 	// ---- rendering and events ------------------------------------------------------------------
+	//
+	// The dialog is built once. After that only the part that changed is touched, so a switch or an
+	// edit does not redraw (and flicker) the whole diagram.
 
+	// Build the whole dialog: legend, diagram and the panel of the selected step.
 	function render(frm) {
 		const st = frm._pf;
 		const $w = st && st.$body;
@@ -698,7 +709,6 @@
 			$w.html(`<div class="pf"><div class="text-muted">${__("Loading...")}</div></div>`);
 			return;
 		}
-		const panel = PANELS[st.selected](frm, data);
 		st.wide = $w[0].clientWidth >= WIDE_AT;
 		const dot = (color, label) => `<span><i style="background:${color}"></i>${label}</span>`;
 		$w.html(`<div class="pf${st.wide ? " wide" : ""}"><div>
@@ -712,11 +722,60 @@
 			"Click a step to see it and change it. Changes save as you make them."
 		)}</span><a href="#" data-refresh="1">${__("Refresh figures")}</a></div>
 <div class="pf-canvas">${drawSvg(data, st.selected)}</div></div>
-<aside class="pf-panel"><div class="kick">${e(panel.k)}</div><h3>${e(panel.h)}</h3><p>${e(
+<aside class="pf-panel"></aside></div>`);
+		const root = $w[0];
+		root.querySelectorAll("[data-node]").forEach((n) => {
+			const pick = () => selectNode(frm, n.dataset.node);
+			n.addEventListener("click", pick);
+			n.addEventListener("keydown", (ev) => {
+				if (ev.key === "Enter" || ev.key === " ") {
+					ev.preventDefault();
+					pick();
+				}
+			});
+		});
+		on(root, "[data-refresh]", "click", (a, ev) => {
+			ev.preventDefault();
+			load(frm);
+		});
+		renderPanel(frm);
+		watchWidth(frm, root);
+	}
+
+	// Redraw only the panel of the selected step.
+	function renderPanel(frm) {
+		const st = frm._pf;
+		const aside = st.$body && st.$body[0].querySelector(".pf-panel");
+		if (!aside || !st.data) return;
+		const panel = PANELS[st.selected](frm, st.data);
+		aside.innerHTML = `<div class="kick">${e(panel.k)}</div><h3>${e(panel.h)}</h3><p>${e(
 			panel.p
-		)}</p>${panel.body}</aside></div>`);
-		bind(frm, $w);
-		watchWidth(frm, $w[0]);
+		)}</p>${panel.body}`;
+		bind(frm, aside);
+	}
+
+	function selectNode(frm, id) {
+		const st = frm._pf;
+		st.selected = id;
+		st.$body[0]
+			.querySelectorAll("[data-node]")
+			.forEach((n) => n.classList.toggle("sel", n.dataset.node === id));
+		renderPanel(frm);
+	}
+
+	// Update the health bar and the figure of each card, leaving the rest of the dialog alone.
+	function updateFigures(frm) {
+		const st = frm._pf;
+		const root = st.$body && st.$body[0];
+		if (!root || !st.data || !root.querySelector("svg")) return render(frm);
+		NODES.forEach((n) => {
+			const g = root.querySelector(`[data-node="${n.id}"]`);
+			if (!g) return;
+			const status = (st.data[n.id] || {}).status || "ok";
+			["ok", "warn", "bad", "off"].forEach((c) => g.classList.toggle(c, c === status));
+			const m = g.querySelector("[data-metric]");
+			if (m) m.textContent = nodeMetric(n.id, st.data);
+		});
 	}
 
 	// A wide dialog has room for the panel beside the diagram; a narrow one puts it under.
@@ -728,13 +787,15 @@
 		frm._pf.watch.observe(el);
 	}
 
+	// Fetch the figures. The first time (or after a layout change) the dialog is built; after that
+	// only the cards are updated.
 	function load(frm) {
 		frm._pf = frm._pf || { selected: "periskope", data: null };
 		frappe.call({
 			method: "periskope_connector.api.settings.get_flow",
 			callback(r) {
 				frm._pf.data = r.message;
-				render(frm);
+				updateFigures(frm);
 			},
 		});
 	}
@@ -758,36 +819,34 @@
 			st.$body = d.fields_dict.flow.$wrapper;
 		}
 		st.dialog.show();
-		render(frm);
+		st.data = null;
+		render(frm); // "Loading..." until the figures arrive; load() then builds the dialog
 		load(frm);
 	}
 
-	// Save the settings form after a change made in the dialog, one save at a time.
+	// Save the settings form after a change made in the dialog, one save at a time. Frappe shows its
+	// own "Saved" message, so none is added here.
 	function autosave(frm) {
 		const st = frm._pf;
 		st.saving = (st.saving || Promise.resolve()).then(
 			() =>
 				new Promise((resolve) => {
-					if (!frm.is_dirty()) return resolve();
-					Promise.resolve(frm.save())
-						.then(() =>
-							frappe.show_alert({ message: __("Saved"), indicator: "green" })
-						)
-						.finally(resolve);
+					// Frappe marks a form dirty a moment after a child row changes.
+					setTimeout(() => {
+						if (!frm.is_dirty()) return resolve();
+						Promise.resolve(frm.save()).finally(resolve);
+					}, 60);
 				})
 		);
 		return st.saving;
 	}
 
 	function setValue(frm, name, value) {
-		return frm.set_value(name, value).then(() => {
-			render(frm);
-			return autosave(frm);
-		});
+		return frm.set_value(name, value).then(() => autosave(frm));
 	}
 
 	function rowOf(frm, table, rowname) {
-		return (frm.doc[table] || []).find((r) => r.name === rowname);
+		return (frm.doc[table] || []).find((r) => String(r.idx) === String(rowname));
 	}
 
 	function setRow(frm, table, name, fieldname, value) {
@@ -795,8 +854,19 @@
 		if (!row) return;
 		frappe.model.set_value(row.doctype, row.name, fieldname, value);
 		frm.dirty();
-		render(frm);
+		if (table === "sla_levels") {
+			const tl = frm._pf.$body[0].querySelector(".pf-tl");
+			if (tl) tl.innerHTML = slaMarks(frm);
+			// choosing "Email Recipients" needs an address box
+			if (fieldname === "action") renderPanel(frm);
+		}
 		autosave(frm);
+	}
+
+	// Show a switch in its new state straight away; the save follows.
+	function flip(el, isOn) {
+		el.classList.toggle("on", !!isOn);
+		el.setAttribute("aria-pressed", isOn ? "true" : "false");
 	}
 
 	// Leave the dialog before going to another page or tab.
@@ -805,51 +875,50 @@
 		go();
 	}
 
-	function bind(frm, $w) {
-		const root = $w[0];
-		const on = (selector, event, fn) =>
-			root
-				.querySelectorAll(selector)
-				.forEach((el) => el.addEventListener(event, (ev) => fn(el, ev)));
-		on("[data-node]", "click", (n) => {
-			frm._pf.selected = n.dataset.node;
-			render(frm);
-		});
-		on("[data-node]", "keydown", (n, ev) => {
-			if (ev.key === "Enter" || ev.key === " ") {
-				ev.preventDefault();
-				frm._pf.selected = n.dataset.node;
-				render(frm);
-			}
-		});
-		on("[data-field]", "click", (b) =>
-			setValue(frm, b.dataset.field, field(frm, b.dataset.field) ? 0 : 1)
+	function on(root, selector, event, fn) {
+		root.querySelectorAll(selector).forEach((el) =>
+			el.addEventListener(event, (ev) => fn(el, ev))
 		);
-		on("[data-select]", "change", (s) => setValue(frm, s.dataset.select, s.value));
+	}
+
+	// Attach the controls inside `root` (the panel).
+	function bind(frm, root) {
+		on(root, "[data-field]", "click", (b) => {
+			const next = field(frm, b.dataset.field) ? 0 : 1;
+			flip(b, next);
+			setValue(frm, b.dataset.field, next);
+		});
+		on(root, "[data-select]", "change", (s) => setValue(frm, s.dataset.select, s.value));
 		on(
+			root,
 			"[data-time]",
 			"change",
 			(s) => s.value && setValue(frm, s.dataset.time, s.value + ":00")
 		);
-		on("[data-text]", "change", (s) => setValue(frm, s.dataset.text, s.value));
-		on("[data-row]", "change", (i) => {
+		on(root, "[data-text]", "change", (s) => setValue(frm, s.dataset.text, s.value));
+		on(root, "[data-row]", "change", (i) => {
 			const [table, name, fieldname] = i.dataset.row.split("|");
 			setRow(frm, table, name, fieldname, i.type === "number" ? +i.value : i.value);
 		});
-		on("[data-rowsw]", "click", (b) => {
+		on(root, "[data-rowsw]", "click", (b) => {
 			const [table, name, fieldname] = b.dataset.rowsw.split("|");
 			const row = rowOf(frm, table, name);
-			if (row) setRow(frm, table, name, fieldname, row[fieldname] ? 0 : 1);
+			if (!row) return;
+			const next = row[fieldname] ? 0 : 1;
+			flip(b, next);
+			setRow(frm, table, name, fieldname, next);
 		});
-		on("[data-sla-del]", "click", (b) => {
-			const idx = (frm.doc.sla_levels || []).findIndex((r) => r.name === b.dataset.slaDel);
+		on(root, "[data-sla-del]", "click", (b) => {
+			const idx = (frm.doc.sla_levels || []).findIndex(
+				(r) => String(r.idx) === b.dataset.slaDel
+			);
 			if (idx < 0) return;
 			frm.get_field("sla_levels").grid.grid_rows[idx].remove();
 			frm.dirty();
-			render(frm);
+			renderPanel(frm);
 			autosave(frm);
 		});
-		on("[data-sla-add]", "click", () => {
+		on(root, "[data-sla-add]", "click", () => {
 			frm.add_child("sla_levels", {
 				wait_minutes: 60,
 				min_severity: "Low",
@@ -857,48 +926,50 @@
 			});
 			frm.refresh_field("sla_levels");
 			frm.dirty();
-			render(frm);
+			renderPanel(frm);
 			autosave(frm);
 		});
-		on("[data-tag-active]", "click", (b) =>
+		on(root, "[data-tag-active]", "click", (b) => {
+			const turnOn = !b.classList.contains("on");
+			flip(b, turnOn);
 			frappe.call({
 				method: "periskope_connector.api.settings.set_tag_active",
-				args: { tag: b.dataset.tagActive, active: b.classList.contains("on") ? 0 : 1 },
+				args: { tag: b.dataset.tagActive, active: turnOn ? 1 : 0 },
 				callback: () => load(frm),
-			})
-		);
-		on("[data-tag-action]", "click", (b) => {
-			const [tag, action] = b.dataset.tagAction.split("|");
-			frappe.call({
-				method: "periskope_connector.api.settings.set_tag_action",
-				args: { tag, action, on: b.classList.contains("on") ? 0 : 1 },
-				callback: () => load(frm),
+				error: () => flip(b, !turnOn),
 			});
 		});
-		on("[data-tab]", "click", (b) =>
+		on(root, "[data-tag-action]", "click", (b) => {
+			const [tag, action] = b.dataset.tagAction.split("|");
+			const turnOn = !b.classList.contains("on");
+			flip(b, turnOn);
+			frappe.call({
+				method: "periskope_connector.api.settings.set_tag_action",
+				args: { tag, action, on: turnOn ? 1 : 0 },
+				callback: () => load(frm),
+				error: () => flip(b, !turnOn),
+			});
+		});
+		on(root, "[data-tab]", "click", (b) =>
 			leave(frm, () =>
 				$(frm.wrapper)
 					.find(`.form-tabs .nav-link[data-fieldname="${b.dataset.tab}"]`)
 					.trigger("click")
 			)
 		);
-		on("[data-list]", "click", (b) =>
+		on(root, "[data-list]", "click", (b) =>
 			leave(frm, () => frappe.set_route("List", b.dataset.list))
 		);
-		on("[data-report]", "click", (b) =>
+		on(root, "[data-report]", "click", (b) =>
 			leave(frm, () => frappe.set_route("query-report", b.dataset.report))
 		);
-		on("[data-new]", "click", (b) => leave(frm, () => frappe.new_doc(b.dataset.new)));
-		on("[data-open]", "click", (a, ev) => {
+		on(root, "[data-new]", "click", (b) => leave(frm, () => frappe.new_doc(b.dataset.new)));
+		on(root, "[data-open]", "click", (a, ev) => {
 			ev.preventDefault();
 			const [doctype, name] = a.dataset.open.split("|");
 			leave(frm, () => frappe.set_route("Form", doctype, name));
 		});
-		on("[data-refresh]", "click", (a, ev) => {
-			ev.preventDefault();
-			load(frm);
-		});
-		on("[data-call]", "click", (b) =>
+		on(root, "[data-call]", "click", (b) =>
 			autosave(frm).then(() =>
 				frappe.call({
 					method: `periskope_connector.api.settings.${b.dataset.call}`,
