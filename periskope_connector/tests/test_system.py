@@ -1,5 +1,6 @@
 import inspect
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -190,8 +191,10 @@ class TestSystemWrites(FrappeTestCase):
 				datetime(2031, 1, 1, 10),
 				1.0,
 			)
-			# the ToDo belongs to L2 now, so advance one level: this is what the engine does
-			reminders._to_level_2(reminder, reminders.get_config(), datetime(2031, 1, 1, 12), 3.0)
+			# the ToDo is an SLA row: carry it out, as the engine does
+			todo_row = SimpleNamespace(action=reminders.TODO_FOR_REP, recipients="")
+			reminders.perform(todo_row, reminder, row, reminders.get_config(), datetime(2031, 1, 1, 12), 3.0)
+			reminder.db_set("status", "Escalated")
 		self.assertEqual(frappe.db.get_value("ToDo", reminder.todo, "allocated_to"), SYSTEM_MANAGER)
 		self.assertEqual(reminder.status, "Escalated")
 

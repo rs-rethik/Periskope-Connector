@@ -34,6 +34,8 @@ def cfg(**kw):
 		"ack_words": [],
 	}
 	base.update(kw)
+	if "levels" not in base:
+		base["levels"] = reminders.default_levels(base["l1"], base["l2"], base["l3"], base["high_minutes"])
 	return SimpleNamespace(**base)
 
 
