@@ -48,7 +48,9 @@ def skip_fields(reason: str) -> dict:
 	"""The values a skipped message is saved with."""
 	fields = {"classification_status": "Skipped", "classification_error": reason}
 	if reason not in NO_CATEGORY_SKIPS:
-		fields.update({"ai_category": "general", "severity": "Low"})
+		from periskope_connector.tags import default_tag
+
+		fields.update({"ai_category": default_tag(), "severity": "Low"})
 	return fields
 
 

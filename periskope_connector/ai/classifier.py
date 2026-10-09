@@ -12,8 +12,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime
 
-from periskope_connector.alerts import send_high_severity_alert
-from periskope_connector.leads import create_lead_for_message
+from periskope_connector import actions, tags
 from periskope_connector.linking import link_message
 from periskope_connector.system import insert_as_system, save_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
@@ -33,28 +32,13 @@ PROVIDER_JARVIS = "Jarvis"
 
 SENTIMENTS = ["Positive", "Neutral", "Negative"]
 SEVERITIES = ["Low", "Medium", "High"]
-CATEGORIES = [
-	"quality_complaint",
-	"delivery_delay",
-	"payment_issue",
-	"sample_request",
-	"order_or_enquiry",
-	"general",
-]
-DEFAULT_CATEGORY = "general"
 
 # The default instructions. Management can edit the live copy in Periskope Settings; this text
 # is used when that field is empty and by "Reset to default".
 DEFAULT_INSTRUCTIONS = """You review WhatsApp messages between a company's sales reps and its customers, for a sales CRM. Messages may be in English, Tamil or Tanglish (Tamil written in English letters), and may come from 1-to-1 chats or from buyer groups. Classify the LAST message only, using the earlier messages as context. For each message you return structured data.
 
 Rules:
-- category is exactly one of:
-  - quality_complaint: a complaint about quality: shade, GSM, shrinkage, pilling, wash fastness, damaged, defective or wrong goods, rejection of the goods, or a problem with service after the sale.
-  - delivery_delay: delivery is late, the customer asks where the order is, or dispatch is delayed.
-  - payment_issue: an invoice or payment dispute, overdue or missing payment, a refund, or a payment outside the company (for example to a personal account).
-  - sample_request: the customer asks for a sample, swatch or demo.
-  - order_or_enquiry: a new enquiry, a price or quotation request, a product question, or placing, confirming or repeating an order.
-  - general: anything else, such as greetings, scheduling, follow-ups and chatter.
+- category is exactly one of the categories listed under Categories below. Pick the one whose description fits the message best.
 - Messages labelled "Rep" are sent by our salesperson, and "Customer" messages come from the customer or prospect.
 - severity is "High" for an angry customer, a rejection, or a risk of losing an order (also legal threats, fraud, abuse, or payments outside the company); "Medium" for a real problem that is not yet serious; otherwise "Low".
 - sentiment is the customer's mood in this message (for a Rep message, the tone of the conversation).
@@ -100,7 +84,7 @@ def skip_reason(doc, settings) -> str | None:
 # --- Prompt and schema -------------------------------------------------------------------------
 
 
-# Added to every prompt, so an older edited copy of the instructions still asks for it.
+# Added to every prompt, so edited instructions still ask for it.
 CUSTOMER_NAME_NOTE = (
 	"customer_name is the name of the customer company or person the message is about, exactly as "
 	"written in the message or the earlier messages (for example the name before an order number in a "
@@ -113,10 +97,9 @@ CUSTOMER_NAME_NOTE = (
 
 def build_system_prompt(settings=None) -> str:
 	instructions = (getattr(settings, "ai_instructions", None) or "").strip()
-	if not instructions or "{tag_list}" in instructions:
-		# Empty, or a copy written for the old tag system: use the current default.
+	if not instructions:
 		instructions = DEFAULT_INSTRUCTIONS.strip()
-	prompt = f"{instructions}\n\n{CUSTOMER_NAME_NOTE}"
+	prompt = f"{instructions}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}"
 
 	business = (getattr(settings, "ai_business_context", None) or "").strip()
 	if business:
@@ -160,7 +143,7 @@ def build_schema() -> dict:
 	return {
 		"type": "object",
 		"properties": {
-			"category": {"type": "string", "enum": CATEGORIES},
+			"category": {"type": "string", "enum": tags.names()},
 			"sentiment": {"type": "string", "enum": SENTIMENTS},
 			"severity": {"type": "string", "enum": SEVERITIES},
 			"summary": text,
@@ -329,7 +312,12 @@ def is_claude(model: str) -> bool:
 JSON_REPLY_INSTRUCTIONS = """
 
 Reply with ONLY one JSON object and nothing else (no explanation, no code fences), with exactly these keys:
-category ("quality_complaint", "delivery_delay", "payment_issue", "sample_request", "order_or_enquiry" or "general"), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string)."""
+category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string)."""
+
+
+def json_reply_instructions() -> str:
+	categories = ", ".join(f'"{name}"' for name in tags.names())
+	return JSON_REPLY_INSTRUCTIONS.format(categories=categories)
 
 
 def parse_json_reply(text: str) -> dict:
@@ -378,7 +366,7 @@ OPTIMIZER_SYSTEM_PROMPT = """You are an expert prompt engineer. You improve the 
 
 Rewrite the instructions you are given so the AI follows them more reliably. Rules:
 - Keep the same purpose, and keep every field the AI must fill in: category, sentiment, severity, summary, confidence, needs_reply, follow_up_on, mentioned_products, mentioned_amount, competitor_name, customer_name, contact_name, language.
-- Keep the six category names exactly as they are (quality_complaint, delivery_delay, payment_issue, sample_request, order_or_enquiry, general) and their meanings. Never invent other categories.
+- Keep the category names exactly as they are written under Categories, and their meanings. Never invent other categories. If the instructions do not list the categories, leave that out: the list is added separately.
 - Be specific and unambiguous. Remove repetition and contradictions. Add short rules for edge cases that are missing, such as mixed-language messages, group chats, messages from the rep, and very short messages.
 - Do not make it much longer than it needs to be.
 - Reply with ONLY the improved instructions, as plain text. No explanation, no heading, no code fences."""
@@ -412,8 +400,6 @@ def optimize_instructions(settings, instructions: str, goal: str = "") -> str:
 	text = re.sub(r"^```[a-z]*\n?|\n?```$", "", text.strip()).strip()
 	if response.stop_reason == "max_tokens" or len(text) < 100:
 		frappe.throw(_("The AI did not return usable instructions. Please try again."))
-	if not all(category in text for category in CATEGORIES):
-		frappe.throw(_("The improved instructions lost one of the categories. Please try again."))
 	return text
 
 
@@ -454,7 +440,7 @@ def call_claude(settings, doc) -> dict:
 
 	if uses_jarvis(settings):
 		reply = jarvis_complete(
-			prompt + JSON_REPLY_INSTRUCTIONS + JARVIS_REPLY_INSTRUCTIONS,
+			prompt + json_reply_instructions() + JARVIS_REPLY_INSTRUCTIONS,
 			build_user_message(doc, history, get_quoted_body(doc)),
 		)
 		return parse_json_reply(reply)
@@ -473,7 +459,7 @@ def call_claude(settings, doc) -> dict:
 		request["output_config"] = {"format": {"type": "json_schema", "schema": build_schema()}}
 	else:
 		# Other providers: no Claude-only options, so ask for JSON in the prompt and parse it.
-		request["system"] = prompt + JSON_REPLY_INSTRUCTIONS
+		request["system"] = prompt + json_reply_instructions()
 
 	started = time.monotonic()
 	response = _client(settings).messages.create(**request)
@@ -491,8 +477,8 @@ def call_claude(settings, doc) -> dict:
 
 def apply_result(doc, result: dict):
 	category = result.get("category")
-	if category not in CATEGORIES:
-		category = DEFAULT_CATEGORY
+	if category not in tags.names():
+		category = tags.default_tag()
 
 	follow_up = None
 	if result.get("follow_up_on"):
@@ -523,8 +509,7 @@ def apply_result(doc, result: dict):
 	doc.classification_error = ""
 	save_as_system(doc)
 	link_message(doc.name)
-	create_lead_for_message(doc.name)
-	send_high_severity_alert(doc.name)
+	actions.run(doc.name)
 
 
 def _mark(name: str, **values):

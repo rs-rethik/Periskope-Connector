@@ -39,6 +39,7 @@ class TestSpend(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_health_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_health_test")
+		frappe.db.delete("Periskope AI Usage")  # the site's real usage must not count; rolled back
 		frappe.cache().delete_keys("periskope_alert:*")
 
 	def test_month_tokens_counts_this_month_only_and_ignores_errors(self):
@@ -136,3 +137,22 @@ class TestGetHealth(FrappeTestCase):
 			"phones",
 		):
 			self.assertIn(key, figures)
+
+
+class TestHealthFigures(FrappeTestCase):
+	def setUp(self):
+		frappe.db.savepoint("periskope_health_figures_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_health_figures_test")
+
+	def test_the_last_webhook_is_the_newest_log(self):
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Webhook Log",
+				"event_type": "message.created",
+				"signature_valid": 1,
+				"payload": "{}",
+			}
+		).insert(ignore_permissions=True)
+		latest = frappe.db.sql("select max(creation) from `tabPeriskope Webhook Log`")[0][0]
+		self.assertEqual(health.get_health()["last_webhook"], str(latest))
+		self.assertNotEqual(health.get_health()["last_webhook"], "never")

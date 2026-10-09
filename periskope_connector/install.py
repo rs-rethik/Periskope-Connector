@@ -93,6 +93,10 @@ def setup():
 		_ensure_role()
 		create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
 		_ensure_lead_source()
+		_ensure_tags()
+		_ensure_sla_levels()
+		_ensure_ai_instructions()
+		_ensure_working_hours()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 	except Exception:
@@ -156,3 +160,61 @@ def _ensure_webhook_events():
 		settings.append("webhook_events", {"event": event})
 	settings.flags.ignore_permissions = True
 	settings.save()
+
+
+def _ensure_tags():
+	"""Create the starting tags on a site that has none. After that the team owns the list."""
+	from periskope_connector.tags import DEFAULT_TAGS, FALLBACK_DEFAULT, default_actions
+
+	if frappe.db.count("Periskope Tag"):
+		return
+	for order, (name, description) in enumerate(DEFAULT_TAGS, start=1):
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Tag",
+				"tag_name": name,
+				"description": description,
+				"active": 1,
+				"is_default": 1 if name == FALLBACK_DEFAULT else 0,
+				"sort_order": order * 10,
+				"actions": default_actions(name),
+			}
+		).insert(ignore_permissions=True)
+
+
+def _ensure_sla_levels():
+	"""Start a new site with the usual SLA ladder; the team edits it afterwards."""
+	from periskope_connector.reminders import default_levels
+
+	settings = frappe.get_doc("Periskope Settings")
+	if settings.sla_levels:
+		return
+	for row in default_levels():
+		settings.append(
+			"sla_levels",
+			{
+				"wait_minutes": row.wait_minutes,
+				"min_severity": row.min_severity,
+				"action": row.action,
+				"recipients": row.recipients,
+			},
+		)
+	settings.flags.ignore_permissions = True
+	settings.save()
+
+
+def _ensure_ai_instructions():
+	"""Show the default AI instructions in the settings so they can be edited."""
+	from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS
+
+	if (frappe.db.get_single_value("Periskope Settings", "ai_instructions") or "").strip():
+		return
+	frappe.db.set_single_value("Periskope Settings", "ai_instructions", DEFAULT_INSTRUCTIONS)
+
+
+def _ensure_working_hours():
+	"""A Time field's default is not applied to a new single doctype: the form fills in the current
+	time instead, which made the working window zero-length. Store the usual hours up front."""
+	for field, value in (("working_hours_start", "09:00:00"), ("working_hours_end", "19:00:00")):
+		if not frappe.db.get_single_value("Periskope Settings", field):
+			frappe.db.set_single_value("Periskope Settings", field, value)

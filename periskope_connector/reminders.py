@@ -5,14 +5,15 @@ Runs every 10 minutes. Per chat (not per message), with a tiered clock in workin
 2. Only working hours count (site time, e.g. 09:00-19:00, Monday-Saturday, minus a Holiday
    List), so a message sent at night starts counting the next morning and nothing fires
    outside working hours.
-3. L1 after `sla_l1_hours`: the rep gets a notification (bell).
-4. L2 after `sla_l2_hours`: the rep gets a ToDo and the managers an email.
-5. L3 after `sla_l3_hours`: the escalation list (the MD) is emailed.
-6. A message tagged High severity that is still unanswered after `high_severity_minutes` jumps
-   straight to L2 and L3, whatever the clock says.
-7. When the rep replies, the reminder and its ToDo are closed and the response time recorded.
-   A level never fires twice for the same waiting period; a new incoming message after the
-   reply starts a fresh cycle.
+3. The SLA levels (Periskope Settings > Reply Reminders) say what happens and when: each row has
+   the working minutes to wait, the lowest severity it applies to, and an action: notify the rep
+   (bell), a ToDo for the rep, an email to the managers, to the escalation list (the MD), or to
+   the recipients on the row. The starting rows are: notify at 1 working hour, ToDo plus managers
+   at 3, escalation list at 8, and for High severity all four after 30 minutes.
+4. An action runs once per waiting period (the same action to the same recipients is not repeated
+   by a later row).
+5. When the rep replies, the reminder and its ToDo are closed and the response time recorded.
+   A new incoming message after the reply starts a fresh cycle.
 
 Group chats: any rep's message in the group counts as the reply (when group chats are included).
 """
@@ -31,6 +32,42 @@ from periskope_connector.text_rules import is_acknowledgement
 LOOKBACK_DAYS = 7
 MAX_SPAN_DAYS = 60
 
+NOTIFY_REP = "Notify Rep"
+TODO_FOR_REP = "ToDo for Rep"
+EMAIL_MANAGERS = "Email Managers"
+EMAIL_ESCALATION = "Email Escalation List"
+EMAIL_RECIPIENTS = "Email Recipients"
+
+# The "level" shown on a reminder: 1 rep notified, 2 ToDo or managers emailed, 3 escalation emailed.
+ACTION_LEVEL = {
+	NOTIFY_REP: 1,
+	TODO_FOR_REP: 2,
+	EMAIL_MANAGERS: 2,
+	EMAIL_RECIPIENTS: 2,
+	EMAIL_ESCALATION: 3,
+}
+SEVERITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
+
+
+def default_levels() -> list[SimpleNamespace]:
+	"""The starting SLA levels: a bell at 1 working hour, a ToDo and the managers at 3, the
+	escalation list at 8, and all four after 30 minutes for a High severity message."""
+	rows = [
+		(60, "Low", NOTIFY_REP),
+		(180, "Low", TODO_FOR_REP),
+		(180, "Low", EMAIL_MANAGERS),
+		(480, "Low", EMAIL_ESCALATION),
+		(30, "High", NOTIFY_REP),
+		(30, "High", TODO_FOR_REP),
+		(30, "High", EMAIL_MANAGERS),
+		(30, "High", EMAIL_ESCALATION),
+	]
+	return [
+		SimpleNamespace(wait_minutes=minutes, min_severity=severity, action=action, recipients="")
+		for minutes, severity, action in rows
+	]
+
+
 WEEKDAYS = {
 	"Monday to Saturday": {0, 1, 2, 3, 4, 5},
 	"Monday to Friday": {0, 1, 2, 3, 4},
@@ -45,6 +82,16 @@ def get_config(settings=None) -> SimpleNamespace:
 		return [e.strip() for e in re.split(r"[,\n;]", value or "") if e.strip()]
 
 	emails = emails_of(settings.alert_emails)
+	levels = [
+		SimpleNamespace(
+			wait_minutes=flt(row.wait_minutes),
+			min_severity=row.min_severity or "Low",
+			action=row.action,
+			recipients=row.recipients or "",
+		)
+		for row in sorted(settings.get("sla_levels") or [], key=lambda r: (flt(r.wait_minutes), r.idx))
+		if row.action
+	]
 	extra_words = [w.strip().lower() for w in re.split(r"[,\n;]", settings.ack_words or "") if w.strip()]
 	return SimpleNamespace(
 		enabled=bool(settings.enable_reply_reminders),
@@ -52,10 +99,7 @@ def get_config(settings=None) -> SimpleNamespace:
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),
 		holidays=_holiday_dates(settings.holiday_list),
-		l1=flt(settings.sla_l1_hours) or 1.0,
-		l2=flt(settings.sla_l2_hours) or 3.0,
-		l3=flt(settings.sla_l3_hours) or 8.0,
-		high_minutes=flt(settings.high_severity_minutes) or 30.0,
+		levels=levels,
 		emails=emails,
 		md_emails=emails_of(settings.escalation_emails) or emails,
 		groups=bool(settings.remind_group_chats),
@@ -151,11 +195,17 @@ def _open_reminder(chat_id: str):
 	return frappe.get_doc("Periskope Reply Reminder", name) if name else None
 
 
-def _level_of(reminder) -> int:
-	"""The level already reached. Old rows (from before the tiers) are placed sensibly."""
-	if reminder.level:
-		return reminder.level
-	return 2 if reminder.status == "Escalated" else 1
+def _key(row) -> str:
+	"""What makes two SLA rows the same step: the action and who it goes to."""
+	recipients = ",".join(
+		sorted(e.strip().lower() for e in re.split(r"[,\n;]", row.recipients or "") if e.strip())
+	)
+	return f"{row.action}|{recipients}"
+
+
+def _done(reminder) -> set[str]:
+	"""The steps already taken in this waiting period."""
+	return {key for key in (reminder.fired_rows or "").split("\n") if key}
 
 
 def _bell(rep: str | None, last, hours: float):
@@ -234,15 +284,14 @@ def _escalation_email(reminder, recipients: list[str], hours: float, to_md: bool
 
 
 def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: datetime, hours: float):
-	"""Open the reminder at L1: notification to the rep, no ToDo and no email yet."""
+	"""Open the reminder. The actions of the SLA levels run afterwards, see _check_chat."""
 	first, last = pending[0], pending[-1]
-	_bell(rep, last, hours)
 	return insert_as_system(
 		{
 			"doctype": "Periskope Reply Reminder",
 			"chat_id": chat_id,
 			"status": "Open",
-			"level": 1,
+			"level": 0,
 			"rep": rep,
 			"contact_number": last.contact_number,
 			"is_group": last.is_group,
@@ -254,40 +303,49 @@ def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: date
 	)
 
 
-def _to_level_2(reminder, cfg, now: datetime, hours: float) -> bool:
-	"""The rep's ToDo plus the managers' email. Returns True when the ToDo was created."""
-	if not reminder.todo:
-		todo = frappe.get_doc(
-			{
-				"doctype": "ToDo",
-				"allocated_to": reminder.rep,
-				"reference_type": "Periskope Message",
-				"reference_name": reminder.last_message,
-				"description": _todo_text(
-					frappe._dict(
-						contact_number=reminder.contact_number,
-						body=reminder.message_preview,
-					),
-					get_datetime(reminder.waiting_since),
-					hours,
-				),
-				"priority": "Medium",
-				"date": today(),
-				"status": "Open",
-			}
-		).insert()
-		reminder.db_set("todo", todo.name)
-	reminder.db_set({"status": "Escalated", "escalated_on": now, "level": 2})
-	_escalation_email(reminder, cfg.emails, hours, to_md=False)
+def _create_todo(reminder, hours: float) -> bool:
+	if reminder.todo:
+		return True
+	todo = frappe.get_doc(
+		{
+			"doctype": "ToDo",
+			"allocated_to": reminder.rep,
+			"reference_type": "Periskope Message",
+			"reference_name": reminder.last_message,
+			"description": _todo_text(
+				frappe._dict(contact_number=reminder.contact_number, body=reminder.message_preview),
+				get_datetime(reminder.waiting_since),
+				hours,
+			),
+			"priority": "Medium",
+			"date": today(),
+			"status": "Open",
+		}
+	).insert()
+	reminder.db_set("todo", todo.name)
 	return True
 
 
-def _to_level_3(reminder, cfg, now: datetime, hours: float) -> bool:
-	"""The MD-level email. Returns True once sent."""
-	if not _escalation_email(reminder, cfg.md_emails, hours, to_md=True):
-		return False
-	reminder.db_set({"level": 3})
-	return True
+def perform(row, reminder, last, cfg, now: datetime, hours: float) -> bool:
+	"""Carry out one SLA row. Returns False when it should be tried again on the next run (an email
+	that could not be sent)."""
+	action = row.action
+	if action == NOTIFY_REP:
+		_bell(reminder.rep, last, hours)
+		return True
+	if action == TODO_FOR_REP:
+		return _create_todo(reminder, hours)
+	if action == EMAIL_MANAGERS:
+		recipients, to_md = cfg.emails, False
+	elif action == EMAIL_ESCALATION:
+		recipients, to_md = cfg.md_emails, True
+	elif action == EMAIL_RECIPIENTS:
+		recipients, to_md = [e.strip() for e in re.split(r"[,\n;]", row.recipients or "") if e.strip()], False
+	else:
+		return True
+	if not recipients:
+		return True  # nobody to tell: not an error, and not worth retrying
+	return _escalation_email(reminder, recipients, hours, to_md=to_md)
 
 
 def close(reminder, now: datetime, messages: list | None = None, cfg=None):
@@ -323,24 +381,42 @@ def _check_chat(chat_id: str, messages: list, cfg, now: datetime, stats: dict):
 		return
 
 	hours = working_seconds(pending[0].message_timestamp, now, cfg) / 3600
-	high = any(getattr(m, "severity", None) == "High" for m in pending)
-	fast_path = high and hours * 60 >= cfg.high_minutes
+	severity = max((SEVERITY_RANK.get(getattr(m, "severity", None) or "Low", 0) for m in pending), default=0)
+	done = _done(reminder) if reminder else set()
+	due = [
+		row
+		for row in cfg.levels
+		if hours * 60 >= row.wait_minutes
+		and severity >= SEVERITY_RANK.get(row.min_severity, 0)
+		and _key(row) not in done
+	]
+	if not due:
+		return
 
 	if not reminder:
-		if hours < cfg.l1 and not fast_path:
-			return
 		rep = next((m.rep for m in reversed(messages) if m.rep), None)
 		reminder = create_reminder(chat_id, pending, rep, cfg, now, hours)
 		stats["notified"] += 1
 
-	level = _level_of(reminder)
-	if level < 2 and (hours >= cfg.l2 or fast_path):
-		_to_level_2(reminder, cfg, now, hours)
-		stats["escalated"] += 1
-		level = 2
-	if level < 3 and (hours >= cfg.l3 or fast_path):
-		if _to_level_3(reminder, cfg, now, hours):
+	escalated = False
+	for row in due:
+		if _key(row) in done:
+			continue  # an earlier row in this pass did the same
+		if not perform(row, reminder, pending[-1], cfg, now, hours):
+			continue
+		done.add(_key(row))
+		if row.action == EMAIL_ESCALATION:
 			stats["md_emailed"] += 1
+		elif row.action != NOTIFY_REP:
+			escalated = True
+	values = {
+		"fired_rows": "\n".join(sorted(done)),
+		"level": max((ACTION_LEVEL.get(key.split("|")[0], 0) for key in done), default=0),
+	}
+	if escalated and reminder.status != "Escalated":
+		values.update({"status": "Escalated", "escalated_on": now})
+		stats["escalated"] += 1
+	reminder.db_set(values)
 
 
 def _run(now: datetime | None) -> dict:

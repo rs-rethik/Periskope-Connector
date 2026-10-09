@@ -19,8 +19,17 @@ WEBHOOK_METHOD = "periskope_connector.api.webhook.receive"
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1")
 
 
+def site_url() -> str:
+	"""The public address of the site. A configured host_name is used as it is: Frappe's get_url()
+	adds the dev port to it on a bench without supervisor, which breaks a tunnel address."""
+	host = (frappe.conf.host_name or "").strip().rstrip("/")
+	if host:
+		return host if host.startswith(("http://", "https://")) else f"http://{host}"
+	return get_url()
+
+
 def webhook_url() -> str:
-	return f"{get_url()}/api/method/{WEBHOOK_METHOD}"
+	return f"{site_url()}/api/method/{WEBHOOK_METHOD}"
 
 
 def _listed(data) -> list[dict]:

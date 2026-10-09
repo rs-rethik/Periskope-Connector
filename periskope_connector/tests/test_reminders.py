@@ -24,16 +24,13 @@ def cfg(**kw):
 		"end": datetime(2000, 1, 1, 19, 0).time(),
 		"days": reminders.WEEKDAYS["Monday to Saturday"],
 		"holidays": set(),
-		"l1": 1.0,
-		"l2": 3.0,
-		"l3": 8.0,
-		"high_minutes": 30.0,
 		"emails": ["boss@example.com"],
 		"md_emails": ["md@example.com"],
 		"groups": False,
 		"ack_words": [],
 	}
 	base.update(kw)
+	base.setdefault("levels", reminders.default_levels())
 	return SimpleNamespace(**base)
 
 

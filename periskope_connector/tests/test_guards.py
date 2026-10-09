@@ -103,6 +103,8 @@ class TestFeedbackLoop(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_feedback_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_feedback_test")
+		# the site's real corrections must not count; rolled back after the test
+		frappe.db.sql("update `tabPeriskope Message` set correct_category = null")
 
 	def _corrected(self, message_id, body, category):
 		name = insert_as_system(

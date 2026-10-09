@@ -21,7 +21,8 @@
   "message_preview",
   "last_message",
   "todo",
-  "chat_id"
+  "chat_id",
+  "fired_rows"
  ],
  "fields": [
   {
@@ -140,6 +141,14 @@
    "label": "Chat ID",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "fired_rows",
+   "fieldtype": "Small Text",
+   "label": "Steps Done",
+   "read_only": 1,
+   "hidden": 1,
+   "description": "The SLA steps already taken in this waiting period, one per line."
   }
  ],
  "index_web_pages_for_search": 1,

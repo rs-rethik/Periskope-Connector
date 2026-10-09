@@ -5,11 +5,14 @@ Settings (the same list that gets the missed-reply escalation). A manager who is
 gets the notification bell as well.
 """
 
+import re
+
 import frappe
 from frappe import _
 from frappe.utils import escape_html, get_url_to_form
 
 from periskope_connector.reminders import get_config
+from periskope_connector.tags import default_tag
 
 
 def _users(emails: list[str]) -> list[str]:
@@ -22,23 +25,33 @@ def _who(doc) -> str:
 	return doc.sender_name or doc.contact_number or ""
 
 
-def send_high_severity_alert(message: str) -> bool:
-	"""Alert the managers about a High severity message. Returns True when an alert went out.
+def _recipients(rows: list) -> list[str]:
+	"""The emails on the matching tag actions; a row with none means the Manager Emails."""
+	emails: list[str] = []
+	for row in rows:
+		listed = [e.strip() for e in re.split(r"[,\n;]", row.get("recipients") or "") if e.strip()]
+		emails += listed or get_config().emails
+	return list(dict.fromkeys(emails))
+
+
+def send_alert(message: str, rows: list) -> bool:
+	"""Email the recipients of the tag's Email Alert actions about a message. Returns True when an
+	alert went out. One alert per message, however many rows match.
 
 	Never raises: a problem here must not undo the message's classification."""
 	try:
 		doc = frappe.get_doc("Periskope Message", message)
-		if doc.severity != "High" or doc.high_alert_sent:
+		if doc.high_alert_sent:
 			return False
-		emails = get_config().emails
+		emails = _recipients(rows)
 		if not emails:
 			return False
 
-		category = (doc.ai_category or "general").replace("_", " ")
+		category = (doc.ai_category or default_tag()).replace("_", " ")
 		summary = doc.ai_summary or ""
 		rep = doc.rep or doc.org_phone or _("no rep assigned")
 		link = get_url_to_form("Periskope Message", doc.name)
-		subject = _("High severity WhatsApp message: {0}").format(category)
+		subject = _("{0} severity WhatsApp message: {1}").format(doc.severity or "Low", category)
 		crm = ""
 		if doc.crm_deal or doc.crm_lead:
 			doctype, name = ("CRM Deal", doc.crm_deal) if doc.crm_deal else ("CRM Lead", doc.crm_lead)

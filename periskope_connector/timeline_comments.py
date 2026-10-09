@@ -1,7 +1,7 @@
 """Show a classified WhatsApp message in the CRM timeline of its lead or deal, as a comment.
 
-Only messages the AI put in a real category get one (not "general", and not skipped messages such
-as "ok" or "thanks"), so the timeline is not filled with chatter. A message gets at most one
+Only messages whose tag has a Timeline Comment action get one (by default every tag but the
+default one, and not skipped messages such as "ok" or "thanks"), so the timeline is not filled with chatter. A message gets at most one
 comment. A deal's timeline includes its lead's comments, so the comment goes on the lead when
 there is one and on the deal otherwise.
 
@@ -14,6 +14,7 @@ from datetime import timedelta
 import frappe
 from frappe.utils import escape_html
 
+from periskope_connector import actions
 from periskope_connector.system import insert_as_system
 
 MODE_PER_MESSAGE = "One per message"
@@ -97,7 +98,7 @@ def add_comment(message: str) -> str | None:
 	"""Add the timeline comment of a linked, tagged message. Returns its name, or None."""
 	doc = frappe.get_doc("Periskope Message", message)
 	target = _target(doc)
-	if doc.timeline_comment or not target or not doc.ai_category or doc.ai_category == "general":
+	if doc.timeline_comment or not target or not actions.matching(doc, actions.TIMELINE_COMMENT):
 		return None
 
 	mode, minutes = _settings()

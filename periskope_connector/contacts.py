@@ -184,7 +184,7 @@ def backfill_and_comment(contact):
 		last = contact.last_message_at.strftime("%d %b %Y") if contact.last_message_at else ""
 		preview = frappe.db.get_value(
 			"Periskope Message",
-			{"contact_number": phone_e164(contact.phone), "is_group": 0},
+			{"contact_number": phone_e164(contact.phone), "is_group": 0, "body": ["is", "set"]},
 			"body",
 			order_by="message_timestamp desc",
 		)

@@ -51,13 +51,11 @@
   "working_days",
   "holiday_list",
   "column_reminders",
-  "sla_l1_hours",
-  "sla_l2_hours",
-  "sla_l3_hours",
-  "high_severity_minutes",
   "alert_emails",
   "escalation_emails",
   "remind_group_chats",
+  "section_sla",
+  "sla_levels",
   "section_ack",
   "ack_words",
   "tab_keywords",
@@ -364,34 +362,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "1",
-   "description": "L1: the rep gets a notification (bell).",
-   "fieldname": "sla_l1_hours",
-   "fieldtype": "Float",
-   "label": "L1: Notify Rep After (working hours)"
-  },
-  {
-   "default": "3",
-   "description": "L2: the rep gets a ToDo and the managers an email.",
-   "fieldname": "sla_l2_hours",
-   "fieldtype": "Float",
-   "label": "L2: ToDo + Managers Email After"
-  },
-  {
-   "default": "8",
-   "description": "L3: the escalation list (the MD) gets an email.",
-   "fieldname": "sla_l3_hours",
-   "fieldtype": "Float",
-   "label": "L3: Escalation Email After"
-  },
-  {
-   "default": "30",
-   "description": "A message tagged High severity that is still unanswered after this many minutes goes straight to L2 and the escalation list, without waiting for the SLA clock.",
-   "fieldname": "high_severity_minutes",
-   "fieldtype": "Int",
-   "label": "High-Severity Fast Path (minutes)"
-  },
-  {
    "fieldname": "alert_emails",
    "fieldtype": "Small Text",
    "label": "Manager Emails (L2)"
@@ -407,6 +377,18 @@
    "fieldname": "remind_group_chats",
    "fieldtype": "Check",
    "label": "Include Group Chats"
+  },
+  {
+   "fieldname": "section_sla",
+   "fieldtype": "Section Break",
+   "label": "SLA Levels",
+   "description": "What happens, and when, for a customer who is waiting for a reply. Rows run in order of waiting time; each action runs once per waiting period."
+  },
+  {
+   "fieldname": "sla_levels",
+   "fieldtype": "Table",
+   "label": "SLA Levels",
+   "options": "Periskope SLA Level"
   },
   {
    "collapsible": 1,

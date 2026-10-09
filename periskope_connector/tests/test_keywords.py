@@ -106,10 +106,11 @@ class TestCheckMessage(FrappeTestCase):
 			self.assertEqual(keywords.check_message(other_chat), 1)  # other chat is not deduped
 
 	def test_a_rule_without_recipients_never_sends(self):
+		before = frappe.db.count("Periskope Keyword Alert")  # the site may already have real alerts
 		with patch.object(keywords, "rules", lambda: [_rule(recipients="")]):
 			name = self._message("kw6", "legal legal legal")
 			self.assertEqual(keywords.check_message(name), 0)
-			self.assertEqual(frappe.db.count("Periskope Keyword Alert"), 0)
+			self.assertEqual(frappe.db.count("Periskope Keyword Alert"), before)
 
 	def test_outgoing_and_empty_messages_are_not_checked(self):
 		with patch.object(keywords, "rules") as rules:

@@ -2,7 +2,7 @@
 
 Only when all of these hold, so a lead is never made by mistake:
 - the setting "Create Leads from New Enquiries" is on,
-- the AI put the message in the category order_or_enquiry,
+- the message's tag has a Create Lead action (order_or_enquiry has one to begin with),
 - it is a customer message in a 1-to-1 chat (a group has no single customer),
 - the number is not already on any CRM lead or deal.
 
@@ -13,10 +13,10 @@ messages of that chat are linked to it.
 
 import frappe
 
+from periskope_connector import actions
 from periskope_connector.contacts import is_ignored
 from periskope_connector.linking import by_mobile, link_message, number_key, phone_e164
 
-ENQUIRY_CATEGORY = "order_or_enquiry"
 DEFAULT_SOURCE = "WhatsApp"
 
 
@@ -61,7 +61,7 @@ def is_new_enquiry(doc) -> bool:
 		doc.direction == "Incoming"
 		and not doc.is_group
 		and bool(number_key(doc.contact_number))
-		and doc.ai_category == ENQUIRY_CATEGORY
+		and bool(actions.matching(doc, actions.CREATE_LEAD))
 	)
 
 

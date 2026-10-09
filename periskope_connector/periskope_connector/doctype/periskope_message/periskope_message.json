@@ -479,18 +479,18 @@
   },
   {
    "fieldname": "ai_category",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Category",
-   "options": "\nquality_complaint\ndelivery_delay\npayment_issue\nsample_request\norder_or_enquiry\ngeneral",
+   "options": "Periskope Tag",
    "read_only": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
   },
   {
    "fieldname": "correct_category",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Correct Category",
-   "options": "\nquality_complaint\ndelivery_delay\npayment_issue\nsample_request\norder_or_enquiry\ngeneral",
+   "options": "Periskope Tag",
    "read_only": 1,
    "description": "Set by a sales manager, with the Correct Category button, only when the AI was wrong."
   },

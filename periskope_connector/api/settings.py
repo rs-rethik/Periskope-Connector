@@ -116,22 +116,14 @@ def _save_phones(phones: list[dict]) -> list[dict]:
 	return [row.as_dict() for row in settings.phones]
 
 
-CATEGORIES = [
-	"quality_complaint",
-	"delivery_delay",
-	"payment_issue",
-	"sample_request",
-	"order_or_enquiry",
-	"general",
-]
-
-
 @frappe.whitelist()
 def set_correct_category(message: str, category: str) -> None:
 	"""A sales manager marks the category the AI should have given. Kept for the later learning loop"""
 	frappe.only_for(("Sales Manager", "System Manager"))
-	if category not in CATEGORIES:
-		frappe.throw(_("Category must be one of: {0}").format(", ".join(CATEGORIES)))
+	from periskope_connector.tags import names
+
+	if category not in names():
+		frappe.throw(_("Category must be one of: {0}").format(", ".join(names())))
 	frappe.db.set_value("Periskope Message", message, "correct_category", category)
 
 
