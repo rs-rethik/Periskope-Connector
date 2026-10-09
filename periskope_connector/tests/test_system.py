@@ -203,3 +203,26 @@ class TestSystemWrites(FrappeTestCase):
 		frappe.set_user("Guest")
 		self.assertEqual(leads.ensure_lead_source(), "WhatsApp")
 		self.assertTrue(frappe.db.exists("CRM Lead Source", "WhatsApp"))
+
+
+class TestUninstallCleanup(FrappeTestCase):
+	def test_the_phone_fields_are_removed_with_frappes_own_helper_in_one_call(self):
+		from periskope_connector import install
+
+		# Patching the real name also proves the helper exists in this Frappe version.
+		with patch("frappe.custom.doctype.custom_field.custom_field.delete_custom_fields") as delete:
+			install.before_uninstall()
+		delete.assert_called_once_with(install.CUSTOM_FIELDS)
+
+	def test_a_failure_is_logged_and_does_not_stop_the_uninstall(self):
+		from periskope_connector import install
+
+		with (
+			patch(
+				"frappe.custom.doctype.custom_field.custom_field.delete_custom_fields",
+				side_effect=RuntimeError("boom"),
+			),
+			patch.object(frappe, "log_error") as log_error,
+		):
+			install.before_uninstall()
+		log_error.assert_called_once()
