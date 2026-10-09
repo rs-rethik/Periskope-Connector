@@ -16,6 +16,11 @@ frappe.ui.form.on("Periskope Settings", {
 
 		frm.add_custom_button(__("Test Connection"), () => test_connection(frm), __("Actions"));
 		frm.add_custom_button(__("Sync Phones"), () => sync_phones(frm), __("Actions"));
+		frm.add_custom_button(
+			__("Create Webhook in Periskope"),
+			() => setup_webhooks(frm),
+			__("Actions")
+		);
 		frm.add_custom_button(__("Test AI Connection"), () => test_ai(frm), __("Actions"));
 		frm.add_custom_button(
 			__("Check Reply Reminders Now"),
@@ -146,6 +151,14 @@ function test_connection(frm) {
 					message: __("Connected: {0} phone(s)", [r.message.phone_count]),
 					indicator: "green",
 				});
+				if (r.message.webhooks) show_webhooks(r.message.webhooks);
+				if (r.message.webhooks_error) {
+					frappe.msgprint({
+						title: __("Webhook not created"),
+						message: r.message.webhooks_error,
+						indicator: "orange",
+					});
+				}
 				frm.reload_doc();
 			},
 			error() {
@@ -153,6 +166,42 @@ function test_connection(frm) {
 				frm.reload_doc();
 			},
 		});
+	});
+}
+
+function setup_webhooks(frm) {
+	with_saved(frm, () => {
+		frappe.call({
+			method: "periskope_connector.api.settings.setup_webhooks",
+			freeze: true,
+			freeze_message: __("Creating the webhook in Periskope..."),
+			callback(r) {
+				if (r.message) show_webhooks(r.message);
+			},
+		});
+	});
+}
+
+function show_webhooks(result) {
+	const lines = [
+		result.created.length
+			? __("Created for: {0}", [result.created.join(", ")])
+			: __("Nothing to create: the webhook already exists."),
+		__(
+			"Periskope does not give the signing secret through the API. Copy it from Periskope (Settings > Webhooks) into Webhook Signing Secret, then save."
+		),
+	];
+	if (result.stale.length) {
+		lines.push(
+			__("Older webhooks for this app still point to: {0}. Remove them in Periskope.", [
+				result.stale.join(", "),
+			])
+		);
+	}
+	frappe.msgprint({
+		title: __("Periskope webhook"),
+		message: lines.map((l) => `<p>${frappe.utils.escape_html(l)}</p>`).join(""),
+		indicator: "green",
 	});
 }
 

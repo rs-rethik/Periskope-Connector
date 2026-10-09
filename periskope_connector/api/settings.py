@@ -38,7 +38,22 @@ def test_connection() -> dict:
 		_set_status(f"Failed: {str(e)[:100]}")
 		raise
 	_set_status(f"Connected ({len(phones)} phone(s))")
-	return {"phone_count": len(phones)}
+	result = {"phone_count": len(phones)}
+	try:
+		result["webhooks"] = setup_webhooks()
+	except Exception as e:
+		# A webhook that could not be registered must not hide that the connection itself works.
+		result["webhooks_error"] = str(e)[:300]
+	return result
+
+
+@frappe.whitelist()
+def setup_webhooks() -> dict:
+	"""Register this site's webhook in Periskope (message.created and message.updated)."""
+	frappe.only_for("System Manager")
+	from periskope_connector.webhooks import ensure_webhooks
+
+	return ensure_webhooks()
 
 
 @frappe.whitelist()
@@ -127,3 +142,12 @@ def get_health() -> dict:
 	from periskope_connector.health import get_health as figures
 
 	return figures()
+
+
+@frappe.whitelist()
+def backfill_messages(days: int = 7) -> dict:
+	"""Fetch the last `days` days of chat history from Periskope and save what webhooks missed."""
+	frappe.only_for("System Manager")
+	from periskope_connector.backfill import run
+
+	return run(days=min(max(int(days), 1), 30))
