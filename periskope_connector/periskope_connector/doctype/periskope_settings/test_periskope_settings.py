@@ -453,7 +453,7 @@ class TestFlowTab(FrappeTestCase):
 			"sla",
 			"people",
 		}
-		self.assertEqual(set(data), steps)
+		self.assertEqual(set(data), steps | {"settings"})  # the settings the panels edit
 		for name in steps - {"actions"}:
 			self.assertIn(data[name]["status"], ("ok", "warn", "bad", "off"), name)
 			self.assertTrue(data[name]["headline"], name)
@@ -518,6 +518,60 @@ class TestFlowTab(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			flow.set_tag_active("general", False)
 
+	def test_the_figures_carry_the_settings_the_panels_edit(self):
+		values = flow.get_flow()["settings"]
+		for name in flow.SETTING_FIELDS:
+			self.assertIn(name, values)
+		self.assertEqual(len(values["sla_levels"]), frappe.db.count("Periskope SLA Level"))
+		self.assertEqual(
+			[r["idx"] for r in values["sla_levels"]], sorted(r["idx"] for r in values["sla_levels"])
+		)
+		self.assertIn("rule_name", values["keyword_rules"][0])
+
+	def test_a_setting_is_saved_by_the_dialog_and_unknown_fields_are_refused(self):
+		before = frappe.db.get_single_value("Periskope Settings", "classify_group_chats")
+		flow.set_setting("classify_group_chats", 0 if before else 1)
+		self.assertEqual(
+			frappe.db.get_single_value("Periskope Settings", "classify_group_chats"), 0 if before else 1
+		)
+		for name in ("api_key", "base_url", "webhook_signing_secret"):
+			with self.assertRaises(frappe.ValidationError, msg=name):
+				flow.set_setting(name, "x")
+
+	def test_the_settings_own_checks_still_apply_to_the_dialog(self):
+		flow.set_setting("working_hours_start", "09:00:00")
+		with self.assertRaises(frappe.ValidationError):
+			flow.set_setting("working_hours_end", "09:05:00")
+		with self.assertRaises(frappe.ValidationError):
+			flow.set_setting("alert_emails", "not-an-email")
+
+	def test_sla_rows_can_be_edited_added_and_removed(self):
+		count = frappe.db.count("Periskope SLA Level")
+		flow.set_row("sla_levels", 1, "wait_minutes", 45)
+		self.assertEqual(frappe.get_doc("Periskope Settings").sla_levels[0].wait_minutes, 45)
+		flow.add_sla_level()
+		rows = frappe.get_doc("Periskope Settings").sla_levels
+		self.assertEqual((len(rows), rows[-1].action, rows[-1].wait_minutes), (count + 1, "Notify Rep", 60))
+		flow.remove_sla_level(len(rows))
+		self.assertEqual(frappe.db.count("Periskope SLA Level"), count)
+
+	def test_a_keyword_rule_can_be_given_recipients_and_switched_off(self):
+		flow.set_row("keyword_rules", 1, "recipients", "qa@example.com")
+		flow.set_row("keyword_rules", 1, "enabled", 0)
+		rule = frappe.get_doc("Periskope Settings").keyword_rules[0]
+		self.assertEqual((rule.recipients, rule.enabled), ("qa@example.com", 0))
+
+	def test_the_dialog_cannot_change_other_fields_or_tables_or_missing_rows(self):
+		for args in (
+			("sla_levels", 1, "idx", 5),
+			("keyword_rules", 1, "keywords", "x"),
+			("phones", 1, "rep", "x"),
+		):
+			with self.assertRaises(frappe.ValidationError, msg=str(args)):
+				flow.set_row(*args)
+		with self.assertRaises(frappe.ValidationError):
+			flow.set_row("sla_levels", 999, "wait_minutes", 5)
+
 	def test_only_managers_can_use_the_flow_api(self):
 		original = frappe.session.user
 		self.addCleanup(frappe.set_user, original)
@@ -530,6 +584,10 @@ class TestFlowTab(FrappeTestCase):
 			settings_api.get_flow,
 			lambda: settings_api.set_tag_active("general", 1),
 			lambda: settings_api.set_tag_action("general", "ToDo for Rep", 1),
+			lambda: settings_api.set_flow_setting("classify_group_chats", 1),
+			lambda: settings_api.set_flow_row("sla_levels", 1, "wait_minutes", 5),
+			settings_api.add_flow_sla_level,
+			lambda: settings_api.remove_flow_sla_level(1),
 		):
 			with self.assertRaises(frappe.PermissionError):
 				call()

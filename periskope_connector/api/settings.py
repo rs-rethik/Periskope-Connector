@@ -170,3 +170,39 @@ def set_tag_action(tag: str, action: str, on: int = 1) -> None:
 	from periskope_connector.flow import set_tag_action as change
 
 	change(tag, action, bool(int(on)))
+
+
+@frappe.whitelist()
+def set_flow_setting(field: str, value=None) -> None:
+	"""Flow dialog: change one setting and save it."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_setting
+
+	set_setting(field, value)
+
+
+@frappe.whitelist()
+def set_flow_row(table: str, idx: int, field: str, value=None) -> None:
+	"""Flow dialog: change one field of an SLA level or keyword rule row and save."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_row
+
+	set_row(table, idx, field, value)
+
+
+@frappe.whitelist()
+def add_flow_sla_level() -> None:
+	"""Flow dialog: add an SLA step."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import add_sla_level
+
+	add_sla_level()
+
+
+@frappe.whitelist()
+def remove_flow_sla_level(idx: int) -> None:
+	"""Flow dialog: remove an SLA step."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import remove_sla_level
+
+	remove_sla_level(idx)

@@ -18,6 +18,30 @@ TAG_ACTIONS = [
 ]
 OWN_DOCTYPES = ("Periskope Message", "Periskope Reply Reminder")
 
+# What the Flow dialog may change in the settings, and the rows of the two tables it edits. The dialog
+# saves these straight to the server, so the settings form behind it is not touched while it is open.
+SETTING_FIELDS = (
+	"enabled",
+	"enable_classification",
+	"classify_group_chats",
+	"create_leads_from_enquiries",
+	"ignore_suppliers",
+	"ignore_employees",
+	"enable_reply_reminders",
+	"remind_group_chats",
+	"reps_see_own_numbers",
+	"comment_mode",
+	"working_days",
+	"working_hours_start",
+	"working_hours_end",
+	"alert_emails",
+	"escalation_emails",
+)
+ROW_FIELDS = {
+	"sla_levels": ("wait_minutes", "min_severity", "action", "recipients"),
+	"keyword_rules": ("recipients", "enabled"),
+}
+
 
 def _ago(moment) -> str:
 	if not moment:
@@ -214,11 +238,34 @@ def _people(settings) -> dict:
 	}
 
 
+def _settings_values(settings) -> dict:
+	"""The settings the panels show and edit, so the dialog never reads the open form."""
+	values = {name: settings.get(name) for name in SETTING_FIELDS}
+	for name in ("working_hours_start", "working_hours_end"):
+		values[name] = str(values[name] or "")
+	values["sla_levels"] = [
+		{
+			"idx": r.idx,
+			"wait_minutes": r.wait_minutes,
+			"min_severity": r.min_severity,
+			"action": r.action,
+			"recipients": r.recipients or "",
+		}
+		for r in settings.sla_levels
+	]
+	values["keyword_rules"] = [
+		{"idx": r.idx, "rule_name": r.rule_name, "recipients": r.recipients or "", "enabled": r.enabled}
+		for r in settings.keyword_rules
+	]
+	return values
+
+
 def get_flow() -> dict:
 	"""Every step of the pipeline with its health and figures, for the Flow tab."""
 	settings = frappe.get_doc("Periskope Settings")
 	tags = _tags()
 	return {
+		"settings": _settings_values(settings),
 		"periskope": _periskope(settings),
 		"capture": _capture(settings),
 		"link": _link(),
@@ -254,3 +301,37 @@ def set_tag_action(tag: str, action: str, on: bool):
 	else:
 		return
 	doc.save()
+
+
+def set_setting(field: str, value):
+	"""Change one setting from the Flow dialog and save it (the settings' own checks still run)."""
+	if field not in SETTING_FIELDS:
+		frappe.throw(_("{0} cannot be changed here").format(field))
+	settings = frappe.get_doc("Periskope Settings")
+	settings.set(field, value)
+	settings.save()
+
+
+def set_row(table: str, idx: int, field: str, value):
+	"""Change one field of a row of the SLA levels or the keyword rules, and save."""
+	if field not in ROW_FIELDS.get(table, ()):
+		frappe.throw(_("{0} cannot be changed here").format(field))
+	settings = frappe.get_doc("Periskope Settings")
+	row = next((r for r in settings.get(table) if r.idx == int(idx)), None)
+	if not row:
+		frappe.throw(_("Row {0} does not exist").format(idx))
+	row.set(field, value)
+	settings.save()
+
+
+def add_sla_level():
+	"""A new SLA step with the usual first values; the team edits it afterwards."""
+	settings = frappe.get_doc("Periskope Settings")
+	settings.append("sla_levels", {"wait_minutes": 60, "min_severity": "Low", "action": "Notify Rep"})
+	settings.save()
+
+
+def remove_sla_level(idx: int):
+	settings = frappe.get_doc("Periskope Settings")
+	settings.set("sla_levels", [r for r in settings.sla_levels if r.idx != int(idx)])
+	settings.save()

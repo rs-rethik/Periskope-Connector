@@ -173,7 +173,8 @@
 		`<button type="button" class="btn btn-xs ${
 			primary ? "btn-primary" : "btn-default"
 		}" ${attrs}>${e(label)}</button>`;
-	const field = (frm, name) => frm.doc[name];
+	const field = (frm, name) => frm._pf.data.settings[name];
+	const rowsOf = (frm, table) => frm._pf.data.settings[table] || [];
 	const switchRow = (frm, label, name) =>
 		`<div class="pf-row"><span>${e(label)}</span>${sw(
 			!!field(frm, name),
@@ -247,7 +248,7 @@
 
 	// The dots and labels of the SLA ladder timeline, from the rows now in the form.
 	function slaMarks(frm) {
-		const rows = frm.doc.sla_levels || [];
+		const rows = rowsOf(frm, "sla_levels");
 		const waits = [...new Set(rows.map((r) => +r.wait_minutes))].sort((a, b) => a - b);
 		return waits
 			.map((w, i) => {
@@ -408,7 +409,7 @@
 		},
 		keywords(frm, d) {
 			const f = d.keywords;
-			const rows = (frm.doc.keyword_rules || [])
+			const rows = rowsOf(frm, "keyword_rules")
 				.map(
 					(r) =>
 						`<tr><td>${e(r.rule_name)}</td><td><input data-row="keyword_rules|${
@@ -604,7 +605,7 @@
 			};
 		},
 		sla(frm, d) {
-			const rows = frm.doc.sla_levels || [];
+			const rows = rowsOf(frm, "sla_levels");
 			const marks = slaMarks(frm);
 			const sel = (name, value, options) =>
 				`<select data-row="sla_levels|${name}|${value.field}">${options
@@ -774,7 +775,8 @@
 			const status = (st.data[n.id] || {}).status || "ok";
 			["ok", "warn", "bad", "off"].forEach((c) => g.classList.toggle(c, c === status));
 			const m = g.querySelector("[data-metric]");
-			if (m) m.textContent = nodeMetric(n.id, st.data);
+			const text = nodeMetric(n.id, st.data);
+			if (m && m.textContent !== text) m.textContent = text; // leave an unchanged figure alone
 		});
 	}
 
@@ -789,13 +791,15 @@
 
 	// Fetch the figures. The first time (or after a layout change) the dialog is built; after that
 	// only the cards are updated.
-	function load(frm) {
+	// `then` is "panel" to redraw the panel too (new rows, a refused change), otherwise only the cards.
+	function load(frm, then) {
 		frm._pf = frm._pf || { selected: "periskope", data: null };
 		frappe.call({
 			method: "periskope_connector.api.settings.get_flow",
 			callback(r) {
 				frm._pf.data = r.message;
 				updateFigures(frm);
+				if (then === "panel") renderPanel(frm);
 			},
 		});
 	}
@@ -812,55 +816,75 @@
 			});
 			d.$wrapper.addClass("pf-dialog");
 			d.onhide = () => {
+				frappe.ui.form.is_saving = false;
 				if (st.watch) st.watch.disconnect();
 				st.watch = null;
+				if (st.changed) {
+					st.changed = false;
+					frm.reload_doc();
+				}
 			};
 			st.dialog = d;
 			st.$body = d.fields_dict.flow.$wrapper;
 		}
 		st.dialog.show();
+		// Frappe reloads an open form when the server says its document changed. While the dialog is
+		// open that would redraw the form behind it on every change, so tell Frappe a save is in
+		// progress; the form is reloaded once when the dialog closes.
+		frappe.ui.form.is_saving = true;
 		st.data = null;
 		render(frm); // "Loading..." until the figures arrive; load() then builds the dialog
 		load(frm);
 	}
 
-	// Save the settings form after a change made in the dialog, one save at a time. Frappe shows its
-	// own "Saved" message, so none is added here.
-	function autosave(frm) {
+	// Every change goes straight to the server, one call at a time. The settings form behind the dialog
+	// is left alone (it would redraw, and show through the dimmed page); it is reloaded once, when the
+	// dialog closes.
+	function save(frm, method, args, then) {
 		const st = frm._pf;
+		st.changed = true;
 		st.saving = (st.saving || Promise.resolve()).then(
 			() =>
 				new Promise((resolve) => {
-					// Frappe marks a form dirty a moment after a child row changes.
-					setTimeout(() => {
-						if (!frm.is_dirty()) return resolve();
-						Promise.resolve(frm.save()).finally(resolve);
-					}, 60);
+					frappe.call({
+						method: `periskope_connector.api.settings.${method}`,
+						args,
+						callback() {
+							frappe.show_alert({ message: __("Saved"), indicator: "green" }, 2);
+							load(frm, then);
+							resolve();
+						},
+						// the server refused the change: show what is really saved
+						error() {
+							load(frm, "panel");
+							resolve();
+						},
+					});
 				})
 		);
 		return st.saving;
 	}
 
 	function setValue(frm, name, value) {
-		return frm.set_value(name, value).then(() => autosave(frm));
+		frm._pf.data.settings[name] = value;
+		return save(frm, "set_flow_setting", { field: name, value });
 	}
 
-	function rowOf(frm, table, rowname) {
-		return (frm.doc[table] || []).find((r) => String(r.idx) === String(rowname));
-	}
-
-	function setRow(frm, table, name, fieldname, value) {
-		const row = rowOf(frm, table, name);
+	function setRow(frm, table, idx, fieldname, value) {
+		const row = rowsOf(frm, table).find((r) => String(r.idx) === String(idx));
 		if (!row) return;
-		frappe.model.set_value(row.doctype, row.name, fieldname, value);
-		frm.dirty();
+		row[fieldname] = value;
 		if (table === "sla_levels") {
 			const tl = frm._pf.$body[0].querySelector(".pf-tl");
 			if (tl) tl.innerHTML = slaMarks(frm);
-			// choosing "Email Recipients" needs an address box
-			if (fieldname === "action") renderPanel(frm);
 		}
-		autosave(frm);
+		// choosing "Email Recipients" needs an address box
+		save(
+			frm,
+			"set_flow_row",
+			{ table, idx, field: fieldname, value },
+			fieldname === "action" ? "panel" : null
+		);
 	}
 
 	// Show a switch in its new state straight away; the save follows.
@@ -901,34 +925,17 @@
 			setRow(frm, table, name, fieldname, i.type === "number" ? +i.value : i.value);
 		});
 		on(root, "[data-rowsw]", "click", (b) => {
-			const [table, name, fieldname] = b.dataset.rowsw.split("|");
-			const row = rowOf(frm, table, name);
+			const [table, idx, fieldname] = b.dataset.rowsw.split("|");
+			const row = rowsOf(frm, table).find((r) => String(r.idx) === idx);
 			if (!row) return;
 			const next = row[fieldname] ? 0 : 1;
 			flip(b, next);
-			setRow(frm, table, name, fieldname, next);
+			setRow(frm, table, idx, fieldname, next);
 		});
-		on(root, "[data-sla-del]", "click", (b) => {
-			const idx = (frm.doc.sla_levels || []).findIndex(
-				(r) => String(r.idx) === b.dataset.slaDel
-			);
-			if (idx < 0) return;
-			frm.get_field("sla_levels").grid.grid_rows[idx].remove();
-			frm.dirty();
-			renderPanel(frm);
-			autosave(frm);
-		});
-		on(root, "[data-sla-add]", "click", () => {
-			frm.add_child("sla_levels", {
-				wait_minutes: 60,
-				min_severity: "Low",
-				action: "Notify Rep",
-			});
-			frm.refresh_field("sla_levels");
-			frm.dirty();
-			renderPanel(frm);
-			autosave(frm);
-		});
+		on(root, "[data-sla-del]", "click", (b) =>
+			save(frm, "remove_flow_sla_level", { idx: b.dataset.slaDel }, "panel")
+		);
+		on(root, "[data-sla-add]", "click", () => save(frm, "add_flow_sla_level", {}, "panel"));
 		on(root, "[data-tag-active]", "click", (b) => {
 			const turnOn = !b.classList.contains("on");
 			flip(b, turnOn);
@@ -970,7 +977,7 @@
 			leave(frm, () => frappe.set_route("Form", doctype, name));
 		});
 		on(root, "[data-call]", "click", (b) =>
-			autosave(frm).then(() =>
+			(frm._pf.saving || Promise.resolve()).then(() =>
 				frappe.call({
 					method: `periskope_connector.api.settings.${b.dataset.call}`,
 					freeze: true,
