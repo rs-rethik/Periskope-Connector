@@ -143,3 +143,30 @@ def backfill_messages(days: int = 7) -> dict:
 	from periskope_connector.backfill import run
 
 	return run(days=min(max(int(days), 1), 30))
+
+
+@frappe.whitelist()
+def get_flow() -> dict:
+	"""The health and figures of each step, for the Flow tab of the settings page."""
+	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	from periskope_connector.flow import get_flow as figures
+
+	return figures()
+
+
+@frappe.whitelist()
+def set_tag_active(tag: str, active: int = 1) -> None:
+	"""Flow tab: switch a tag on or off."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_tag_active as switch
+
+	switch(tag, bool(int(active)))
+
+
+@frappe.whitelist()
+def set_tag_action(tag: str, action: str, on: int = 1) -> None:
+	"""Flow tab: give a tag an action, or take it away."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_tag_action as change
+
+	change(tag, action, bool(int(on)))
