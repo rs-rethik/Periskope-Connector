@@ -112,6 +112,22 @@ class TestQueue(FrappeTestCase):
 			)
 		)
 
+	def test_the_history_comment_shows_the_latest_text_even_after_an_attachment(self):
+		self._message("q6a", body="Please send the catalog")
+		self._message("q6b", body="", message_type="document", from_me=True)  # the rep's file, no text
+		row = frappe.get_doc("Periskope Contact", {"phone": "919600000001"})
+		lead_name = contacts.create_lead_for_contact(row.name)
+		content = frappe.db.get_value(
+			"Comment",
+			{
+				"reference_doctype": "CRM Lead",
+				"reference_name": lead_name,
+				"content": ["like", "%WhatsApp history linked%"],
+			},
+			"content",
+		)
+		self.assertIn("Latest: Please send the catalog", content)
+
 	def test_link_action_writes_the_phone_and_links_the_history(self):
 		self._message("q7", body="hello")
 		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Existing", "mobile_no": ""})

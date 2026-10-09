@@ -36,12 +36,12 @@ class TestTags(FrappeTestCase):
 		self.assertEqual(tags.default_tag(), "general")
 
 	def test_a_new_tag_reaches_the_prompt_the_schema_and_the_reply_format(self):
-		_tag("price_negotiation", "the customer pushes back on the price")
+		_tag("zz_negotiation", "the customer pushes back on the price")
 		self.assertIn(
-			"price_negotiation: the customer pushes back on the price", classifier.build_system_prompt()
+			"zz_negotiation: the customer pushes back on the price", classifier.build_system_prompt()
 		)
-		self.assertIn("price_negotiation", classifier.build_schema()["properties"]["category"]["enum"])
-		self.assertIn('"price_negotiation"', classifier.json_reply_instructions())
+		self.assertIn("zz_negotiation", classifier.build_schema()["properties"]["category"]["enum"])
+		self.assertIn('"zz_negotiation"', classifier.json_reply_instructions())
 
 	def test_an_inactive_tag_is_no_longer_offered(self):
 		frappe.db.set_value("Periskope Tag", "sample_request", "active", 0)
