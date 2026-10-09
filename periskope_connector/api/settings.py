@@ -143,3 +143,66 @@ def backfill_messages(days: int = 7) -> dict:
 	from periskope_connector.backfill import run
 
 	return run(days=min(max(int(days), 1), 30))
+
+
+@frappe.whitelist()
+def get_flow() -> dict:
+	"""The health and figures of each step, for the Flow tab of the settings page."""
+	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	from periskope_connector.flow import get_flow as figures
+
+	return figures()
+
+
+@frappe.whitelist()
+def set_tag_active(tag: str, active: int = 1) -> None:
+	"""Flow tab: switch a tag on or off."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_tag_active as switch
+
+	switch(tag, bool(int(active)))
+
+
+@frappe.whitelist()
+def set_tag_action(tag: str, action: str, on: int = 1) -> None:
+	"""Flow tab: give a tag an action, or take it away."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_tag_action as change
+
+	change(tag, action, bool(int(on)))
+
+
+@frappe.whitelist()
+def set_flow_setting(field: str, value=None) -> None:
+	"""Flow dialog: change one setting and save it."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_setting
+
+	set_setting(field, value)
+
+
+@frappe.whitelist()
+def set_flow_row(table: str, idx: int, field: str, value=None) -> None:
+	"""Flow dialog: change one field of an SLA level or keyword rule row and save."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import set_row
+
+	set_row(table, idx, field, value)
+
+
+@frappe.whitelist()
+def add_flow_sla_level() -> None:
+	"""Flow dialog: add an SLA step."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import add_sla_level
+
+	add_sla_level()
+
+
+@frappe.whitelist()
+def remove_flow_sla_level(idx: int) -> None:
+	"""Flow dialog: remove an SLA step."""
+	frappe.only_for("System Manager")
+	from periskope_connector.flow import remove_sla_level
+
+	remove_sla_level(idx)

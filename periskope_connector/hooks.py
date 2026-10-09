@@ -50,6 +50,9 @@ doc_events = {
 	},
 }
 
+# The Flow tab of the settings page draws the pipeline and edits its steps.
+doctype_js = {"Periskope Settings": "public/js/periskope_flow.js"}
+
 # Scheduled Tasks
 # ---------------
 
