@@ -93,6 +93,7 @@ def setup():
 		_ensure_role()
 		create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
 		_ensure_lead_source()
+		_ensure_tags()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 	except Exception:
@@ -156,3 +157,22 @@ def _ensure_webhook_events():
 		settings.append("webhook_events", {"event": event})
 	settings.flags.ignore_permissions = True
 	settings.save()
+
+
+def _ensure_tags():
+	"""Create the starting tags on a site that has none. After that the team owns the list."""
+	from periskope_connector.tags import DEFAULT_TAGS, FALLBACK_DEFAULT
+
+	if frappe.db.count("Periskope Tag"):
+		return
+	for order, (name, description) in enumerate(DEFAULT_TAGS, start=1):
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Tag",
+				"tag_name": name,
+				"description": description,
+				"active": 1,
+				"is_default": 1 if name == FALLBACK_DEFAULT else 0,
+				"sort_order": order * 10,
+			}
+		).insert(ignore_permissions=True)
