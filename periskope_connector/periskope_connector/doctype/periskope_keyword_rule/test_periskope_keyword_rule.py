@@ -1,4 +1,4 @@
-"""Keyword alerts (M4): word-boundary matching, per-rule recipients, dedupe window."""
+"""Tests for the Periskope Keyword Rule doctype and the code that works on it."""
 
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -9,7 +9,7 @@ from frappe.utils import now_datetime
 
 from periskope_connector import keywords, messages
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.test_linking import _event
+from periskope_connector.tests.utils import event
 
 
 def _rule(name="Legal", words="legal, lawyer", recipients="boss@example.com"):
@@ -61,7 +61,7 @@ class TestCheckMessage(FrappeTestCase):
 		self.addCleanup(frappe.db.rollback, save_point="periskope_keyword_test")
 
 	def _message(self, message_id, body, **data):
-		name = messages.create_message(_event(message_id=message_id, body=body, **data))
+		name = messages.create_message(event(message_id=message_id, body=body, **data))
 		return name
 
 	def test_a_matching_message_alerts_the_rules_recipients_once(self):

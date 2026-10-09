@@ -489,6 +489,8 @@ Run the tests on a development site. They roll back everything they write and ne
 bench --site $SITE_NAME run-tests --app periskope_connector
 ```
 
+Following the Frappe standard, each doctype has its tests in `test_<doctype>.py` next to its controller, for example `periskope_connector/periskope_connector/doctype/periskope_message/test_periskope_message.py`. Tests for reports sit beside the reports, and the `tests/` folder holds only the shared helpers (`utils.py`) and the checks that cover the whole app (`test_system.py`).
+
 The repo uses `pre-commit` (ruff, eslint, prettier). Enable it once with `pre-commit install` in this folder.
 
 Useful commands:
