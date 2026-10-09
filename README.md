@@ -37,6 +37,7 @@ Sales conversations usually live on each rep's phone, so management cannot see t
   * [Set it up](#set-it-up)
   * [Daily use](#daily-use)
   * [Customise it](#customise-it)
+  * [The Flow tab](#the-flow-tab)
   * [Reports and dashboard](#reports-and-dashboard)
   * [Keeping it healthy](#keeping-it-healthy)
   * [Troubleshooting](#troubleshooting)
@@ -100,7 +101,7 @@ bench --site $SITE_NAME migrate
 
 ## Setup
 
-Open **Periskope Settings**. The tabs walk you through it: **Connection** (API key, webhook events, signing secret, phone-to-rep assignment; **Test Connection** creates the webhook in Periskope for the selected events, so only the signing secret is pasted by hand), **AI Tagging** (provider, key, model, instructions, business context), **Lead Capture** (auto-create switch, ignore list, digest recipients), **Reply Reminders** (working hours, holiday list, SLA levels, manager and MD emails, acknowledgement words), **Keyword Alerts** (rules and dedupe window — a rule sends nothing until it has recipients), **Data & Cost** (token budget, max tokens, retention, media download), **CRM Visibility** (comment mode, rep self-visibility) and **Health** (live figures). Step-by-step instructions with screenshots are in the [User Manual](#user-manual).
+Open **Periskope Settings**. The tabs walk you through it: **Connection** (API key, webhook events, signing secret, phone-to-rep assignment; **Test Connection** creates the webhook in Periskope for the selected events, so only the signing secret is pasted by hand), **AI Tagging** (provider, key, model, instructions, business context), **Lead Capture** (auto-create switch, ignore list, digest recipients), **Reply Reminders** (working hours, holiday list, SLA levels, manager and MD emails, acknowledgement words), **Keyword Alerts** (rules and dedupe window — a rule sends nothing until it has recipients), **Data & Cost** (token budget, max tokens, retention, media download), **CRM Visibility** (comment mode, rep self-visibility) **Health** (live figures) and **Flow** (the whole pipeline as a diagram you can edit). Step-by-step instructions with screenshots are in the [User Manual](#user-manual).
 
 ## User Manual
 
@@ -369,6 +370,30 @@ On **Reply Reminders**, the **SLA Levels** table is the escalation ladder. Each 
 | CRM Visibility | Timeline comments: one per message, one shared comment per burst of messages, or none. Whether reps can read the messages of their own number. |
 | Reply Reminders | Acknowledgement words that need no reply, for example local-language equivalents of ok. |
 | Advanced | The Periskope API address. |
+
+### The Flow tab
+
+The **Flow** tab of Periskope Settings draws the whole pipeline: capture, linking, AI tagging, tags and their actions, the contact queue, and the reply escalation. Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel under the diagram.
+
+![The Flow tab with the SLA ladder open](docs/manual/31-flow-tab-sla-ladder.jpg)
+*The Flow tab with the SLA ladder open. The waiting times are the shortened ones from the test site; a new install starts at 60, 180 and 480 minutes.*
+
+What you can change in a panel:
+
+| Step | Edit in the panel |
+|---|---|
+| Periskope, Capture | Test Connection, create the webhook, switch the integration on or off |
+| Link to CRM, Contact queue | Timeline comment mode, rep access, lead creation, supplier and employee ignore switches |
+| Keyword rules | Recipients and the on/off switch of each rule |
+| AI tagging | Tagging and group tagging switches, Test AI Connection |
+| Tags | Switch a tag on or off (saved at once) |
+| Tag actions | Tick a tag against Lead, Mail, Note or ToDo (saved at once) |
+| Customer waiting, SLA ladder, People told | Reminder switches, working hours, the SLA rows, manager and owner emails |
+
+![Tag actions in the Flow tab](docs/manual/32-flow-tab-tag-actions.jpg)
+*Tag actions: one tick per tag and action.*
+
+Switches, SLA rows and emails change the settings form, so they are kept when you press **Save** (the tab shows a reminder while changes are unsaved). Tags and tag actions are separate records, so they save as soon as you click. A tick adds the usual row (an email alert starts at High severity); open the tag to change severity, chat type or recipients. The default tag and the last active tag cannot be switched off.
 
 ### Reports and dashboard
 
