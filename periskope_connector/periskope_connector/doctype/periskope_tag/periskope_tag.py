@@ -23,9 +23,10 @@ class PeriskopeTag(Document):
 	def on_update(self):
 		if self.is_default:
 			# One default only: the one just saved wins.
-			frappe.db.sql(
-				"update `tabPeriskope Tag` set is_default = 0 where name != %s and is_default = 1", self.name
-			)
+			tag = frappe.qb.DocType("Periskope Tag")
+			frappe.qb.update(tag).set(tag.is_default, 0).where(
+				(tag.name != self.name) & (tag.is_default == 1)
+			).run()
 
 	def on_trash(self):
 		if self.is_default:
