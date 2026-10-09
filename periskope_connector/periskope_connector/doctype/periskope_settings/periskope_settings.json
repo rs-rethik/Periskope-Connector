@@ -15,6 +15,7 @@
   "webhook_url",
   "column_secret",
   "webhook_signing_secret",
+  "webhook_events",
   "section_phones",
   "phones",
   "tab_ai",
@@ -148,10 +149,17 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Paste the signing secret from Periskope (Settings > Webhooks). Add the Webhook URL shown on the left there first, with the <b>message.created</b> and <b>message.updated</b> events.",
+   "description": "Paste the signing secret from Periskope (Settings > Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions > Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
    "fieldname": "webhook_signing_secret",
    "fieldtype": "Password",
    "label": "Webhook Signing Secret"
+  },
+  {
+   "description": "The events Periskope should send to this site. Only message.created is stored as a message; the others are logged. Test Connection or Create Webhook in Periskope registers them.",
+   "fieldname": "webhook_events",
+   "fieldtype": "Table",
+   "label": "Webhook Events",
+   "options": "Periskope Webhook Event"
   },
   {
    "fieldname": "section_phones",

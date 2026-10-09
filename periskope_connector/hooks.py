@@ -62,6 +62,8 @@ scheduler_events = {
 		"*/5 * * * *": ["periskope_connector.ai.classifier.run_batch"],
 		# Re-queue webhook logs whose background job never ran (dead-letter recovery).
 		"*/30 * * * *": ["periskope_connector.messages.sweep_unprocessed"],
+		# Read the chat history from Periskope and save messages a missed webhook never delivered.
+		"15 * * * *": ["periskope_connector.backfill.run"],
 	},
 	"daily": [
 		# Yesterday's unmatched contacts to the sales head, ranked by activity.

@@ -94,6 +94,7 @@ def setup():
 		create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
 		_ensure_lead_source()
 		_ensure_keyword_rules()
+		_ensure_webhook_events()
 	except Exception:
 		# A half-installed site must still be able to migrate; the gap shows in Health.
 		frappe.log_error(title="Periskope: install-time setup failed")
@@ -140,5 +141,18 @@ def _ensure_keyword_rules():
 		return
 	for name, words in DEFAULT_KEYWORD_RULES:
 		settings.append("keyword_rules", {"rule_name": name, "keywords": words, "enabled": 1})
+	settings.flags.ignore_permissions = True
+	settings.save()
+
+
+def _ensure_webhook_events():
+	"""Pre-select the usual events on a new site; the admin can change the selection afterwards."""
+	from periskope_connector.webhooks import DEFAULT_EVENTS
+
+	settings = frappe.get_doc("Periskope Settings")
+	if settings.webhook_events:
+		return
+	for event in DEFAULT_EVENTS:
+		settings.append("webhook_events", {"event": event})
 	settings.flags.ignore_permissions = True
 	settings.save()
