@@ -33,6 +33,13 @@ class PeriskopeSettings(Document):
 		if self.working_hours_start and self.working_hours_end:
 			if get_time(self.working_hours_start) >= get_time(self.working_hours_end):
 				frappe.throw(_("Working Hours End must be after Working Hours Start"))
+		for row in self.get("sla_levels") or []:
+			if flt(row.wait_minutes) < 0:
+				frappe.throw(_("Row {0}: Waiting minutes cannot be negative").format(row.idx))
+			if row.action == "Email Recipients":
+				listed = [e.strip() for e in re.split(r"[,\n;]", row.recipients or "") if e.strip()]
+				if not listed or not all(validate_email_address(e) for e in listed):
+					frappe.throw(_("Row {0}: Email Recipients needs valid email addresses").format(row.idx))
 		for field, default in (("remind_after_hours", 1), ("escalate_after_hours", 2)):
 			if not flt(self.get(field)):
 				self.set(field, default)  # never saved yet, or cleared

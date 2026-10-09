@@ -94,6 +94,7 @@ def setup():
 		create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
 		_ensure_lead_source()
 		_ensure_tags()
+		_ensure_sla_levels()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 	except Exception:
@@ -177,3 +178,10 @@ def _ensure_tags():
 				"actions": default_actions(name),
 			}
 		).insert(ignore_permissions=True)
+
+
+def _ensure_sla_levels():
+	"""Start a new site with the usual SLA ladder; the team edits it afterwards."""
+	from periskope_connector.patches.seed_sla_levels import execute
+
+	execute()

@@ -58,6 +58,8 @@
   "alert_emails",
   "escalation_emails",
   "remind_group_chats",
+  "section_sla",
+  "sla_levels",
   "section_ack",
   "ack_words",
   "tab_keywords",
@@ -365,31 +367,35 @@
   },
   {
    "default": "1",
-   "description": "L1: the rep gets a notification (bell).",
+   "description": "L1: the rep gets a notification (bell). (Replaced by the SLA Levels table; kept so older settings can be migrated.)",
    "fieldname": "sla_l1_hours",
    "fieldtype": "Float",
-   "label": "L1: Notify Rep After (working hours)"
+   "label": "L1: Notify Rep After (working hours)",
+   "hidden": 1
   },
   {
    "default": "3",
-   "description": "L2: the rep gets a ToDo and the managers an email.",
+   "description": "L2: the rep gets a ToDo and the managers an email. (Replaced by the SLA Levels table; kept so older settings can be migrated.)",
    "fieldname": "sla_l2_hours",
    "fieldtype": "Float",
-   "label": "L2: ToDo + Managers Email After"
+   "label": "L2: ToDo + Managers Email After",
+   "hidden": 1
   },
   {
    "default": "8",
-   "description": "L3: the escalation list (the MD) gets an email.",
+   "description": "L3: the escalation list (the MD) gets an email. (Replaced by the SLA Levels table; kept so older settings can be migrated.)",
    "fieldname": "sla_l3_hours",
    "fieldtype": "Float",
-   "label": "L3: Escalation Email After"
+   "label": "L3: Escalation Email After",
+   "hidden": 1
   },
   {
    "default": "30",
-   "description": "A message tagged High severity that is still unanswered after this many minutes goes straight to L2 and the escalation list, without waiting for the SLA clock.",
+   "description": "A message tagged High severity that is still unanswered after this many minutes goes straight to L2 and the escalation list, without waiting for the SLA clock. (Replaced by the SLA Levels table; kept so older settings can be migrated.)",
    "fieldname": "high_severity_minutes",
    "fieldtype": "Int",
-   "label": "High-Severity Fast Path (minutes)"
+   "label": "High-Severity Fast Path (minutes)",
+   "hidden": 1
   },
   {
    "fieldname": "alert_emails",
@@ -407,6 +413,18 @@
    "fieldname": "remind_group_chats",
    "fieldtype": "Check",
    "label": "Include Group Chats"
+  },
+  {
+   "fieldname": "section_sla",
+   "fieldtype": "Section Break",
+   "label": "SLA Levels",
+   "description": "What happens, and when, for a customer who is waiting for a reply. Rows run in order of waiting time; each action runs once per waiting period."
+  },
+  {
+   "fieldname": "sla_levels",
+   "fieldtype": "Table",
+   "label": "SLA Levels",
+   "options": "Periskope SLA Level"
   },
   {
    "collapsible": 1,
