@@ -315,11 +315,22 @@ def find_link(doc) -> tuple[str | None, str | None, str, str]:
 	group = frappe.db.get_value(
 		"Periskope Group",
 		{"chat_id": doc.chat_id},
-		["group_name", "group_type", "crm_lead", "crm_deal"],
+		["group_name", "group_type", "crm_lead", "crm_deal", "organization"],
 		as_dict=True,
 	)
 	if group and (group.crm_lead or group.crm_deal):
 		return group.crm_lead, group.crm_deal, "Linked", "Group Mapping"
+	if group and group.organization:
+		# mapped to a company: its deals and leads
+		deals = frappe.get_all(
+			"CRM Deal", filters={"organization": group.organization}, fields=["name", "lead"]
+		)
+		leads = frappe.get_all(
+			"CRM Lead", filters={"organization": group.organization}, fields=["name", "converted"]
+		)
+		lead, deal, status = resolve(_from_deals(deals) + _from_leads(leads))
+		if status != "No Match":
+			return lead, deal, status, "Group Mapping"
 
 	if group and group.group_type == "Customer":
 		lead, deal, status = resolve(by_organization(group.group_name))

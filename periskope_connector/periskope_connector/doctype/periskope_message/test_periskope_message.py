@@ -540,6 +540,18 @@ class TestLinking(FrappeTestCase):
 		linking.link_message(name)
 		self.assertEqual(self._link(name), (mapped.name, None, "Linked", "Group Mapping"))
 
+	def test_a_group_mapped_to_a_company_links_to_its_lead(self):
+		lead = self._lead(organization="Linking Test Spinners Ltd")
+		name = messages.create_message(event(message_id="g5", chat_id=GROUP_CHAT))
+		self.assertEqual(self._link(name)[2], "Internal")  # the group name does not say who it is
+		if not frappe.db.exists("CRM Organization", "Linking Test Spinners Ltd"):
+			frappe.get_doc(
+				{"doctype": "CRM Organization", "organization_name": "Linking Test Spinners Ltd"}
+			).insert(ignore_permissions=True)
+		frappe.db.set_value("Periskope Group", GROUP_CHAT, "organization", "Linking Test Spinners Ltd")
+		linking.link_message(name)
+		self.assertEqual(self._link(name), (lead.name, None, "Linked", "Group Mapping"))
+
 	def test_a_converted_lead_is_represented_by_its_deal(self):
 		lead = self._lead(mobile_no="9600000001")
 		frappe.db.set_value("CRM Lead", lead.name, "converted", 1)

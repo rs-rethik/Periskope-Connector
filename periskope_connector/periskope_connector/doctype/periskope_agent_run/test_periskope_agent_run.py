@@ -159,6 +159,46 @@ class TestLearner(FrappeTestCase):
 	def test_not_enough_evidence_is_dropped(self):
 		self.assertEqual(self._analyse([self._item(evidence_chats=[1])]), 0)
 
+	def test_a_contact_is_backed_by_its_own_chat_not_by_others(self):
+		contact = frappe.get_doc(
+			{"doctype": "Periskope Contact", "phone": "918888800077", "status": "New", "message_count": 3}
+		).insert(ignore_permissions=True)
+		own = frappe.get_doc(
+			{
+				"doctype": "Periskope Message",
+				"message_id": "own_chat_1",
+				"chat_id": "918888800077@c.us",
+				"direction": "Incoming",
+				"body": "Courier pickup at 4pm",
+			}
+		).insert(ignore_permissions=True)
+		item = self._item(
+			kind="Ignore Contact",
+			target=contact.phone,
+			payload_json=json.dumps({"status": "Ignored (Vendor)"}),
+			evidence_chats=[1],
+		)
+		self.assertEqual(self._analyse([item], {1: ["M1"], 2: ["M2"]}), 0)  # someone else's chat
+		self.assertEqual(self._analyse([item], {1: [own.name]}), 1)
+
+	def test_a_rule_already_waiting_is_not_proposed_again(self):
+		rule = {"kind": "Keyword Rule", "evidence_chats": [1, 2]}
+		first = self._item(
+			**rule, payload_json=json.dumps({"rule_name": "Payment Method", "keywords": "cheque"})
+		)
+		again = self._item(
+			**rule, payload_json=json.dumps({"rule_name": "payment methods", "keywords": "neft"})
+		)
+		self.assertEqual(self._analyse([first]), 1)
+		self.assertEqual(self._analyse([again]), 0)
+		renamed = self._item(
+			**rule,
+			payload_json=json.dumps(
+				{"rule_name": "Payment Method Issues", "keywords": "cheque, payment, neft"}
+			),
+		)
+		self.assertEqual(self._analyse([renamed]), 0)
+
 	def test_evidence_must_exist(self):
 		self.assertEqual(self._analyse([self._item(evidence_chats=[8, 9])]), 0)
 

@@ -81,6 +81,48 @@ def clean_payload(kind: str, payload: dict | None) -> dict:
 	return {k: v for k, v in (payload or {}).items() if k in allowed}
 
 
+NAME_FIELDS = {"Tag": "tag_name", "Keyword Rule": "rule_name"}
+SAME_RULE_WORDS = 0.6  # share of the smaller rule's words from which two keyword rules are the same
+
+
+def _already_pending(kind, operation, target, payload) -> bool:
+	"""One open question per record: a change to something that already has a pending suggestion,
+	or a new tag or rule of a name already proposed, waits for that decision instead."""
+	pending = frappe.get_all(
+		"Periskope Suggestion",
+		filters={"status": "Pending", "kind": kind},
+		fields=["operation", "target", "payload"],
+	)
+	if target and operation != "Add":
+		return any(p.target == target and p.operation != "Add" for p in pending)
+	field = NAME_FIELDS.get(kind)
+	name = _plain(payload.get(field)) if field else ""
+	if not name:
+		return False
+	words = _words(payload.get("keywords")) if kind == "Keyword Rule" else set()
+	for p in pending:
+		try:
+			other = json.loads(p.payload or "{}")
+		except ValueError:
+			continue
+		if _plain(other.get(field)) == name:
+			return True
+		# the same alert under another name: most of its words are already proposed
+		theirs = _words(other.get("keywords"))
+		if words and theirs and len(words & theirs) / min(len(words), len(theirs)) >= SAME_RULE_WORDS:
+			return True
+	return False
+
+
+def _words(text) -> set[str]:
+	return set(re.findall(r"[a-z0-9]+", str(text or "").lower()))
+
+
+def _plain(name) -> str:
+	"""A name to compare: "Payment Methods" and "payment_method" are the same rule."""
+	return re.sub(r"[^a-z0-9]", "", str(name or "").lower()).removesuffix("s")
+
+
 def create(kind, operation, summary, reason="", target="", payload=None, current=None, evidence=None):
 	"""Save a pending suggestion. Returns the document, or None when the same suggestion is already
 	waiting, was applied lately, or was rejected in the last 30 days (a "no" is remembered)."""
@@ -88,6 +130,8 @@ def create(kind, operation, summary, reason="", target="", payload=None, current
 		return None
 	payload = clean_payload(kind, payload)
 	if kind == "Setting" and (target not in LEARNABLE_SETTINGS or "value" not in payload):
+		return None
+	if _already_pending(kind, operation, target, payload):
 		return None
 	signature = _signature(kind, operation, target, payload)
 	since = add_to_date(now_datetime(), days=-REJECTED_QUIET_DAYS)
@@ -223,6 +267,17 @@ def _apply_knowledge(doc, data: dict):
 			if data.get(field):
 				entry.set(field, data[field])
 		entry.status = "Approved"
+		# a topic the agent proposed for this answer is approved with it
+		parent = entry.parent_entry
+		while parent:
+			node = frappe.db.get_value(
+				"Periskope Knowledge Entry", parent, ["status", "parent_entry"], as_dict=True
+			)
+			if not node:
+				break
+			if node.status == "Suggested":
+				frappe.db.set_value("Periskope Knowledge Entry", parent, "status", "Approved")
+			parent = node.parent_entry
 	save_as_system(entry)
 
 
@@ -336,8 +391,22 @@ def approve(doc, via: str, user: str) -> str:
 def reject(doc, via: str, user: str) -> str:
 	_finish(doc, "Rejected", via, user)
 	if doc.kind == "Knowledge Entry" and doc.operation == "Add" and doc.target:
-		if frappe.db.get_value("Periskope Knowledge Entry", doc.target, "status") == "Suggested":
+		entry = frappe.db.get_value(
+			"Periskope Knowledge Entry", doc.target, ["status", "parent_entry"], as_dict=True
+		)
+		if entry and entry.status == "Suggested":
 			frappe.db.set_value("Periskope Knowledge Entry", doc.target, "status", "Retired")
+			# a topic or condition the agent proposed goes too once nothing is left under it
+			parent = entry.parent_entry
+			while (
+				parent
+				and frappe.db.get_value("Periskope Knowledge Entry", parent, "status") == "Suggested"
+				and not frappe.db.exists(
+					"Periskope Knowledge Entry", {"parent_entry": parent, "status": ["!=", "Retired"]}
+				)
+			):
+				frappe.db.set_value("Periskope Knowledge Entry", parent, "status", "Retired")
+				parent = frappe.db.get_value("Periskope Knowledge Entry", parent, "parent_entry")
 	return "Rejected"
 
 

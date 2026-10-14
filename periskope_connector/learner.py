@@ -15,6 +15,8 @@ from periskope_connector import suggestions
 from periskope_connector.ai import assistant
 
 MAX_SUGGESTIONS = 8
+# One group or one number is a single conversation: these are backed by that conversation itself.
+OWN_CHAT_KINDS = ("Group Mapping", "Ignore Contact")
 STATS_DAYS = 30
 
 SYSTEM_PROMPT = """You help a sales team keep the setup of their WhatsApp CRM assistant accurate. You see recent customer conversations, the current configuration and some statistics. Suggest a small number of concrete changes where the conversations show the setup is wrong, incomplete or outdated:
@@ -25,7 +27,7 @@ SYSTEM_PROMPT = """You help a sales team keep the setup of their WhatsApp CRM as
 - Group Mapping: a group listed under unmapped_groups that clearly belongs to one customer company: target is its chat_id, payload sets group_type "Customer" and organization (an existing organization name when one matches).
 - Ignore Contact: a number listed under unmatched_contacts that is clearly personal, a vendor, spam or a colleague: target is the number, payload status one of "Ignored (Personal)", "Ignored (Vendor)", "Ignored (Spam)", "Ignored (Internal)".
 - Lead Rule: whether new enquiries with a tag should create a CRM lead: target is the tag, operation Add (create leads) or Remove (stop).
-Rules: every suggestion must be backed by at least {min_evidence} different conversations (list their numbers in evidence_chats); do not repeat something that already exists; prefer fewer, stronger suggestions; return an empty list when nothing is clearly needed. target is the existing tag name, rule name, SLA level id or setting name (empty for an addition). payload_json is a JSON object string with only the changed fields: Tag {{"tag_name","description","active"}}, Keyword Rule {{"rule_name","keywords","enabled"}}, SLA Level {{"wait_minutes","min_severity","action"}}, Setting {{"value"}}, Group Mapping {{"group_type","organization"}}, Ignore Contact {{"status"}}, Lead Rule {{"create_lead"}}. reason must say what you saw."""
+Rules: every suggestion must be backed by at least {min_evidence} different conversations (list their numbers in evidence_chats), except Group Mapping and Ignore Contact, which are backed by that group's or number's own conversation (cite it); do not repeat something that already exists or is listed in pending_suggestions (those wait for a decision); prefer fewer, stronger suggestions; return an empty list when nothing is clearly needed. target is the existing tag name, rule name, SLA level id or setting name (empty for an addition). payload_json is a JSON object string with only the changed fields: Tag {{"tag_name","description","active"}}, Keyword Rule {{"rule_name","keywords","enabled"}}, SLA Level {{"wait_minutes","min_severity","action"}}, Setting {{"value"}}, Group Mapping {{"group_type","organization"}}, Ignore Contact {{"status"}}, Lead Rule {{"create_lead"}}. reason must say what you saw."""
 
 SCHEMA = {
 	"type": "object",
@@ -151,6 +153,15 @@ def snapshot() -> dict:
 			)
 		),
 		"organizations": frappe.get_all("CRM Organization", pluck="name", limit=200),
+		"pending_suggestions": [
+			f"{p.kind} {p.operation} {p.target or ''}: {p.summary}"
+			for p in frappe.get_all(
+				"Periskope Suggestion",
+				filters={"status": "Pending", "kind": ["!=", "Knowledge Entry"]},
+				fields=["kind", "operation", "target", "summary"],
+				limit=50,
+			)
+		],
 		"statistics_last_30_days": {
 			"messages_per_tag": {r.ai_category: r.n for r in by_tag},
 			"human_corrections": [
@@ -215,6 +226,17 @@ def validate(item: dict, config: dict, evidence_ok: bool) -> tuple[bool, object]
 	return True, current
 
 
+def _is_own_chat(item: dict, messages: list[str]) -> bool:
+	"""Whether a cited conversation is the target group's or number's own chat."""
+	chat_id = frappe.db.get_value("Periskope Message", messages[0], "chat_id") if messages else ""
+	target = (item.get("target") or "").strip()
+	if not chat_id or not target:
+		return False
+	if item["kind"] == "Group Mapping":
+		return chat_id == target
+	return chat_id.split("@")[0] == "".join(c for c in target if c.isdigit())
+
+
 def analyse(transcript: str, chats: dict[int, list[str]]) -> int:
 	"""One AI call over a batch of conversations. Returns how many suggestions were saved."""
 	min_evidence = frappe.db.get_single_value("Periskope Settings", "learning_min_evidence") or 3
@@ -225,7 +247,11 @@ def analyse(transcript: str, chats: dict[int, list[str]]) -> int:
 	saved = 0
 	for item in (result.get("suggestions") or [])[:MAX_SUGGESTIONS]:
 		cited = {n for n in item.get("evidence_chats") or [] if n in chats}
-		ok, current = validate(item, config, len(cited) >= int(min_evidence))
+		if item["kind"] in OWN_CHAT_KINDS:
+			enough = any(_is_own_chat(item, chats[n]) for n in cited)
+		else:
+			enough = len(cited) >= int(min_evidence)
+		ok, current = validate(item, config, enough)
 		if not ok:
 			continue
 		try:

@@ -779,7 +779,13 @@ class KnowledgeCanvas {
 					: `<input class="form-control" data-f="${key}" value="${KC.e(n[key])}">`
 			}${desc ? `<div class="d">${KC.e(desc)}</div>` : ""}`;
 		let body = "";
-		if (n.status === "Suggested") {
+		if (n.status === "Suggested" && n.node_type !== "Answer") {
+			body += `<div class="st warn">${KC.e(
+				__(
+					"The agent proposed this topic for an answer it learned. It is approved together with that answer."
+				)
+			)}</div>`;
+		} else if (n.status === "Suggested") {
 			const sug = this.suggestions[n.name];
 			body += `<div class="st warn">${KC.e(
 				__(
