@@ -55,12 +55,31 @@ class TestKnowledgeCanvas(FrappeTestCase):
 		self.assertEqual(set(found), {self.two.name, self.five.name})
 		self.assertEqual(found[self.two.name].title, "Delivery > Delivery time")
 		self.assertIn("Applies only when: Customer is in Chennai.", found[self.two.name].text)
-		self.assertIn("none of the other conditions", found[self.five.name].text)
+		self.assertIn("none of these is true: Customer is in Chennai.", found[self.five.name].text)
 
 	def test_one_word_of_a_topic_brings_its_answers(self):
 		frappe.db.set_value("Periskope Knowledge Entry", self.delivery.name, "keywords", "shipping, courier")
 		names = {e.name for e in knowledge.find("We are in Mumbai, how long is shipping?")}
 		self.assertEqual(names, {self.two.name, self.five.name})
+
+	def test_a_busy_topic_does_not_crowd_out_another(self):
+		products = _node("Topic", "Products")
+		frappe.db.set_value("Periskope Knowledge Entry", products.name, "keywords", "yarn, polyester")
+		for count in range(12):
+			_node("Answer", f"Price of polyester {count}s yarn", products.name, f"{count} per kg")
+		pricing = _node("Topic", "Pricing")
+		frappe.db.set_value("Periskope Knowledge Entry", pricing.name, "keywords", "discount")
+		bulk = _node("Condition", "The order is 1000 kg or more", pricing.name)
+		discount = _node("Answer", "Bulk discount", bulk.name, "3% off.")
+		names = [e.name for e in knowledge.find("We want 1200 kg of 30s polyester yarn, any discount?")]
+		self.assertIn(discount.name, names)
+		self.assertNotIn(self.two.name, names)  # no delivery branches for a pricing question
+
+	def test_a_named_topic_brings_its_branches_even_when_another_answer_ranks_first(self):
+		charges = _node("Answer", "Delivery charges", self.delivery.name, "Free above 500 kg.")
+		frappe.db.set_value("Periskope Knowledge Entry", self.delivery.name, "keywords", "reach")
+		names = {e.name for e in knowledge.find("We are in Coimbatore, when will it reach us?")}
+		self.assertTrue({charges.name, self.two.name, self.five.name} <= names)
 
 	def test_an_answer_under_an_unapproved_node_is_not_used(self):
 		frappe.db.set_value("Periskope Knowledge Entry", self.chennai.name, "status", "Suggested")
@@ -153,6 +172,10 @@ class TestKnowledgeCanvas(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True)
 		self.assertIn(
+			"Do you do custom dyeing for 2000 kg?", [g["question"] for g in knowledge_canvas.gaps()]
+		)
+		_node("Answer", "Do you do custom dyeing?", None, "Yes, for 500 kg or more.")
+		self.assertNotIn(
 			"Do you do custom dyeing for 2000 kg?", [g["question"] for g in knowledge_canvas.gaps()]
 		)
 

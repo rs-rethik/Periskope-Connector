@@ -177,7 +177,8 @@ def remove_node(name: str) -> dict:
 
 @frappe.whitelist()
 def gaps(days: int = 14) -> list[dict]:
-	"""What customers asked that the agent answered with the holding message: [{question, when}]."""
+	"""What customers asked that the agent answered with the holding message and the knowledge base
+	still has no answer for: [{question, when}]."""
 	require_admin()
 	rows = frappe.get_all(
 		"Periskope Auto Reply",
@@ -198,6 +199,8 @@ def gaps(days: int = 14) -> list[dict]:
 		key = " ".join(sorted(knowledge.words(text)))[:120]
 		if text and key not in seen:
 			seen.add(key)
+			if knowledge.find(text):
+				continue  # answered since
 			found.append({"question": text, "when": str(row.modified)})
 	return found[:15]
 

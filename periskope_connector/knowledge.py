@@ -200,16 +200,26 @@ def _trail(entry, nodes: dict) -> list | None:
 	return trail
 
 
-def _describe(entry, trail: list) -> None:
-	"""Set entry.title (the path, for the AI) and entry.text (the answer with when it applies)."""
+def _describe(entry, trail: list, nodes: dict) -> None:
+	"""Set entry.title (the path, for the AI) and entry.text (the answer with when it applies). An
+	Otherwise condition names the conditions next to it, so the AI knows what it excludes."""
 	entry.title = " > ".join([n.question for n in trail if n.node_type == "Topic"] + [entry.question])
-	when = [
-		"none of the other conditions under it apply"
-		if (n.question or "").strip().lower().rstrip(".") in OTHERWISE
-		else n.question
-		for n in trail
-		if n.node_type == "Condition"
-	]
+	when = []
+	for n in trail:
+		if n.node_type != "Condition":
+			continue
+		if (n.question or "").strip().lower().rstrip(".") not in OTHERWISE:
+			when.append(n.question)
+			continue
+		others = [
+			o.question
+			for o in nodes.values()
+			if o.node_type == "Condition"
+			and o.parent_entry == n.parent_entry
+			and o.name != n.name
+			and (o.question or "").strip().lower().rstrip(".") not in OTHERWISE
+		]
+		when.append(f"none of these is true: {' / '.join(others)}" if others else "always")
 	entry.text = (f"Applies only when: {'; '.join(when)}. " if when else "") + entry.answer
 
 
@@ -218,8 +228,9 @@ def find(text: str, limit: int = 5) -> list:
 
 	An answer matches by its own question and keywords, or by the topics and conditions above it; one
 	word of a topic's name or keywords is enough to bring in the answers under that topic.
-	The other answers under the same topic come along, so the AI sees every branch (Chennai: 2 days,
-	Otherwise: 5 days) and picks the one whose condition holds. Each has .title and .text."""
+	Each topic the customer named brings its best answer and all its condition branches; so does the
+	topic of a conditional answer, so the AI sees every branch (Chennai: 2 days, Otherwise:
+	5 days) and picks the one whose condition holds. Each has .title and .text."""
 	nodes = {
 		n.name: n
 		for n in frappe.get_all(
@@ -253,15 +264,31 @@ def find(text: str, limit: int = 5) -> list:
 			score = max(score, 0.15)
 		if score >= 0.15 or overlap >= 2:
 			scored.append((score + overlap * 0.01, entry))
-	best = [e for _score, e in sorted(scored, key=lambda s: s[0], reverse=True)[:limit]]
-	found = list(best)
-	for entry in best:
-		topic = next((n.name for n in reversed(trails[entry.name]) if n.node_type == "Topic"), None)
-		for name, trail in trails.items():
-			if len(found) >= MAX_BRANCHES:
-				break
-			if topic and any(n.name == topic for n in trail) and nodes[name] not in found:
-				found.append(nodes[name])
+	ranked = [e for _score, e in sorted(scored, key=lambda s: s[0], reverse=True)]
+	found = ranked[:limit]
+	# the best answer under each topic the customer named, so one busy topic cannot crowd out another
+	for topic in topics:
+		best = next((e for e in ranked if any(n.name == topic for n in trails[e.name])), None)
+		if best and best not in found:
+			found.append(best)
+	# the condition branches of every named topic and next to every conditional answer, so the AI
+	# can pick the branch that holds
+	branching = set(topics)
 	for entry in found:
-		_describe(entry, trails[entry.name])
+		if any(n.node_type == "Condition" for n in trails[entry.name]):
+			branching.add(
+				next((n.name for n in reversed(trails[entry.name]) if n.node_type == "Topic"), None)
+			)
+	branching.discard(None)
+	for name, other in trails.items():
+		if len(found) >= MAX_BRANCHES:
+			break
+		if (
+			any(n.name in branching for n in other)
+			and any(n.node_type == "Condition" for n in other)
+			and nodes[name] not in found
+		):
+			found.append(nodes[name])
+	for entry in found:
+		_describe(entry, trails[entry.name], nodes)
 	return found

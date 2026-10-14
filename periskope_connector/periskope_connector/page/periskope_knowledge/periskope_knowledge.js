@@ -74,10 +74,10 @@ const KC_CSS = `
 	background-color:var(--subtle-fg,#f7f7f7);background-image:radial-gradient(var(--gray-400,#c0c6cc) 1px,transparent 1px);user-select:none;touch-action:none;cursor:grab}
 .kc.panning{cursor:grabbing}
 .kc-world{position:absolute;left:0;top:0;transform-origin:0 0}
-.kc-wires{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible}
+.kc-wires{position:absolute;left:-10000px;top:-10000px;width:20000px;height:20000px;pointer-events:none}
 .kc-wire{fill:none;stroke:var(--gray-500,#98a1a9);stroke-width:2}
 .kc-wire.temp{stroke:var(--primary);stroke-dasharray:6 5}
-.kc-hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer}
+.kc-hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
 .kc-hit:hover+.kc-wire,.kc-wire.hot{stroke:var(--primary)}
 .kc-node{position:absolute;display:flex;align-items:center;gap:10px;padding:0 12px 0 10px;background:var(--card-bg,#fff);
 	border:1.5px solid var(--border-color);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);cursor:pointer}
@@ -227,6 +227,20 @@ class KnowledgeCanvas {
 		}
 	}
 
+	// The first free spot at (x, y) or below it, so a new node never lands on another one.
+	free_spot(x, y, skip) {
+		const taken = (ty) =>
+			[...this.nodes.values()].some(
+				(o) =>
+					o.name !== skip &&
+					o.x != null &&
+					Math.abs(o.x - x) < KC.NODE_W + 20 &&
+					Math.abs(o.y - ty) < KC.NODE_H + 12
+			);
+		while (taken(y)) y += KC.ROW;
+		return [x, y];
+	}
+
 	// A node with no saved position goes to the right of its parent, below its siblings.
 	place_new() {
 		const placed = [];
@@ -243,12 +257,15 @@ class KnowledgeCanvas {
 				const sibs = [...this.nodes.values()].filter(
 					(s) => s !== n && s.x != null && this.parent_of(s) === parent
 				);
-				n.x = p ? p.x + KC.COL : KC.ROOT_X;
-				n.y = sibs.length
-					? Math.max(...sibs.map((s) => s.y)) + KC.ROW
-					: p
-					? p.y
-					: -KC.NODE_H / 2;
+				[n.x, n.y] = this.free_spot(
+					p ? p.x + KC.COL : KC.ROOT_X,
+					sibs.length
+						? Math.max(...sibs.map((s) => s.y)) + KC.ROW
+						: p
+						? p.y
+						: -KC.NODE_H / 2,
+					n.name
+				);
 				placed.push(n.name);
 			}
 			if (!left) break;
@@ -371,7 +388,9 @@ class KnowledgeCanvas {
 		}
 		if (this.temp)
 			s += `<path class="kc-wire temp" d="${this.curve(this.temp.from, this.temp.to)}"/>`;
-		this.$wires.html(s);
+		// The layer is 20000 px wide, shifted so that canvas (0, 0) sits at its middle: browsers do
+		// not find the pointer on SVG drawn outside the SVG's own box.
+		this.$wires.html(`<g transform="translate(10000 10000)">${s}</g>`);
 	}
 
 	apply_view() {
@@ -683,10 +702,12 @@ class KnowledgeCanvas {
 		const name = `new-${++this.drafts}`;
 		const sibs = [...this.nodes.values()].filter((s) => this.parent_of(s) === parent);
 		const [px, py] = this.out_point(parent);
-		const [x, y] = at || [
-			parent === KC.ROOT ? KC.ROOT_X : px + KC.COL - KC.NODE_W,
-			sibs.length ? Math.max(...sibs.map((s) => s.y)) + KC.ROW : py - KC.NODE_H / 2,
-		];
+		const [x, y] =
+			at ||
+			this.free_spot(
+				parent === KC.ROOT ? KC.ROOT_X : px + KC.COL - KC.NODE_W,
+				sibs.length ? Math.max(...sibs.map((s) => s.y)) + KC.ROW : py - KC.NODE_H / 2
+			);
 		this.nodes.set(name, {
 			name,
 			draft: true,
@@ -886,7 +907,7 @@ class KnowledgeCanvas {
 		this.nodes.set(saved.name, { ...saved, x: n.x, y: n.y });
 		this.close_panel();
 		this.selected = saved.name;
-		this.draw();
+		this.load(); // also refreshes the gaps count
 	}
 
 	// --- Gaps and documents --------------------------------------------------------------------
