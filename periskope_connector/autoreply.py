@@ -8,7 +8,8 @@
    answer.py, and sends either the answer (confident, from data) or the holding message. In the
    holding case it also gives the rep a ToDo and opens a reply reminder, so the SLA ladder follows.
 
-Nothing is sent unless "Enable Auto Reply" is on.
+Nothing is sent unless "Enable Auto Reply" is on. In test mode (safety.py) a chat that is not on
+the allow list gets a dry run: the reply is prepared and kept on the row, nothing is sent.
 """
 
 import random
@@ -18,8 +19,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
-from periskope_connector import answer, reminders
-from periskope_connector.client import send_message
+from periskope_connector import answer, reminders, safety
+from periskope_connector.outbound import send as send_message
 from periskope_connector.system import insert_as_system
 
 FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is not answered
@@ -263,7 +264,21 @@ def process(name: str) -> str:
 		return end("Cancelled", _("A rep replied"))
 
 	try:
-		send_message(row.chat_id, text, phone)
+		send_message(row.chat_id, text, phone, origin="Auto Reply", detail={"auto_reply": name})
+	except safety.SendNotAllowed as e:
+		# Test mode: keep what would have been sent; nobody is told, nothing is followed up.
+		frappe.db.set_value(
+			"Periskope Auto Reply",
+			name,
+			{
+				"status": e.mode,
+				"reply_text": text,
+				"confidence": result["confidence"],
+				"sources": ", ".join(result["used_sources"]),
+				"cancel_reason": _("Holding message") if not confident else "",
+			},
+		)
+		return e.mode
 	except Exception as e:
 		_fail_and_follow(name, row, pending, rep, str(e))
 		return "Failed"

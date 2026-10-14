@@ -110,7 +110,12 @@
   "health_month_tokens",
   "health_phones",
   "tab_advanced",
-  "base_url"
+  "base_url",
+  "section_test_mode",
+  "test_mode",
+  "column_test_mode",
+  "test_allowed_chats",
+  "test_allowed_emails"
  ],
  "fields": [
   {
@@ -735,6 +740,36 @@
    "fieldtype": "Small Text",
    "label": "Holding Message",
    "default": "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
+  },
+  {
+   "fieldname": "section_test_mode",
+   "fieldtype": "Section Break",
+   "label": "Test Mode",
+   "description": "While test mode is on, WhatsApp messages go only to the chats listed here (never to a group), the agent writes to the CRM only for those chats, and emails reach only the addresses listed here. Everything else is logged as a dry run in Periskope Agent Action."
+  },
+  {
+   "fieldname": "test_mode",
+   "fieldtype": "Check",
+   "label": "Test Mode",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_test_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "test_allowed_chats",
+   "fieldtype": "Small Text",
+   "label": "Allowed Chats",
+   "description": "One number per line, with country code (e.g. 916374955805).",
+   "depends_on": "test_mode"
+  },
+  {
+   "fieldname": "test_allowed_emails",
+   "fieldtype": "Small Text",
+   "label": "Allowed Emails",
+   "description": "One email per line.",
+   "depends_on": "test_mode"
   }
  ],
  "hide_toolbar": 1,

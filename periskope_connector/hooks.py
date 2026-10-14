@@ -40,6 +40,8 @@ has_permission = {
 # Keep the normalised phone fields of leads and deals up to date when sales edits
 # a number, so message matching always runs on indexed equality.
 doc_events = {
+	# Test mode: drop every email recipient that is not on the allow list (safety.py).
+	"Email Queue": {"before_insert": "periskope_connector.safety.filter_email_queue"},
 	"CRM Lead": {
 		"after_insert": "periskope_connector.linking.update_phone_fields",
 		"on_update": "periskope_connector.linking.update_phone_fields",
@@ -95,5 +97,6 @@ scheduler_events = {
 # ------------
 
 default_log_clearing_doctypes = {
-	"Periskope Webhook Log": 30  # days to retain logs
+	"Periskope Webhook Log": 30,  # days to retain logs
+	"Periskope Agent Action": 90,
 }

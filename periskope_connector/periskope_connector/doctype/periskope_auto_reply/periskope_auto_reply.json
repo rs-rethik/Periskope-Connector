@@ -58,7 +58,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Waiting\nSent\nHolding Sent\nCancelled\nSkipped\nFailed",
+   "options": "Waiting\nSent\nHolding Sent\nDry Run\nBlocked\nCancelled\nSkipped\nFailed",
    "default": "Waiting",
    "in_list_view": 1,
    "in_standard_filter": 1,

@@ -42,7 +42,13 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 
 def send_message(chat_id: str, text: str, phone: str) -> dict:
 	"""Send a WhatsApp text from one of the linked numbers (POST /message/send). The reply carries a
-	queue id, not the final delivery state: Periskope queues the message and sends it itself."""
+	queue id, not the final delivery state: Periskope queues the message and sends it itself.
+
+	The test-mode check comes first and cannot be skipped: a chat that is not allowed raises
+	safety.SendNotAllowed before any request is made. Call it through outbound.send, which logs."""
+	from periskope_connector import safety
+
+	safety.check_send(chat_id)
 	if not chat_id or not text or not phone:
 		frappe.throw(_("A chat, a text and a sending number are needed to send a message"))
 	return request("POST", "message/send", phone=phone, json={"chat_id": chat_id, "message": text})

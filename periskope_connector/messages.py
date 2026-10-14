@@ -6,12 +6,12 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
-from periskope_connector.autoreply import match_sent
 from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
 from periskope_connector.keywords import check_message
 from periskope_connector.linking import ensure_group, link_message, number_key
+from periskope_connector.outbound import match_sent
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
 
@@ -94,7 +94,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		skip = "Not a text message" if not is_text else analysis_skip_reason(data.get("body"))
 
 	# Our own assistant's message arrives through the webhook like any other from our number.
-	agent_reply = match_sent(chat_id, data.get("body")) if from_me else ""
+	agent_reply = match_sent(chat_id, data) if from_me else ""
 
 	doc = frappe.get_doc(
 		{

@@ -9,7 +9,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
-from periskope_connector import answer, autoreply, knowledge, messages, reminders
+from periskope_connector import answer, autoreply, knowledge, messages, reminders, safety
 from periskope_connector.tests.utils import event, isolate, settings
 
 CHAT = "919600000777@c.us"
@@ -277,6 +277,26 @@ class TestAutoReply(FrappeTestCase):
 		row = self._row()
 		self.assertEqual(row.status, "Failed")
 		self.assertTrue(row.follow_up)
+
+	def test_test_mode_keeps_the_reply_but_sends_and_follows_up_nothing(self):
+		self._incoming()
+		self._make_due()
+		self.send.side_effect = safety.SendNotAllowed(safety.DRY_RUN)
+		with patch.object(
+			answer,
+			"build",
+			return_value={
+				"can_answer": True,
+				"answer": "It is 120 per kg.",
+				"confidence": 95,
+				"used_sources": ["KB:x"],
+				"sources": [],
+			},
+		):
+			autoreply.run_due()
+		row = self._row()
+		self.assertEqual((row.status, row.reply_text), ("Dry Run", "It is 120 per kg."))
+		self.assertFalse(row.follow_up)
 
 	def test_daily_limit_per_chat(self):
 		settings(reply_max_per_chat_per_day=1)

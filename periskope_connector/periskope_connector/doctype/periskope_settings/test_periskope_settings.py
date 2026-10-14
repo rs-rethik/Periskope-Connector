@@ -390,8 +390,9 @@ class TestHealthFigures(FrappeTestCase):
 
 
 class TestOutboundMessagingBoundary(FrappeTestCase):
-	"""The hard boundary: the only code that may send a WhatsApp message is the auto reply
-	(autoreply.py, through client.send_message), and it sends nothing unless it is switched on."""
+	"""The hard boundary: only outbound.py calls client.send_message (the auto reply goes through it),
+	client.send_message runs the test-mode check before any request, and nothing is sent while the
+	auto reply is off."""
 
 	SEND_MARKERS = (
 		"messages/send",
@@ -401,7 +402,7 @@ class TestOutboundMessagingBoundary(FrappeTestCase):
 		"chats/send",
 		"/sendmessage",
 	)
-	ALLOWED = ("client.py", "autoreply.py")
+	ALLOWED = ("client.py", "outbound.py", "autoreply.py")
 
 	def test_only_the_auto_reply_calls_send_message(self):
 		for path in APP.rglob("*.py"):
@@ -418,6 +419,11 @@ class TestOutboundMessagingBoundary(FrappeTestCase):
 		self.assertIn('"POST", "message/send"', source)
 		for method in ('"PUT"', '"PATCH"', '"DELETE"'):
 			self.assertNotIn(method, source)
+
+	def test_the_client_checks_test_mode_before_any_request(self):
+		source = (APP / "client.py").read_text()
+		body = source[source.index("def send_message") :]
+		self.assertLess(body.index("safety.check_send"), body.index("request("))
 
 	def test_nothing_is_sent_while_auto_reply_is_off(self):
 		from periskope_connector import autoreply

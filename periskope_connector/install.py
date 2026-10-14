@@ -179,6 +179,17 @@ def _ensure_assistant_defaults():
 	for field, value in defaults.items():
 		if frappe.db.get_single_value("Periskope Settings", field) in (None, "", 0, "0"):
 			frappe.db.set_single_value("Periskope Settings", field, value)
+	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
+	# once: an admin who switches it off later is not overridden by the next migrate.
+	if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": "test_mode"}):
+		frappe.db.set_single_value(
+			"Periskope Settings",
+			{
+				"test_mode": 1,
+				"test_allowed_chats": "916374955805",
+				"test_allowed_emails": "rethik@praneraservices.com\npriyadharshini@agamnext.com",
+			},
+		)
 
 
 def _ensure_tags():
