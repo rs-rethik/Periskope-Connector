@@ -44,7 +44,7 @@ class TestAgent(FrappeTestCase):
 		insert_as_system({"doctype": "Periskope Agent Run", "status": "Done", "cursor_to": since})
 		frappe.cache().delete_value("periskope_agent_learn")
 		frappe.cache().delete_value("periskope_agent_stale")
-		settings(enable_agent=1, suggestion_recipients="boss@example.com", suggestion_email_gap_hours=0)
+		settings(enable_agent=1, approver_emails="boss@example.com", suggestion_email_gap_hours=0)
 		ready = patch.object(assistant, "is_ready", return_value=True)
 		ready.start()
 		self.addCleanup(ready.stop)

@@ -12,6 +12,7 @@ from periskope_connector.contacts import ensure_contact
 from periskope_connector.keywords import check_message
 from periskope_connector.linking import ensure_group, link_message, number_key
 from periskope_connector.outbound import match_sent
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
 
@@ -86,7 +87,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# A group is saved once, with its name and type, so its messages can be linked to the CRM.
 	chat_name = (ensure_group(chat_id, org_phone).group_name or "") if is_group else ""
 
-	classify = bool(frappe.db.get_single_value("Periskope Settings", "enable_classification"))
+	classify = feature_on("enable_classification")
 	is_text = (data.get("message_type") or "chat") == "chat"
 	if from_me:
 		skip = "Sent by the rep"  # only the customer's messages are classified

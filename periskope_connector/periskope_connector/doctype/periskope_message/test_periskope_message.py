@@ -1432,6 +1432,7 @@ class TestClassify(FrappeTestCase):
 
 	def test_jarvis_provider_needs_no_api_key_and_hides_the_optimizer(self):
 		self.settings.ai_provider = "Jarvis"
+		self.settings.enable_agent = 1
 		self.settings.enable_classification = 1
 		self.settings.get_password = lambda field, **kw: None
 		with patch.object(classifier, "get_settings", lambda: self.settings):

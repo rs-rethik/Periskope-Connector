@@ -87,7 +87,7 @@ def snapshot() -> dict:
 		],
 		"keyword_rules": [
 			{"name": r.rule_name, "keywords": r.keywords, "enabled": bool(r.enabled)}
-			for r in settings.keyword_rules
+			for r in frappe.get_all("Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled"])
 		],
 		"sla_levels": [
 			{
@@ -96,7 +96,11 @@ def snapshot() -> dict:
 				"min_severity": r.min_severity,
 				"action": r.action,
 			}
-			for r in settings.sla_levels
+			for r in frappe.get_all(
+				"Periskope SLA Level",
+				fields=["name", "wait_minutes", "min_severity", "action"],
+				order_by="wait_minutes asc",
+			)
 		],
 		"settings": {f: settings.get(f) for f in suggestions.LEARNABLE_SETTINGS},
 		"statistics_last_30_days": {

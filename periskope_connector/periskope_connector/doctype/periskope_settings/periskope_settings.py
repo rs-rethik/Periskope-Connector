@@ -39,13 +39,24 @@ class PeriskopeSettings(Document):
 			frappe.throw(_("Random Variation must be between 0 and 100 percent"))
 		if not 0 <= flt(self.reply_min_confidence) <= 100:
 			frappe.throw(_("Minimum Confidence must be between 0 and 100"))
-		emails = [e.strip() for e in re.split(r"[,\n;]", self.suggestion_recipients or "") if e.strip()]
+		emails = [e.strip() for e in re.split(r"[,\n;]", self.approver_emails or "") if e.strip()]
 		for email in emails:
 			if not validate_email_address(email):
 				frappe.throw(_("{0} is not a valid email address").format(email))
-		self.suggestion_recipients = ", ".join(emails)
+		self.approver_emails = "\n".join(emails)
 		if self.enable_auto_reply and not (self.holding_message or "").strip():
 			frappe.throw(_("Set a Holding Message before switching Auto Reply on"))
+		if self.enable_agent and self.has_value_changed("enable_agent"):
+			from periskope_connector.setup_status import missing_before_agent
+
+			missing = missing_before_agent(self)
+			if missing:
+				frappe.throw(
+					_("Finish the setup before switching the AI Agent on:")
+					+ "<br>"
+					+ "<br>".join(frappe.utils.escape_html(m) for m in missing),
+					title=_("Setup not finished"),
+				)
 
 	def validate_reminders(self):
 		from frappe.utils import get_time, validate_email_address
@@ -58,13 +69,6 @@ class PeriskopeSettings(Document):
 						MIN_WORKING_MINUTES
 					)
 				)
-		for row in self.get("sla_levels") or []:
-			if flt(row.wait_minutes) < 0:
-				frappe.throw(_("Row {0}: Waiting minutes cannot be negative").format(row.idx))
-			if row.action == "Email Recipients":
-				listed = [e.strip() for e in re.split(r"[,\n;]", row.recipients or "") if e.strip()]
-				if not listed or not all(validate_email_address(e) for e in listed):
-					frappe.throw(_("Row {0}: Email Recipients needs valid email addresses").format(row.idx))
 		emails = [e.strip() for e in re.split(r"[,\n;]", self.alert_emails or "") if e.strip()]
 		for email in emails:
 			if not validate_email_address(email):

@@ -7,6 +7,7 @@ from frappe import _
 from frappe.utils import add_days, get_datetime, now_datetime, nowdate
 
 from periskope_connector import actions, health
+from periskope_connector.setup_status import feature_on
 
 # The action columns of the tag matrix, and the rows a tick adds. Email alerts start at High so a
 # new tick does not mail the team about every message.
@@ -18,8 +19,9 @@ TAG_ACTIONS = [
 ]
 OWN_DOCTYPES = ("Periskope Message", "Periskope Reply Reminder")
 
-# What the Flow dialog may change in the settings, and the rows of the two tables it edits. The dialog
-# saves these straight to the server, so the settings form behind it is not touched while it is open.
+# What the Flow dialog may change in the settings, and in the SLA levels and keyword rules (their own
+# doctypes; a row is addressed by its name). The dialog saves these straight to the server, so the
+# settings form behind it is not touched while it is open.
 SETTING_FIELDS = (
 	"enabled",
 	"enable_classification",
@@ -41,6 +43,23 @@ ROW_FIELDS = {
 	"sla_levels": ("wait_minutes", "min_severity", "action", "recipients"),
 	"keyword_rules": ("recipients", "enabled"),
 }
+ROW_DOCTYPES = {"sla_levels": "Periskope SLA Level", "keyword_rules": "Periskope Keyword Rule"}
+
+
+def _levels() -> list:
+	return frappe.get_all(
+		"Periskope SLA Level",
+		fields=["name", "wait_minutes", "min_severity", "action", "recipients"],
+		order_by="wait_minutes asc, creation asc",
+	)
+
+
+def _rules() -> list:
+	return frappe.get_all(
+		"Periskope Keyword Rule",
+		fields=["name", "rule_name", "recipients", "enabled"],
+		order_by="rule_name asc",
+	)
 
 
 def _ago(moment) -> str:
@@ -126,7 +145,7 @@ def _queue(settings) -> dict:
 def _keywords(settings) -> dict:
 	rules = [
 		{"name": r.name, "rule": r.rule_name, "recipients": r.recipients or "", "enabled": bool(r.enabled)}
-		for r in settings.keyword_rules
+		for r in _rules()
 	]
 	silent = [r for r in rules if r["enabled"] and not r["recipients"].strip()]
 	return {
@@ -143,7 +162,9 @@ def _ai(settings) -> dict:
 	tagged = _count("Periskope Message", {"classification_status": "Done"})
 	corrected = _count("Periskope Message", {"correct_category": ["is", "set"]})
 	return {
-		"status": _status(off=not settings.enable_classification, warn=failed > 0 or pending > 50),
+		"status": _status(
+			off=not feature_on("enable_classification", settings), warn=failed > 0 or pending > 50
+		),
 		"headline": _("{0} waiting, {1} failed").format(pending, failed),
 		"model": settings.ai_model or "",
 		"pending": pending,
@@ -195,7 +216,7 @@ def _tags() -> dict:
 def _waiting(settings) -> dict:
 	waiting = _count("Periskope Reply Reminder", {"status": ["in", ["Open", "Escalated"]]})
 	return {
-		"status": _status(off=not settings.enable_reply_reminders),
+		"status": _status(off=not feature_on("enable_reply_reminders", settings)),
 		"headline": _("{0} waiting now").format(waiting),
 		"waiting": waiting,
 	}
@@ -214,10 +235,12 @@ def _sla(settings) -> dict:
 			"action": r.action,
 			"recipients": r.recipients or "",
 		}
-		for r in settings.sla_levels
+		for r in _levels()
 	]
 	return {
-		"status": _status(off=not settings.enable_reply_reminders, bad=not levels, warn=deep > 0),
+		"status": _status(
+			off=not feature_on("enable_reply_reminders", settings), bad=not levels, warn=deep > 0
+		),
 		"headline": _("{0} escalated").format(deep),
 		"levels": levels,
 		"open": len(open_rows),
@@ -245,17 +268,17 @@ def _settings_values(settings) -> dict:
 		values[name] = str(values[name] or "")
 	values["sla_levels"] = [
 		{
-			"idx": r.idx,
+			"idx": r.name,
 			"wait_minutes": r.wait_minutes,
 			"min_severity": r.min_severity,
 			"action": r.action,
 			"recipients": r.recipients or "",
 		}
-		for r in settings.sla_levels
+		for r in _levels()
 	]
 	values["keyword_rules"] = [
-		{"idx": r.idx, "rule_name": r.rule_name, "recipients": r.recipients or "", "enabled": r.enabled}
-		for r in settings.keyword_rules
+		{"idx": r.name, "rule_name": r.rule_name, "recipients": r.recipients or "", "enabled": r.enabled}
+		for r in _rules()
 	]
 	return values
 
@@ -312,26 +335,24 @@ def set_setting(field: str, value):
 	settings.save()
 
 
-def set_row(table: str, idx: int, field: str, value):
-	"""Change one field of a row of the SLA levels or the keyword rules, and save."""
+def set_row(table: str, idx: str, field: str, value):
+	"""Change one field of an SLA level or a keyword rule (`idx` is its name), and save."""
 	if field not in ROW_FIELDS.get(table, ()):
 		frappe.throw(_("{0} cannot be changed here").format(field))
-	settings = frappe.get_doc("Periskope Settings")
-	row = next((r for r in settings.get(table) if r.idx == int(idx)), None)
-	if not row:
+	doctype = ROW_DOCTYPES[table]
+	if not frappe.db.exists(doctype, idx):
 		frappe.throw(_("Row {0} does not exist").format(idx))
-	row.set(field, value)
-	settings.save()
+	doc = frappe.get_doc(doctype, idx)
+	doc.set(field, value)
+	doc.save()
 
 
 def add_sla_level():
 	"""A new SLA step with the usual first values; the team edits it afterwards."""
-	settings = frappe.get_doc("Periskope Settings")
-	settings.append("sla_levels", {"wait_minutes": 60, "min_severity": "Low", "action": "Notify Rep"})
-	settings.save()
+	frappe.get_doc(
+		{"doctype": "Periskope SLA Level", "wait_minutes": 60, "min_severity": "Low", "action": "Notify Rep"}
+	).insert()
 
 
-def remove_sla_level(idx: int):
-	settings = frappe.get_doc("Periskope Settings")
-	settings.set("sla_levels", [r for r in settings.sla_levels if r.idx != int(idx)])
-	settings.save()
+def remove_sla_level(idx: str):
+	frappe.delete_doc("Periskope SLA Level", idx)

@@ -85,7 +85,32 @@ def test_ai_connection() -> dict:
 	frappe.only_for("System Manager")
 	from periskope_connector.ai.classifier import get_settings, ping
 
-	return {"model": ping(get_settings())}
+	try:
+		model = ping(get_settings())
+	except Exception as e:
+		frappe.db.rollback()
+		_save_ai_status(f"Failed: {str(e)[:100]}")
+		raise
+	_save_ai_status(f"Working ({model})")
+	return {"model": model}
+
+
+def _save_ai_status(status: str):
+	try:
+		frappe.db.set_single_value("Periskope Settings", "ai_status", status)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Periskope: could not save the AI status")
+
+
+@frappe.whitelist()
+def get_setup_status() -> dict:
+	"""The setup steps for the panel at the top of the settings."""
+	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	from periskope_connector.setup_status import get_status
+
+	return get_status()
 
 
 @frappe.whitelist()
@@ -182,7 +207,7 @@ def set_flow_setting(field: str, value=None) -> None:
 
 
 @frappe.whitelist()
-def set_flow_row(table: str, idx: int, field: str, value=None) -> None:
+def set_flow_row(table: str, idx: str, field: str, value=None) -> None:
 	"""Flow dialog: change one field of an SLA level or keyword rule row and save."""
 	frappe.only_for("System Manager")
 	from periskope_connector.flow import set_row
@@ -200,7 +225,7 @@ def add_flow_sla_level() -> None:
 
 
 @frappe.whitelist()
-def remove_flow_sla_level(idx: int) -> None:
+def remove_flow_sla_level(idx: str) -> None:
 	"""Flow dialog: remove an SLA step."""
 	frappe.only_for("System Manager")
 	from periskope_connector.flow import remove_sla_level

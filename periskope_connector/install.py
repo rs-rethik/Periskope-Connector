@@ -138,14 +138,13 @@ def _ensure_lead_source():
 
 
 def _ensure_keyword_rules():
-	"""Add the starter rules only when the settings table has never had any row."""
-	settings = frappe.get_doc("Periskope Settings")
-	if settings.keyword_rules:
+	"""Add the starter rules only on a site that has never had any."""
+	if frappe.db.count("Periskope Keyword Rule"):
 		return
 	for name, words in DEFAULT_KEYWORD_RULES:
-		settings.append("keyword_rules", {"rule_name": name, "keywords": words, "enabled": 1})
-	settings.flags.ignore_permissions = True
-	settings.save()
+		frappe.get_doc(
+			{"doctype": "Periskope Keyword Rule", "rule_name": name, "keywords": words, "enabled": 1}
+		).insert(ignore_permissions=True)
 
 
 def _ensure_webhook_events():
@@ -162,8 +161,9 @@ def _ensure_webhook_events():
 
 
 def _ensure_assistant_defaults():
-	"""Single doctypes do not apply field defaults until saved, so store the starting values of the
-	AI Assistant tab once. The agent and the auto reply both start switched off."""
+	"""Single doctypes do not apply field defaults until saved, so store the starting values once.
+	The parts of the agent (tagging, auto reply, reminders) start on, so switching Enable AI Agent on
+	is all it takes; the agent itself starts off and cannot be switched on before the setup is done."""
 	defaults = {
 		"learning_lookback_days": 14,
 		"learning_min_evidence": 3,
@@ -179,6 +179,9 @@ def _ensure_assistant_defaults():
 	for field, value in defaults.items():
 		if frappe.db.get_single_value("Periskope Settings", field) in (None, "", 0, "0"):
 			frappe.db.set_single_value("Periskope Settings", field, value)
+	for field in ("enable_classification", "enable_auto_reply", "enable_reply_reminders"):
+		if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": field}):
+			frappe.db.set_single_value("Periskope Settings", field, 1)
 	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
 	# once: an admin who switches it off later is not overridden by the next migrate.
 	if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": "test_mode"}):
@@ -217,21 +220,18 @@ def _ensure_sla_levels():
 	"""Start a new site with the usual SLA ladder; the team edits it afterwards."""
 	from periskope_connector.reminders import default_levels
 
-	settings = frappe.get_doc("Periskope Settings")
-	if settings.sla_levels:
+	if frappe.db.count("Periskope SLA Level"):
 		return
 	for row in default_levels():
-		settings.append(
-			"sla_levels",
+		frappe.get_doc(
 			{
+				"doctype": "Periskope SLA Level",
 				"wait_minutes": row.wait_minutes,
 				"min_severity": row.min_severity,
 				"action": row.action,
 				"recipients": row.recipients,
-			},
-		)
-	settings.flags.ignore_permissions = True
-	settings.save()
+			}
+		).insert(ignore_permissions=True)
 
 
 def _ensure_ai_instructions():

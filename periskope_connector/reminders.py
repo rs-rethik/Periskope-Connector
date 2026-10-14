@@ -5,7 +5,7 @@ Runs every 10 minutes. Per chat (not per message), with a tiered clock in workin
 2. Only working hours count (site time, e.g. 09:00-19:00, Monday-Saturday, minus a Holiday
    List), so a message sent at night starts counting the next morning and nothing fires
    outside working hours.
-3. The SLA levels (Periskope Settings > Reply Reminders) say what happens and when: each row has
+3. The SLA levels (the Periskope SLA Level list) say what happens and when: each row has
    the working minutes to wait, the lowest severity it applies to, and an action: notify the rep
    (bell), a ToDo for the rep, an email to the managers, to the escalation list (the MD), or to
    the recipients on the row. The starting rows are: notify at 1 working hour, ToDo plus managers
@@ -26,6 +26,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, flt, get_datetime, get_time, get_url_to_form, now_datetime, today
 
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import is_acknowledgement
 
@@ -89,12 +90,16 @@ def get_config(settings=None) -> SimpleNamespace:
 			action=row.action,
 			recipients=row.recipients or "",
 		)
-		for row in sorted(settings.get("sla_levels") or [], key=lambda r: (flt(r.wait_minutes), r.idx))
+		for row in frappe.get_all(
+			"Periskope SLA Level",
+			fields=["wait_minutes", "min_severity", "action", "recipients"],
+			order_by="wait_minutes asc, creation asc",
+		)
 		if row.action
 	]
 	extra_words = [w.strip().lower() for w in re.split(r"[,\n;]", settings.ack_words or "") if w.strip()]
 	return SimpleNamespace(
-		enabled=bool(settings.enable_reply_reminders),
+		enabled=feature_on("enable_reply_reminders", settings),
 		start=get_time(settings.working_hours_start or "09:00:00"),
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),

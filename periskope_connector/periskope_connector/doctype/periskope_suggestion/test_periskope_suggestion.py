@@ -20,7 +20,7 @@ def _make(kind="Tag", operation="Add", target="", payload=None, **kw):
 class TestSuggestion(FrappeTestCase):
 	def setUp(self):
 		self.sent = isolate(self, "periskope_suggestion_test")
-		settings(suggestion_recipients="boss@example.com", suggestion_email_gap_hours=0)
+		settings(approver_emails="boss@example.com", suggestion_email_gap_hours=0)
 
 	def _token(self, which=0, decision="approve"):
 		message = self.sent.call_args.kwargs["message"]
@@ -66,15 +66,30 @@ class TestSuggestion(FrappeTestCase):
 	def test_keyword_rule_add_modify_remove(self):
 		doc = _make("Keyword Rule", "Add", payload={"rule_name": "Legal", "keywords": "lawyer, notice"})
 		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {r.rule_name: r for r in frappe.get_doc("Periskope Settings").keyword_rules}
+		rows = {
+			r.rule_name: r
+			for r in frappe.get_all(
+				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
+			)
+		}
 		self.assertTrue(rows["Legal"].enabled)
 		doc = _make("Keyword Rule", "Modify", target="Legal", payload={"keywords": "lawyer, notice, court"})
 		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {r.rule_name: r for r in frappe.get_doc("Periskope Settings").keyword_rules}
+		rows = {
+			r.rule_name: r
+			for r in frappe.get_all(
+				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
+			)
+		}
 		self.assertIn("court", rows["Legal"].keywords)
 		doc = _make("Keyword Rule", "Remove", target="Legal", summary="Switch off Legal")
 		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {r.rule_name: r for r in frappe.get_doc("Periskope Settings").keyword_rules}
+		rows = {
+			r.rule_name: r
+			for r in frappe.get_all(
+				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
+			)
+		}
 		self.assertFalse(rows["Legal"].enabled)
 
 	def test_the_agent_cannot_choose_who_is_emailed(self):
@@ -85,23 +100,27 @@ class TestSuggestion(FrappeTestCase):
 		)
 		self.assertNotIn("recipients", json.loads(doc.payload))
 		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {r.rule_name: r for r in frappe.get_doc("Periskope Settings").keyword_rules}
+		rows = {
+			r.rule_name: r
+			for r in frappe.get_all(
+				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
+			)
+		}
 		self.assertEqual(rows["Moq"].recipients, "alerts@example.com")
 
 	def test_sla_level_add_and_remove(self):
-		before = len(frappe.get_doc("Periskope Settings").sla_levels)
+		before = frappe.db.count("Periskope SLA Level")
 		doc = _make(
 			"SLA Level",
 			"Add",
 			payload={"wait_minutes": 45, "min_severity": "Medium", "action": "Notify Rep"},
 		)
 		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
-		levels = frappe.get_doc("Periskope Settings").sla_levels
-		self.assertEqual(len(levels), before + 1)
-		new = next(r for r in levels if r.wait_minutes == 45)
+		self.assertEqual(frappe.db.count("Periskope SLA Level"), before + 1)
+		new = frappe.get_all("Periskope SLA Level", filters={"wait_minutes": 45}, fields=["name"])[0]
 		doc = _make("SLA Level", "Remove", target=new.name, summary="Drop 45 minute step")
 		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
-		self.assertEqual(len(frappe.get_doc("Periskope Settings").sla_levels), before)
+		self.assertEqual(frappe.db.count("Periskope SLA Level"), before)
 
 	def test_a_change_that_cannot_be_applied_is_kept_as_failed(self):
 		doc = _make("Tag", "Modify", target="no_such_tag", payload={"description": "x"})
@@ -131,7 +150,7 @@ class TestSuggestion(FrappeTestCase):
 class TestEmailedLinks(FrappeTestCase):
 	def setUp(self):
 		self.sent = isolate(self, "periskope_suggestion_mail_test")
-		settings(suggestion_recipients="boss@example.com", suggestion_email_gap_hours=0)
+		settings(approver_emails="boss@example.com", suggestion_email_gap_hours=0)
 		frappe.db.delete("Periskope Suggestion")
 		self.one = _make(payload={"tag_name": "mail_tag_a", "description": "a"})
 		self.two = _make(payload={"tag_name": "mail_tag_b", "description": "b"})
@@ -180,7 +199,7 @@ class TestEmailedLinks(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("Periskope Suggestion", self.one.name, "status"), "Expired")
 
 	def test_nobody_to_tell_means_nothing_is_marked_as_sent(self):
-		settings(suggestion_recipients="", alert_emails="")
+		settings(approver_emails="", alert_emails="")
 		self.assertEqual(suggestions.send_digest(), 0)
 		self.assertFalse(frappe.db.get_value("Periskope Suggestion", self.one.name, "emailed_on"))
 

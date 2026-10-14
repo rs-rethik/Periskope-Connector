@@ -14,6 +14,7 @@ from frappe.utils import flt, get_datetime, now_datetime
 
 from periskope_connector import actions, tags
 from periskope_connector.linking import link_message
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system, save_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
 
@@ -557,7 +558,7 @@ def _is_expected_error(e: Exception) -> bool:
 
 def _ready_to_run() -> bool:
 	settings = get_settings()
-	if not settings.enable_classification:
+	if not feature_on("enable_classification", settings):
 		return False
 	if uses_jarvis(settings):
 		return True

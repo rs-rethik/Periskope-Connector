@@ -119,13 +119,6 @@ def _settings_doc():
 	return settings
 
 
-def _row(settings, table: str, key: str, value: str):
-	row = next((r for r in settings.get(table) if str(r.get(key) or "").lower() == str(value).lower()), None)
-	if not row:
-		frappe.throw(_("{0} no longer exists").format(value))
-	return row
-
-
 def _apply_tag(doc, data: dict):
 	from periskope_connector.tags import default_actions
 
@@ -156,42 +149,45 @@ def _apply_tag(doc, data: dict):
 
 
 def _apply_keyword_rule(doc, data: dict):
-	settings = _settings_doc()
 	if doc.operation == "Add":
-		settings.append(
-			"keyword_rules",
+		insert_as_system(
 			{
+				"doctype": "Periskope Keyword Rule",
 				"rule_name": data.get("rule_name"),
 				"keywords": data.get("keywords"),
-				"recipients": settings.alert_emails,
+				"recipients": _settings_doc().alert_emails,
 				"enabled": 1,
-			},
+			}
 		)
+		return
+	name = frappe.db.get_value("Periskope Keyword Rule", {"rule_name": doc.target})
+	if not name:
+		frappe.throw(_("{0} no longer exists").format(doc.target))
+	rule = frappe.get_doc("Periskope Keyword Rule", name)
+	if doc.operation == "Remove":
+		rule.enabled = 0
 	else:
-		row = _row(settings, "keyword_rules", "rule_name", doc.target)
-		if doc.operation == "Remove":
-			row.enabled = 0
-		else:
-			for field in ("keywords", "enabled"):
-				if field in data:
-					row.set(field, data[field])
-	settings.save()
+		for field in ("keywords", "enabled"):
+			if field in data:
+				rule.set(field, data[field])
+	save_as_system(rule)
 
 
 def _apply_sla_level(doc, data: dict):
-	settings = _settings_doc()
 	if doc.operation == "Add":
-		settings.append("sla_levels", {k: v for k, v in data.items() if v not in (None, "")})
-	else:
-		row = next((r for r in settings.sla_levels if r.name == doc.target), None)
-		if not row:
-			frappe.throw(_("That SLA level no longer exists"))
-		if doc.operation == "Remove":
-			settings.set("sla_levels", [r for r in settings.sla_levels if r.name != doc.target])
-		else:
-			for field, value in data.items():
-				row.set(field, value)
-	settings.save()
+		insert_as_system(
+			{"doctype": "Periskope SLA Level", **{k: v for k, v in data.items() if v not in (None, "")}}
+		)
+		return
+	if not frappe.db.exists("Periskope SLA Level", doc.target):
+		frappe.throw(_("That SLA level no longer exists"))
+	if doc.operation == "Remove":
+		frappe.delete_doc("Periskope SLA Level", doc.target, ignore_permissions=True)
+		return
+	level = frappe.get_doc("Periskope SLA Level", doc.target)
+	for field, value in data.items():
+		level.set(field, value)
+	save_as_system(level)
 
 
 def _apply_setting(doc, data: dict):
@@ -304,7 +300,7 @@ def describe_token(token: str) -> dict | None:
 def _recipients() -> list[str]:
 	from periskope_connector.reminders import get_config
 
-	raw = frappe.db.get_single_value("Periskope Settings", "suggestion_recipients") or ""
+	raw = frappe.db.get_single_value("Periskope Settings", "approver_emails") or ""
 	listed = [e.strip() for e in re.split(r"[,\n;]", raw) if e.strip()]
 	return listed or get_config().emails
 

@@ -67,7 +67,7 @@ def rules() -> list[frappe._dict]:
 	"""Enabled rules with recipients, ready to run."""
 	rows = frappe.get_all(
 		"Periskope Keyword Rule",
-		filters={"parent": "Periskope Settings", "parenttype": "Periskope Settings", "enabled": 1},
+		filters={"enabled": 1},
 		fields=["name", "rule_name", "keywords", "recipients"],
 	)
 	out = []

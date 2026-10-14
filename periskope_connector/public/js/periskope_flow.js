@@ -299,7 +299,7 @@
 						__("Test Connection"),
 						`data-call="test_connection"`,
 						true
-					)}${goTab("tab_connection", __("Open Connection tab"))}</div>`,
+					)}${goTab("tab_setup", __("Open Setup"))}</div>`,
 			};
 		},
 		capture(frm, d) {
@@ -330,7 +330,7 @@
 						__("Create Webhook in Periskope"),
 						`data-call="setup_webhooks"`,
 						true
-					)}${goTab("tab_connection", __("Open Connection tab"))}${btn(
+					)}${goTab("tab_setup", __("Open Setup"))}${btn(
 						__("Webhook logs"),
 						`data-list="Periskope Webhook Log"`
 					)}</div>`,
@@ -373,7 +373,7 @@
 					`<div class="pf-btns">${btn(
 						__("Unmatched Numbers report"),
 						`data-report="Periskope Unmatched Numbers"`
-					)}${goTab("tab_crm", __("Open CRM Visibility"))}</div>`,
+					)}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
 			};
 		},
 		queue(frm, d) {
@@ -404,7 +404,7 @@
 						__("Open the queue"),
 						`data-list="Periskope Contact"`,
 						true
-					)}${goTab("tab_capture", __("Open Lead Capture"))}</div>`,
+					)}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
 			};
 		},
 		keywords(frm, d) {
@@ -446,9 +446,9 @@
 								: ""
 						}`
 					) +
-					`<div class="pf-btns">${goTab(
-						"tab_keywords",
-						__("Edit words and add rules")
+					`<div class="pf-btns">${btn(
+						__("Edit words and add rules"),
+						`data-list="Periskope Keyword Rule"`
 					)}</div>`,
 			};
 		},
@@ -478,7 +478,7 @@
 						__("Test AI Connection"),
 						`data-call="test_ai_connection"`,
 						true
-					)}${goTab("tab_ai", __("Edit AI instructions"))}${btn(
+					)}${goTab("tab_advanced", __("Edit AI instructions"))}${btn(
 						__("Tagging Review"),
 						`data-report="Periskope Tagging Review"`
 					)}</div>`,
@@ -598,9 +598,9 @@
 							"Days"
 						)}</span><span style="width:60%">${select}</span></div>`
 					) +
-					`<div class="pf-btns">${goTab(
-						"tab_reminders",
-						__("Open Reply Reminders")
+					`<div class="pf-btns">${btn(
+						__("All SLA levels"),
+						`data-list="Periskope SLA Level"`
 					)}</div>`,
 			};
 		},
@@ -690,7 +690,7 @@
 						f.mail_ready
 							? ""
 							: btn(__("Email Accounts"), `data-list="Email Account"`, true)
-					}${goTab("tab_reminders", __("Open Reply Reminders"))}</div>`,
+					}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
 			};
 		},
 	};

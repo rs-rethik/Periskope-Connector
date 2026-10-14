@@ -31,6 +31,7 @@ class TestAutoReply(FrappeTestCase):
 		self.send = self.sends.start()
 		self.addCleanup(self.sends.stop)
 		settings(
+			enable_agent=1,
 			enable_auto_reply=1,
 			reply_delay_minutes=3,
 			reply_delay_jitter_percent=0,

@@ -21,6 +21,7 @@ from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
 from periskope_connector import answer, reminders, safety
 from periskope_connector.outbound import send as send_message
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
 
 FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is not answered
@@ -70,7 +71,7 @@ def on_message(doc) -> str:
 
 def schedule(doc) -> str:
 	settings = _settings()
-	if not settings.enable_auto_reply:
+	if not feature_on("enable_auto_reply", settings):
 		return ""
 	if doc.is_group and not settings.reply_group_chats:
 		return ""
@@ -146,7 +147,7 @@ def due_rows() -> list[str]:
 def run_due() -> int:
 	"""Scheduler, every minute. Returns how many rows were handled."""
 	settings = _settings()
-	if not settings.enable_auto_reply:
+	if not feature_on("enable_auto_reply", settings):
 		return 0
 	handled = 0
 	for name in due_rows():
@@ -199,7 +200,7 @@ def process(name: str) -> str:
 		frappe.db.set_value("Periskope Auto Reply", name, {"status": status, "cancel_reason": reason})
 		return status
 
-	if not settings.enable_auto_reply:
+	if not feature_on("enable_auto_reply", settings):
 		return end("Cancelled", _("Auto reply was switched off"))
 
 	messages = frappe.get_all(
