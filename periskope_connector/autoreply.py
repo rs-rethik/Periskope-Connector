@@ -19,11 +19,12 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
-from periskope_connector import answer, chat, crm_context, reminders, safety, writeback
-from periskope_connector.ai import analyse
+from periskope_connector import answer, chat, crm_context, health, reminders, safety, writeback
+from periskope_connector.ai import analyse, assistant
 from periskope_connector.outbound import send as send_message
 from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
+from periskope_connector.text_rules import readable_text
 
 FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is not answered
 MATCH_MINUTES = 30
@@ -42,6 +43,8 @@ MESSAGE_FIELDS = [
 	"severity",
 	"org_phone",
 	"agent_reply",
+	"transcript",
+	"is_deleted",
 ]
 DEFAULT_HOLDING = "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
 
@@ -80,8 +83,8 @@ def schedule(doc) -> str:
 		return ""
 	if chat.is_paused(doc.chat_id):
 		return ""
-	if doc.message_type != "text" or not reminders.needs_reply(doc):
-		return ""
+	if not readable_text(doc) or not reminders.needs_reply(doc):
+		return ""  # nothing to answer yet (a voice note is scheduled once it is transcribed)
 	if doc.message_timestamp and get_datetime(doc.message_timestamp) < now_datetime() - timedelta(
 		minutes=FRESH_MINUTES
 	):
@@ -239,18 +242,23 @@ def process(name: str) -> str:
 		)
 		return end("Skipped", _("Daily limit for this chat reached"))
 
-	customer_text = "\n".join((m.body or "").strip() for m in pending if (m.body or "").strip())
+	customer_text = "\n".join(readable_text(m) for m in pending if readable_text(m))
 	rep = next((m.rep for m in reversed(messages) if m.rep), None) or row.rep
 	phone = row.org_phone or pending[-1].org_phone
 	frappe.db.set_value("Periskope Auto Reply", name, "customer_text", customer_text)
 
 	result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
-	try:
-		result = answer.build(
-			customer_text, row.contact_number or "", bool(pending[-1].is_group), chat_id=row.chat_id
-		)
-	except Exception:
-		frappe.log_error(title=f"Periskope: could not prepare the answer for {row.chat_id}")
+	ready, reason = assistant.readiness()
+	if not ready:
+		# No AI call at all: the customer gets the holding message, the rep a task, the admin one email.
+		health.notify_admin_once(reason)
+	else:
+		try:
+			result = answer.build(
+				customer_text, row.contact_number or "", bool(pending[-1].is_group), chat_id=row.chat_id
+			)
+		except Exception:
+			health.log_once("Periskope: could not prepare an auto reply")
 
 	min_conf = float(settings.reply_min_confidence or 80)
 	confident = result["can_answer"] and result["confidence"] >= min_conf

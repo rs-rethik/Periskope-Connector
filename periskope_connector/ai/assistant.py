@@ -15,16 +15,24 @@ from periskope_connector.ai import classifier
 DEFAULT_MAX_TOKENS = 2000
 
 
-def is_ready(settings=None) -> bool:
-	"""True when an AI key (or Jarvis) is set and the monthly token budget is not used up."""
+def readiness(settings=None) -> tuple[bool, str]:
+	"""(True, "") when an AI call may be made, else (False, why): no AI key, or the monthly token
+	budget is used up. Checked before every call the agent makes."""
 	from periskope_connector.health import budget_exceeded
 
 	settings = settings or classifier.get_settings()
 	if budget_exceeded():
-		return False
+		return False, "budget"
 	if classifier.uses_jarvis(settings):
-		return True
-	return bool(settings.get_password("anthropic_api_key", raise_exception=False))
+		return True, ""
+	if not settings.get_password("anthropic_api_key", raise_exception=False):
+		return False, "no_key"
+	return True, ""
+
+
+def is_ready(settings=None) -> bool:
+	"""True when an AI key (or Jarvis) is set and the monthly token budget is not used up."""
+	return readiness(settings)[0]
 
 
 def complete_json(system: str, user: str, schema: dict, max_tokens: int = DEFAULT_MAX_TOKENS) -> dict:

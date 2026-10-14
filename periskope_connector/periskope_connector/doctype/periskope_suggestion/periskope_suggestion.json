@@ -32,7 +32,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Tag\nKeyword Rule\nSLA Level\nSetting\nKnowledge Entry",
+   "options": "Tag\nKeyword Rule\nSLA Level\nSetting\nKnowledge Entry\nGroup Mapping\nIgnore Contact\nLead Rule",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "reqd": 1

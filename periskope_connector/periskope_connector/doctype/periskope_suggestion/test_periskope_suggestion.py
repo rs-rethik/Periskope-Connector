@@ -217,3 +217,88 @@ class TestEmailedLinks(FrappeTestCase):
 		self.assertIn(b"mail_tag_a", page.data)
 		self.assertIn(b'data-decision="approve"', page.data)
 		self.assertEqual(frappe.db.get_value("Periskope Suggestion", self.one.name, "status"), "Pending")
+
+
+class TestNewKinds(FrappeTestCase):
+	"""Group mappings, ignored numbers and lead rules, learned and applied through approval."""
+
+	def setUp(self):
+		isolate(self, "periskope_new_kinds_test")
+		frappe.db.delete("Periskope Group", {"chat_id": "120363999000111@g.us"})
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Group",
+				"chat_id": "120363999000111@g.us",
+				"group_name": "Sri Murugan Knits Orders",
+				"group_type": "Internal",
+			}
+		).insert(ignore_permissions=True)
+
+	def test_a_group_is_mapped_to_its_company(self):
+		doc = _make(
+			"Group Mapping",
+			"Modify",
+			target="120363999000111@g.us",
+			payload={"group_type": "Customer", "organization": "Sri Murugan Knits", "crm_owner": "x"},
+		)
+		self.assertNotIn("crm_owner", json.loads(doc.payload))
+		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
+		group = frappe.db.get_value(
+			"Periskope Group",
+			{"chat_id": "120363999000111@g.us"},
+			["group_type", "organization"],
+			as_dict=True,
+		)
+		self.assertEqual(group.group_type, "Customer")
+		self.assertEqual(
+			frappe.db.get_value("CRM Organization", group.organization, "organization_name"),
+			"Sri Murugan Knits",
+		)
+
+	def test_a_number_is_ignored(self):
+		doc = _make("Ignore Contact", "Add", target="919600000777", payload={"status": "Ignored (Vendor)"})
+		suggestions.approve(doc, "Desk", "Administrator")
+		self.assertEqual(
+			frappe.db.get_value("Periskope Contact", {"phone": "919600000777"}, "status"), "Ignored (Vendor)"
+		)
+
+	def test_a_lead_rule_is_switched_on_and_off(self):
+		def has_rule():
+			return any(a.action == "Create Lead" for a in frappe.get_doc("Periskope Tag", "general").actions)
+
+		suggestions.approve(
+			_make("Lead Rule", "Add", target="general", payload={"create_lead": True}),
+			"Desk",
+			"Administrator",
+		)
+		self.assertTrue(has_rule())
+		suggestions.approve(
+			_make("Lead Rule", "Remove", target="general", summary="Stop leads", payload={}),
+			"Desk",
+			"Administrator",
+		)
+		self.assertFalse(has_rule())
+
+	def test_the_learner_only_points_at_what_exists(self):
+		from periskope_connector import learner
+
+		config = learner.snapshot()
+		config["unmapped_groups"] = [{"chat_id": "120363999000111@g.us", "name": "x", "type": "Internal"}]
+		config["unmatched_contacts"] = [{"number": "919600000777", "name": "", "messages": 3, "topic": ""}]
+		item = {
+			"kind": "Group Mapping",
+			"operation": "Modify",
+			"target": "120363999000111@g.us",
+			"payload_json": "{}",
+		}
+		self.assertTrue(learner.validate(item, config, True)[0])
+		self.assertFalse(learner.validate({**item, "target": "nope@g.us"}, config, True)[0])
+		ignore = {
+			"kind": "Ignore Contact",
+			"operation": "Add",
+			"target": "919600000777",
+			"payload_json": "{}",
+		}
+		self.assertTrue(learner.validate(ignore, config, True)[0])
+		self.assertFalse(learner.validate({**ignore, "target": "910000000000"}, config, True)[0])
+		self.assertFalse(learner.validate(ignore, config, False)[0])  # not enough evidence

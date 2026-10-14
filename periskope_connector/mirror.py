@@ -20,6 +20,7 @@ from frappe.model.naming import set_new_name
 from frappe.utils import get_datetime, now_datetime
 
 from periskope_connector import safety
+from periskope_connector.text_rules import readable_text
 
 ACCOUNT = "Periskope"
 AI_PREFIX = "AI assistant: "
@@ -41,6 +42,8 @@ FIELDS = [
 	"media_path",
 	"ack",
 	"whatsapp_message",
+	"transcript",
+	"is_deleted",
 ]
 CONTENT_TYPES = {"text": "text", "image": "image", "document": "document", "audio": "audio", "video": "video"}
 ACK_STATUS = {"2": "delivered", "3": "read", "4": "read"}
@@ -80,9 +83,9 @@ def ensure_account():
 
 
 def _text(m) -> str:
-	body = (m.body or "").strip()
-	if not body:
-		body = f"[{m.message_type or 'attachment'}]"
+	if m.is_deleted:
+		return "This message was deleted"
+	body = readable_text(m) or f"[{m.message_type or 'attachment'}]"
 	return (AI_PREFIX + body) if m.agent_reply else body
 
 

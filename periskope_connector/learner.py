@@ -22,7 +22,10 @@ SYSTEM_PROMPT = """You help a sales team keep the setup of their WhatsApp CRM as
 - Keyword Rule: add a rule for words that signal something management must see, add words to a rule, or switch off a rule that only produces noise.
 - SLA Level: add or adjust an escalation step (wait_minutes, min_severity Low/Medium/High, action one of: Notify Rep, ToDo for Rep, Email Managers, Email Escalation List) when replies are often late or escalations come too early.
 - Setting: only one of the listed settings.
-Rules: every suggestion must be backed by at least {min_evidence} different conversations (list their numbers in evidence_chats); do not repeat something that already exists; prefer fewer, stronger suggestions; return an empty list when nothing is clearly needed. target is the existing tag name, rule name, SLA level id or setting name (empty for an addition). payload_json is a JSON object string with only the changed fields: Tag {{"tag_name","description","active"}}, Keyword Rule {{"rule_name","keywords","enabled"}}, SLA Level {{"wait_minutes","min_severity","action"}}, Setting {{"value"}}. reason must say what you saw."""
+- Group Mapping: a group listed under unmapped_groups that clearly belongs to one customer company: target is its chat_id, payload sets group_type "Customer" and organization (an existing organization name when one matches).
+- Ignore Contact: a number listed under unmatched_contacts that is clearly personal, a vendor, spam or a colleague: target is the number, payload status one of "Ignored (Personal)", "Ignored (Vendor)", "Ignored (Spam)", "Ignored (Internal)".
+- Lead Rule: whether new enquiries with a tag should create a CRM lead: target is the tag, operation Add (create leads) or Remove (stop).
+Rules: every suggestion must be backed by at least {min_evidence} different conversations (list their numbers in evidence_chats); do not repeat something that already exists; prefer fewer, stronger suggestions; return an empty list when nothing is clearly needed. target is the existing tag name, rule name, SLA level id or setting name (empty for an addition). payload_json is a JSON object string with only the changed fields: Tag {{"tag_name","description","active"}}, Keyword Rule {{"rule_name","keywords","enabled"}}, SLA Level {{"wait_minutes","min_severity","action"}}, Setting {{"value"}}, Group Mapping {{"group_type","organization"}}, Ignore Contact {{"status"}}, Lead Rule {{"create_lead"}}. reason must say what you saw."""
 
 SCHEMA = {
 	"type": "object",
@@ -32,7 +35,18 @@ SCHEMA = {
 			"items": {
 				"type": "object",
 				"properties": {
-					"kind": {"type": "string", "enum": ["Tag", "Keyword Rule", "SLA Level", "Setting"]},
+					"kind": {
+						"type": "string",
+						"enum": [
+							"Tag",
+							"Keyword Rule",
+							"SLA Level",
+							"Setting",
+							"Group Mapping",
+							"Ignore Contact",
+							"Lead Rule",
+						],
+					},
 					"operation": {"type": "string", "enum": ["Add", "Modify", "Remove"]},
 					"target": {"type": "string"},
 					"summary": {"type": "string"},
@@ -103,6 +117,40 @@ def snapshot() -> dict:
 			)
 		],
 		"settings": {f: settings.get(f) for f in suggestions.LEARNABLE_SETTINGS},
+		"unmapped_groups": [
+			{"chat_id": g.chat_id, "name": g.group_name, "type": g.group_type}
+			for g in frappe.get_all(
+				"Periskope Group",
+				filters={
+					"crm_deal": ["is", "not set"],
+					"crm_lead": ["is", "not set"],
+					"organization": ["is", "not set"],
+				},
+				fields=["chat_id", "group_name", "group_type"],
+				order_by="modified desc",
+				limit=30,
+			)
+		],
+		"unmatched_contacts": [
+			{"number": c.phone, "name": c.display_name, "messages": c.message_count, "topic": c.last_category}
+			for c in frappe.get_all(
+				"Periskope Contact",
+				filters={"status": "New"},
+				fields=["phone", "display_name", "message_count", "last_category"],
+				order_by="message_count desc",
+				limit=30,
+			)
+		],
+		"lead_rules": sorted(
+			set(
+				frappe.get_all(
+					"Periskope Tag Action",
+					filters={"parenttype": "Periskope Tag", "action": "Create Lead"},
+					pluck="parent",
+				)
+			)
+		),
+		"organizations": frappe.get_all("CRM Organization", pluck="name", limit=200),
 		"statistics_last_30_days": {
 			"messages_per_tag": {r.ai_category: r.n for r in by_tag},
 			"human_corrections": [
@@ -124,6 +172,11 @@ def _current(item: dict, config: dict):
 		"Keyword Rule": [(r["name"], r) for r in config["keyword_rules"]],
 		"SLA Level": [(r["id"], r) for r in config["sla_levels"]],
 		"Setting": [(k, {"value": v}) for k, v in config["settings"].items()],
+		"Group Mapping": [(g["chat_id"], g) for g in config.get("unmapped_groups", [])],
+		"Ignore Contact": [(c["number"], c) for c in config.get("unmatched_contacts", [])],
+		"Lead Rule": [
+			(t["name"], {"create_lead": t["name"] in config.get("lead_rules", [])}) for t in config["tags"]
+		],
 	}[kind]
 	return next((value for key, value in pool if str(key).lower() == target.lower()), None)
 
@@ -132,6 +185,16 @@ def validate(item: dict, config: dict, evidence_ok: bool) -> tuple[bool, object]
 	"""(accepted, current value). The code, not the AI, decides what is acceptable."""
 	if not evidence_ok:
 		return False, None
+	if item["kind"] in ("Group Mapping", "Ignore Contact", "Lead Rule"):
+		# These always point at something that exists: a listed group, a listed number, a tag.
+		current = _current(item, config)
+		if current is None:
+			return False, None
+		if item["kind"] == "Ignore Contact" and item["operation"] != "Add":
+			return False, None
+		if item["kind"] == "Lead Rule" and current["create_lead"] == (item["operation"] != "Remove"):
+			return False, None  # already so
+		return True, current
 	current = _current(item, config) if item["operation"] != "Add" else None
 	if item["operation"] != "Add" and current is None:
 		return False, None

@@ -21,7 +21,16 @@ from frappe.utils import add_to_date, escape_html, get_datetime, now_datetime
 from periskope_connector.api.permission import require_manager
 from periskope_connector.system import insert_as_system, save_as_system
 
-KINDS = ("Tag", "Keyword Rule", "SLA Level", "Setting", "Knowledge Entry")
+KINDS = (
+	"Tag",
+	"Keyword Rule",
+	"SLA Level",
+	"Setting",
+	"Knowledge Entry",
+	"Group Mapping",
+	"Ignore Contact",
+	"Lead Rule",
+)
 OPERATIONS = ("Add", "Modify", "Remove")
 REJECTED_QUIET_DAYS = 30
 MAX_PER_EMAIL = 25
@@ -49,6 +58,12 @@ PAYLOAD_FIELDS = {
 	"SLA Level": ("wait_minutes", "min_severity", "action"),
 	"Setting": ("value",),
 	"Knowledge Entry": ("question", "answer", "keywords"),
+	# target: the group's chat id. A group about one customer is linked to its company, deal or lead.
+	"Group Mapping": ("group_type", "organization", "crm_deal", "crm_lead"),
+	# target: the contact's number (the unmatched-contact queue).
+	"Ignore Contact": ("status",),
+	# target: a tag. Whether its messages from unknown numbers create a lead.
+	"Lead Rule": ("create_lead",),
 }
 
 
@@ -211,12 +226,84 @@ def _apply_knowledge(doc, data: dict):
 	save_as_system(entry)
 
 
+def _apply_group_mapping(doc, data: dict):
+	from periskope_connector.linking import link_message
+
+	group = frappe.db.get_value("Periskope Group", {"chat_id": doc.target})
+	if not group:
+		frappe.throw(_("Group {0} no longer exists").format(doc.target))
+	values = {}
+	if data.get("group_type") in ("Customer", "Internal"):
+		values["group_type"] = data["group_type"]
+	if data.get("organization"):
+		organization = frappe.db.get_value("CRM Organization", {"organization_name": data["organization"]})
+		values["organization"] = (
+			organization
+			or insert_as_system(
+				{"doctype": "CRM Organization", "organization_name": data["organization"]}
+			).name
+		)
+	for field, doctype in (("crm_deal", "CRM Deal"), ("crm_lead", "CRM Lead")):
+		if data.get(field):
+			if not frappe.db.exists(doctype, data[field]):
+				frappe.throw(_("{0} {1} no longer exists").format(doctype, data[field]))
+			values[field] = data[field]
+	if not values:
+		frappe.throw(_("Nothing to change"))
+	frappe.db.set_value("Periskope Group", group, values)
+	# The group's messages follow the new mapping.
+	for name in frappe.get_all(
+		"Periskope Message",
+		filters={"chat_id": doc.target},
+		pluck="name",
+		order_by="creation desc",
+		limit=500,
+	):
+		link_message(name)
+
+
+def _apply_ignore_contact(doc, data: dict):
+	from periskope_connector.contacts import IGNORED_STATUSES
+
+	status = data.get("status") if data.get("status") in IGNORED_STATUSES else "Ignored (Personal)"
+	name = frappe.db.get_value("Periskope Contact", {"phone": doc.target})
+	if doc.operation == "Remove":
+		if name:
+			frappe.db.set_value("Periskope Contact", name, "status", "New")
+		return
+	if name:
+		frappe.db.set_value("Periskope Contact", name, "status", status)
+	else:
+		insert_as_system({"doctype": "Periskope Contact", "phone": doc.target, "status": status})
+
+
+def _apply_lead_rule(doc, data: dict):
+	from periskope_connector.actions import CREATE_LEAD
+	from periskope_connector.flow import TAG_ACTIONS
+
+	if not frappe.db.exists("Periskope Tag", doc.target):
+		frappe.throw(_("Tag {0} no longer exists").format(doc.target))
+	tag = frappe.get_doc("Periskope Tag", doc.target)
+	want = doc.operation != "Remove" and bool(data.get("create_lead", True))
+	rows = [r for r in tag.actions if r.action == CREATE_LEAD]
+	if want and not rows:
+		tag.append("actions", {"action": CREATE_LEAD, **dict(TAG_ACTIONS)[CREATE_LEAD]})
+	elif not want and rows:
+		tag.set("actions", [r for r in tag.actions if r.action != CREATE_LEAD])
+	else:
+		return
+	save_as_system(tag)
+
+
 APPLIERS = {
 	"Tag": _apply_tag,
 	"Keyword Rule": _apply_keyword_rule,
 	"SLA Level": _apply_sla_level,
 	"Setting": _apply_setting,
 	"Knowledge Entry": _apply_knowledge,
+	"Group Mapping": _apply_group_mapping,
+	"Ignore Contact": _apply_ignore_contact,
+	"Lead Rule": _apply_lead_rule,
 }
 
 

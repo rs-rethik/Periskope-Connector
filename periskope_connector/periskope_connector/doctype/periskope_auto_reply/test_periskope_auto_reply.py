@@ -375,3 +375,57 @@ class TestAnswerGuards(FrappeTestCase):
 		ids = [s["id"] for s in answer.gather("minimum order quantity?")]
 		self.assertIn(f"KB:{entry.name}", ids)
 		self.assertTrue(knowledge.find("minimum order quantity"))
+
+
+class TestNoBudgetNoAI(FrappeTestCase):
+	"""With no AI key or the budget used up: no AI call, the holding message, one email to the admin."""
+
+	def setUp(self):
+		self.mail = isolate(self, "periskope_budget_test")
+		patcher = patch.object(messages, "_rep_for_phone", lambda n: "Administrator")
+		patcher.start()
+		self.addCleanup(patcher.stop)
+		self.send = patch.object(autoreply, "send_message").start()
+		self.addCleanup(patch.stopall)
+		settings(
+			enable_agent=1,
+			enable_auto_reply=1,
+			reply_delay_minutes=0,
+			reply_delay_jitter_percent=0,
+			reply_working_hours_only=0,
+			reply_max_per_chat_per_day=5,
+			holding_message=HOLDING,
+			enable_classification=0,
+			approver_emails="boss@example.com",
+		)
+		frappe.cache().delete_value("periskope_alert:not_ready:budget")
+		self.addCleanup(frappe.cache().delete_value, "periskope_alert:not_ready:budget")
+
+	def test_holding_message_and_a_single_warning(self):
+		from periskope_connector.ai import assistant
+
+		with (
+			patch.object(assistant, "readiness", return_value=(False, "budget")),
+			patch.object(answer, "build") as build,
+		):
+			for n in range(2):
+				messages.create_message(
+					event(
+						message_id=f"nb_{n}_{random.random()}",
+						chat_id=CHAT,
+						sender_phone=CHAT,
+						body="Price?",
+						timestamp=_utc(),
+					)
+				)
+				frappe.db.set_value(
+					"Periskope Auto Reply",
+					{"chat_id": CHAT, "status": "Waiting"},
+					"due_on",
+					now_datetime() - timedelta(minutes=1),
+				)
+				autoreply.run_due()
+		build.assert_not_called()
+		self.assertEqual(self.send.call_args.args[1], HOLDING)
+		warnings = [c for c in self.mail.call_args_list if "budget" in c.kwargs.get("subject", "")]
+		self.assertEqual(len(warnings), 1)

@@ -64,3 +64,20 @@ def analysis_skip_reason(body: str | None) -> str | None:
 	if is_single_word_statement(body):
 		return "One-word message"
 	return None
+
+
+MEDIA_LABELS = {"image": "[image]", "document": "[document]", "audio": "[voice note]", "video": "[video]"}
+
+
+def readable_text(m) -> str:
+	"""The words of a message for the AI and the CRM: the text of a chat, or for an attachment its
+	label with the caption and, for a voice note, the transcript ("[voice note] can you send..").
+	"" for an attachment that has no words (yet)."""
+	body = (getattr(m, "body", None) or "").strip()
+	if (getattr(m, "message_type", None) or "text") == "text":
+		return body
+	if m.message_type not in MEDIA_LABELS:
+		return ""  # contacts, stickers, locations: no words to read
+	transcript = (getattr(m, "transcript", None) or "").strip()
+	words = " ".join(part for part in (body, transcript) if part)
+	return f"{MEDIA_LABELS[m.message_type]} {words}" if words else ""

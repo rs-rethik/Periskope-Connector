@@ -164,6 +164,8 @@ def needs_reply(message, extra_words: list[str] | None = None) -> bool:
 	"""False for acknowledgements, emoji-only and 1-2 character texts. A short real question
 	such as "Price?" still needs a reply. If the AI already tagged the message and decided no
 	reply is needed, that is respected."""
+	if getattr(message, "is_deleted", 0):
+		return False  # the customer deleted it
 	body = (message.body or "").strip()
 	if not body:
 		return bool(message.message_type and message.message_type != "text")  # an attachment

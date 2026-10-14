@@ -57,6 +57,10 @@
   "classify_group_chats",
   "ai_max_tokens",
   "min_length",
+  "section_voice",
+  "gemini_api_key",
+  "column_voice",
+  "gemini_model",
   "section_prompt",
   "ai_instructions",
   "optimize_instructions",
@@ -734,6 +738,28 @@
    "label": "AI Resumes After (hours)",
    "default": "24",
    "description": "After a rep replies in a chat, the AI stays out of it for this long. 0 keeps it paused until someone clicks Resume AI replies in the CRM."
+  },
+  {
+   "fieldname": "section_voice",
+   "fieldtype": "Section Break",
+   "label": "Voice Notes",
+   "collapsible": 1,
+   "description": "With a Google Gemini key, voice notes are transcribed so the agent can tag, answer and learn from them. Without it, voice notes go to the rep as they are."
+  },
+  {
+   "fieldname": "gemini_api_key",
+   "fieldtype": "Password",
+   "label": "Google Gemini API Key"
+  },
+  {
+   "fieldname": "column_voice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gemini_model",
+   "fieldtype": "Data",
+   "label": "Gemini Model",
+   "default": "gemini-2.5-flash"
   }
  ],
  "hide_toolbar": 1,

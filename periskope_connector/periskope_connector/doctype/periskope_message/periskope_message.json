@@ -20,6 +20,11 @@
   "sender_phone",
   "section_content",
   "body",
+  "transcript",
+  "is_deleted",
+  "deleted_on",
+  "edited_on",
+  "previous_body",
   "quoted_message_id",
   "section_ai",
   "ai_category",
@@ -517,6 +522,37 @@
    "label": "CRM WhatsApp Message",
    "read_only": 1,
    "description": "Its copy in the CRM WhatsApp tab."
+  },
+  {
+   "fieldname": "transcript",
+   "fieldtype": "Long Text",
+   "label": "Voice Note Transcript",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_deleted",
+   "fieldtype": "Check",
+   "label": "Deleted on WhatsApp",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "deleted_on",
+   "fieldtype": "Datetime",
+   "label": "Deleted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "edited_on",
+   "fieldtype": "Datetime",
+   "label": "Edited On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_body",
+   "fieldtype": "Small Text",
+   "label": "Text Before the Edit",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
