@@ -16,6 +16,7 @@ CONFIG = (
 	"Periskope Tag",
 	"Periskope Knowledge Entry",
 	"Periskope Suggestion",
+	"Periskope Chat",
 )
 QUEUE = ("Periskope Contact", "Periskope Group")
 LOGS = (

@@ -68,6 +68,7 @@
   "reply_working_hours_only",
   "reply_group_chats",
   "reply_max_per_chat_per_day",
+  "ai_resume_after_hours",
   "holding_message",
   "section_learning",
   "learning_lookback_days",
@@ -726,6 +727,13 @@
    "fieldname": "test_ai",
    "fieldtype": "Button",
    "label": "Test AI"
+  },
+  {
+   "fieldname": "ai_resume_after_hours",
+   "fieldtype": "Int",
+   "label": "AI Resumes After (hours)",
+   "default": "24",
+   "description": "After a rep replies in a chat, the AI stays out of it for this long. 0 keeps it paused until someone clicks Resume AI replies in the CRM."
   }
  ],
  "hide_toolbar": 1,

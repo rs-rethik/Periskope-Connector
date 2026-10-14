@@ -45,6 +45,7 @@
   "language",
   "section_crm",
   "crm_deal",
+  "whatsapp_message",
   "column_crm",
   "crm_lead",
   "link_status",
@@ -509,6 +510,13 @@
    "options": "\nAnswer\nHolding",
    "read_only": 1,
    "description": "Set when the AI assistant sent this message"
+  },
+  {
+   "fieldname": "whatsapp_message",
+   "fieldtype": "Data",
+   "label": "CRM WhatsApp Message",
+   "read_only": 1,
+   "description": "Its copy in the CRM WhatsApp tab."
   }
  ],
  "index_web_pages_for_search": 1,

@@ -19,7 +19,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
-from periskope_connector import answer, reminders, safety
+from periskope_connector import answer, chat, reminders, safety
 from periskope_connector.outbound import send as send_message
 from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
@@ -62,6 +62,8 @@ def on_message(doc) -> str:
 		if doc.direction == "Outgoing":
 			if doc.agent_reply:
 				return "own"
+			# A human answered: the rep takes the chat over and the AI stays out of it for a while.
+			chat.pause(doc.chat_id, doc.rep or "Administrator", "Rep replied")
 			return "cancelled" if cancel(doc.chat_id, _("A rep replied")) else ""
 		return schedule(doc)
 	except Exception:
@@ -74,6 +76,8 @@ def schedule(doc) -> str:
 	if not feature_on("enable_auto_reply", settings):
 		return ""
 	if doc.is_group and not settings.reply_group_chats:
+		return ""
+	if chat.is_paused(doc.chat_id):
 		return ""
 	if doc.message_type != "text" or not reminders.needs_reply(doc):
 		return ""
@@ -202,6 +206,8 @@ def process(name: str) -> str:
 
 	if not feature_on("enable_auto_reply", settings):
 		return end("Cancelled", _("Auto reply was switched off"))
+	if chat.is_paused(row.chat_id):
+		return end("Cancelled", _("A rep took this chat over"))
 
 	messages = frappe.get_all(
 		"Periskope Message",

@@ -351,10 +351,35 @@ def link_message(message: str) -> str:
 		)
 		if status in ("Linked", "Ambiguous"):
 			add_comment(message)
+		_after_link(message)
 		return status
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not link message {message} to the CRM")
 		return ""
+
+
+CHAT_FIELDS = [
+	"chat_id",
+	"chat_name",
+	"sender_name",
+	"direction",
+	"is_group",
+	"contact_number",
+	"org_phone",
+	"message_timestamp",
+	"crm_lead",
+	"crm_deal",
+]
+
+
+def _after_link(message: str):
+	"""Keep the chat row and the CRM WhatsApp tab in step with the message's link."""
+	from periskope_connector import chat, mirror
+
+	row = frappe.db.get_value("Periskope Message", message, CHAT_FIELDS, as_dict=True)
+	if row and row.chat_id:
+		chat.ensure(row)
+		mirror.upsert(message)
 
 
 def link_unlinked(limit: int = 5000) -> int:

@@ -100,6 +100,7 @@ def setup():
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
 		_ensure_assistant_defaults()
+		_ensure_crm_ui()
 	except Exception:
 		# A half-installed site must still be able to migrate; the gap shows in Health.
 		frappe.log_error(title="Periskope: install-time setup failed")
@@ -179,9 +180,15 @@ def _ensure_assistant_defaults():
 	for field, value in defaults.items():
 		if frappe.db.get_single_value("Periskope Settings", field) in (None, "", 0, "0"):
 			frappe.db.set_single_value("Periskope Settings", field, value)
-	for field in ("enable_classification", "enable_auto_reply", "enable_reply_reminders"):
+	# Seeded once only: 0 is a real choice for these, so a later migrate must not undo it.
+	for field, value in (
+		("enable_classification", 1),
+		("enable_auto_reply", 1),
+		("enable_reply_reminders", 1),
+		("ai_resume_after_hours", 24),
+	):
 		if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": field}):
-			frappe.db.set_single_value("Periskope Settings", field, 1)
+			frappe.db.set_single_value("Periskope Settings", field, value)
 	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
 	# once: an admin who switches it off later is not overridden by the next migrate.
 	if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": "test_mode"}):
@@ -249,3 +256,56 @@ def _ensure_working_hours():
 	for field, value in (("working_hours_start", "09:00:00"), ("working_hours_end", "19:00:00")):
 		if not frappe.db.get_single_value("Periskope Settings", field):
 			frappe.db.set_single_value("Periskope Settings", field, value)
+
+
+# The CRM lead and deal pages get one action: pause or resume the AI replies in their WhatsApp chats.
+FORM_SCRIPT = """class %(cls)s {
+	onLoad() {
+		this.periskopeAI()
+	}
+	periskopeAI() {
+		call("periskope_connector.api.crm.get_ai_state", { doctype: "%(dt)s", name: this.doc.name }).then((state) => {
+			if (!state || !state.chats) return
+			this._periskopePaused = state.paused
+			const label = state.paused ? __("Resume AI replies") : __("Pause AI replies")
+			const action = this.actions.find((a) => a.periskope)
+			if (action) {
+				action.label = label
+				return
+			}
+			this.actions.push({
+				periskope: true,
+				label,
+				onClick: () =>
+					call("periskope_connector.api.crm.set_ai_paused", {
+						doctype: "%(dt)s",
+						name: this.doc.name,
+						paused: this._periskopePaused ? 0 : 1,
+					}).then((next) => {
+						toast.success(next.paused ? __("AI replies paused") : __("AI replies resumed"))
+						this.periskopeAI()
+					}),
+			})
+		})
+	}
+}
+"""
+
+
+def _ensure_crm_ui():
+	"""The Periskope WhatsApp account (so the CRM shows its WhatsApp tab) and the lead / deal action."""
+	from periskope_connector.mirror import ensure_account
+
+	ensure_account()
+	if not frappe.db.exists("DocType", "CRM Form Script"):
+		return
+	for dt in ("CRM Deal", "CRM Lead"):
+		name = f"Periskope AI ({dt})"
+		script = FORM_SCRIPT % {"cls": dt.replace(" ", ""), "dt": dt}
+		if frappe.db.exists("CRM Form Script", name):
+			frappe.db.set_value("CRM Form Script", name, {"script": script, "enabled": 1})
+			continue
+		doc = frappe.get_doc(
+			{"doctype": "CRM Form Script", "dt": dt, "view": "Form", "enabled": 1, "script": script}
+		)
+		doc.insert(set_name=name, ignore_permissions=True)

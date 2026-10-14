@@ -55,6 +55,12 @@ doc_events = {
 # The Flow tab of the settings page draws the pipeline and edits its steps.
 doctype_js = {"Periskope Settings": "public/js/periskope_flow.js"}
 
+# The CRM's WhatsApp tab sends through Periskope for the Periskope account (frappe_whatsapp is optional:
+# the override is only loaded when its doctype exists).
+override_doctype_class = {
+	"WhatsApp Message": "periskope_connector.overrides.whatsapp_message.PeriskopeWhatsAppMessage",
+}
+
 # Scheduled Tasks
 # ---------------
 

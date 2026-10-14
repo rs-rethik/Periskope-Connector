@@ -54,3 +54,13 @@ def message_has_permission(user=None, doc=None, ptype="read") -> bool | None:
 		)
 		frappe.cache().set_value("periskope_rep_numbers:" + frappe.session.user, numbers)
 	return bool(numbers and doc.org_phone in numbers)
+
+
+CRM_RECORDS = ("CRM Lead", "CRM Deal")
+
+
+def require_record_access(doctype: str, name: str, ptype: str = "write"):
+	"""Sales users act on what they may open in the CRM: their own (or assigned) leads and deals."""
+	if doctype not in CRM_RECORDS:
+		frappe.throw(frappe._("Not a CRM lead or deal"), frappe.PermissionError)
+	frappe.get_doc(doctype, name).check_permission(ptype)
