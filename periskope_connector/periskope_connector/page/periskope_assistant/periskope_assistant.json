@@ -1,0 +1,27 @@
+{
+ "content": null,
+ "creation": "2026-10-14 18:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "",
+ "idx": 0,
+ "modified": "2026-10-14 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "periskope-assistant",
+ "owner": "Administrator",
+ "page_name": "periskope-assistant",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "WhatsApp Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Periskope Assistant"
+}
