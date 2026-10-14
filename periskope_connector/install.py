@@ -99,6 +99,7 @@ def setup():
 		_ensure_working_hours()
 		_ensure_keyword_rules()
 		_ensure_webhook_events()
+		_ensure_assistant_defaults()
 	except Exception:
 		# A half-installed site must still be able to migrate; the gap shows in Health.
 		frappe.log_error(title="Periskope: install-time setup failed")
@@ -160,9 +161,29 @@ def _ensure_webhook_events():
 	settings.save()
 
 
+def _ensure_assistant_defaults():
+	"""Single doctypes do not apply field defaults until saved, so store the starting values of the
+	AI Assistant tab once. The agent and the auto reply both start switched off."""
+	defaults = {
+		"learning_lookback_days": 14,
+		"learning_min_evidence": 3,
+		"suggestion_expiry_days": 7,
+		"suggestion_email_gap_hours": 6,
+		"reply_delay_minutes": 3,
+		"reply_delay_jitter_percent": 20,
+		"reply_min_confidence": 80,
+		"reply_working_hours_only": 1,
+		"reply_max_per_chat_per_day": 3,
+		"holding_message": "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly.",
+	}
+	for field, value in defaults.items():
+		if frappe.db.get_single_value("Periskope Settings", field) in (None, "", 0, "0"):
+			frappe.db.set_single_value("Periskope Settings", field, value)
+
+
 def _ensure_tags():
 	"""Create the starting tags on a site that has none. After that the team owns the list."""
-	from periskope_connector.tags import DEFAULT_TAGS, FALLBACK_DEFAULT, default_actions
+	from periskope_connector.tags import DASHBOARD_GROUPS, DEFAULT_TAGS, FALLBACK_DEFAULT, default_actions
 
 	if frappe.db.count("Periskope Tag"):
 		return
@@ -175,6 +196,7 @@ def _ensure_tags():
 				"active": 1,
 				"is_default": 1 if name == FALLBACK_DEFAULT else 0,
 				"sort_order": order * 10,
+				"dashboard_group": DASHBOARD_GROUPS.get(name, ""),
 				"actions": default_actions(name),
 			}
 		).insert(ignore_permissions=True)

@@ -38,6 +38,7 @@ Sales conversations usually live on each rep's phone, so management cannot see t
   * [Daily use](#daily-use)
   * [Customise it](#customise-it)
   * [The Flow dialog](#the-flow-dialog)
+  * [The AI assistant](#the-ai-assistant)
   * [Reports and dashboard](#reports-and-dashboard)
   * [Keeping it healthy](#keeping-it-healthy)
   * [Troubleshooting](#troubleshooting)
@@ -117,7 +118,7 @@ Your sales reps talk to customers on WhatsApp from their company numbers. Perisk
 4. **Reacts** to the tag with the actions you choose: create a lead, email people, add a timeline comment, give the rep a ToDo.
 5. **Escalates** when a customer waits too long for a reply: a bell for the rep, then a ToDo and an email to managers, then an email to the owner.
 
-> **Note** The app never sends a WhatsApp message. Reps keep using WhatsApp or WhatsApp Business as they do today.
+> **Note** The app sends a WhatsApp message only through the **Auto Reply** (see [The AI assistant](#the-ai-assistant)), and only when you switch it on. It is off by default. Reps keep using WhatsApp or WhatsApp Business as they do today.
 
 ##### Who uses it
 
@@ -397,9 +398,41 @@ What you can change in a panel:
 
 A tick adds the usual row (an email alert starts at High severity); open the tag to change severity, chat type or recipients. The default tag and the last active tag cannot be switched off. The buttons that open other pages (a tab, a list or a report) close the dialog first.
 
+### The AI assistant
+
+Two features on the **AI Assistant** tab of Periskope Settings. Both are off by default.
+
+#### The learning agent
+
+A background job (every 15 minutes) reads the conversations that have been quiet for an hour, and:
+
+1. **Builds the knowledge base.** Questions a rep answered clearly (minimum order, lead time, payment terms, how a process works) become **Periskope Knowledge Entry** rows with the status *Suggested*. A repeat of a question adds to the entry instead of making a new one; a different answer from the reps is suggested as a change; entries nobody used for 90 days are suggested for retirement.
+2. **Suggests setup changes.** From the same conversations, the human corrections, keyword alerts and escalations it suggests: a new tag or a better tag description, a new keyword rule or extra words, a new or adjusted SLA level, and a few settings (working hours, acknowledgement words, reply delay and so on). A suggestion needs evidence from at least *Minimum Evidence* different conversations. API keys, switches, webhook settings and email lists can never be suggested.
+3. **Asks you.** One email lists the pending suggestions with the reason and *Approve* / *Reject* buttons. The button opens a small page that asks for one confirming click (mail scanners open links on their own, so opening a link never decides). Each link works once and expires after *Suggestion Valid For* days. You can also approve in Desk from **Periskope Suggestion**.
+
+**Nothing is applied until it is approved.** Every suggestion stays as a **Periskope Suggestion** row with its outcome (Pending, Applied, Rejected, Failed, Expired): that list is the log. A rejected suggestion is not proposed again for 30 days. Every pass is a **Periskope Agent Run** row (messages read, entries and suggestions made, tokens used). *Run Agent Now* on the tab runs a pass at once. It uses the same AI key and monthly token budget as the tagging.
+
+#### Auto reply
+
+When **Enable Auto Reply** is on, a customer's text message in a 1-to-1 chat gets a reply after **Reply Delay** (plus up to *Random Variation* percent):
+
+- A newer message from the customer moves the timer; the reply reads everything the customer wrote since the last reply.
+- A message from a rep cancels the reply.
+- After the delay the assistant looks for the answer in the approved knowledge base entries, ERPNext items (price list rate and stock) and the customer's open sales orders. If the data answers it and the AI is at least *Minimum Confidence* sure, it sends that answer. Every number in the answer must come from the data or from what the customer wrote.
+- Otherwise it does not guess: it sends the **Holding Message**, gives the rep a ToDo and a bell, and opens a reply reminder so the SLA levels escalate if nobody picks it up. The holding message does not count as the rep's reply.
+
+Safeguards: groups are skipped unless *Reply in Groups* is on, replies are sent in working hours only (default), at most *Max Replies per Chat per Day* per chat, and an old message recovered by the back-fill is never answered. Each attempt is a **Periskope Auto Reply** row with the customer's text, the reply, the confidence and the sources used. Messages are sent through Periskope's send-message API from the number the customer wrote to.
+
 ### Reports and dashboard
 
-The **Periskope** workspace opens on a dashboard. The cards count messages today, customers waiting for a rep, high severity issues, new enquiries, complaints and payment issues, and AI tagging failures. The charts show messages per day, by tag, by sentiment and by severity.
+The **Periskope** workspace opens on a dashboard with the things that need attention first.
+
+- **Needs attention:** customers waiting for a rep reply, open escalations, high severity issues, new contacts in the queue, AI tagging failures, and the issues of the last 7 days.
+- **Overview:** messages today and the enquiries of the last 7 days, then charts of messages per day, by tag, by sentiment and by severity.
+- **Shortcuts:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, Tags, Reply Reminders, Contact Queue, Keyword Alerts and Webhook Logs.
+- **Reports:** every report below, and a list of all the app's pages.
+
+The *Enquiries* and *Issues* cards follow your tags, not fixed tag names. Each tag has a **Dashboard Group** field (Enquiry, Issue, or empty): a card counts the incoming messages of the last 7 days whose tag is in its group. A new site starts with `order_or_enquiry` as Enquiry and `quality_complaint` and `payment_issue` as Issue.
 
 ![The workspace with live counts and charts.](docs/manual/26-the-workspace-with-live-counts-and-chart.jpg)
 *The workspace with live counts and charts.*
@@ -487,6 +520,8 @@ Low: ordinary. Medium: a real problem that is not yet serious. High: an angry cu
 |---|---|
 | Tag waiting messages with the AI | Every 5 minutes, 20 messages |
 | Reply reminder and escalation check | Every 10 minutes, in working hours |
+| Learning agent (knowledge base, suggestions, approval email) | Every 15 minutes, when enabled |
+| Auto reply: send the replies that are due | Every minute, when enabled |
 | Re-queue webhook logs that were never saved | Every 30 minutes |
 | Catch up on missed messages | Every hour, last 24 hours |
 | Silent number check, token budget check, contact digest | Daily |
@@ -495,7 +530,7 @@ Low: ordinary. Medium: a real problem that is not yet serious. High: an angry cu
 
 ## Privacy
 
-Message text is sent to the AI provider you configure — Anthropic by default; the GLM/Z.ai and Jarvis options send it to those providers instead, so choose them only if that fits your policy. Only company numbers linked in Periskope are captured; personal or mixed-use numbers can be excluded on the ignore list, and staff should be told that business WhatsApp numbers are monitored for record-keeping. Raw webhook payloads are cleared after 90 days by default and message text can be given its own retention. Under India's DPDP Act 2023 the operator remains the data fiduciary for this processing.
+The learning agent and the auto reply send message text (and, for the reply, the matching item, price and order data) to the same AI provider. Message text is sent to the AI provider you configure — Anthropic by default; the GLM/Z.ai and Jarvis options send it to those providers instead, so choose them only if that fits your policy. Only company numbers linked in Periskope are captured; personal or mixed-use numbers can be excluded on the ignore list, and staff should be told that business WhatsApp numbers are monitored for record-keeping. Raw webhook payloads are cleared after 90 days by default and message text can be given its own retention. Under India's DPDP Act 2023 the operator remains the data fiduciary for this processing.
 
 ## Roadmap
 

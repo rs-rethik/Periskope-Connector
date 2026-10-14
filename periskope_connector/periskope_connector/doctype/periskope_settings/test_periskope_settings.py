@@ -389,25 +389,53 @@ class TestHealthFigures(FrappeTestCase):
 		self.assertNotEqual(health.get_health()["last_webhook"], "never")
 
 
-class TestNoOutboundMessaging(FrappeTestCase):
-	"""The hard boundary: nothing in this app may send a WhatsApp message, ever."""
+class TestOutboundMessagingBoundary(FrappeTestCase):
+	"""The hard boundary: the only code that may send a WhatsApp message is the auto reply
+	(autoreply.py, through client.send_message), and it sends nothing unless it is switched on."""
 
-	# Periskope's send-message REST surface; none of these may appear anywhere in the app.
-	SEND_MARKERS = ("messages/send", "send_message", "send-message", "chats/send", "/sendmessage")
+	SEND_MARKERS = (
+		"messages/send",
+		"message/send",
+		"send_message",
+		"send-message",
+		"chats/send",
+		"/sendmessage",
+	)
+	ALLOWED = ("client.py", "autoreply.py")
 
-	def test_no_send_message_call_exists_in_the_app(self):
+	def test_only_the_auto_reply_calls_send_message(self):
 		for path in APP.rglob("*.py"):
-			if "__pycache__" in str(path) or path.name.startswith("test_"):
+			if "__pycache__" in str(path) or path.name.startswith("test_") or path.name in self.ALLOWED:
 				continue
 			source = path.read_text()
 			for marker in self.SEND_MARKERS:
 				self.assertNotIn(marker, source, f"{path} looks like it sends messages")
 
-	def test_the_periskope_client_never_posts(self):
+	def test_the_periskope_client_posts_only_to_send_message(self):
 		source = (APP / "client.py").read_text()
-		self.assertIn('"GET"', source)  # reads chats and phones only
-		for method in ('"POST"', '"PUT"', '"PATCH"', '"DELETE"'):
+		self.assertIn('"GET"', source)
+		self.assertEqual(source.count('"POST"'), 1)
+		self.assertIn('"POST", "message/send"', source)
+		for method in ('"PUT"', '"PATCH"', '"DELETE"'):
 			self.assertNotIn(method, source)
+
+	def test_nothing_is_sent_while_auto_reply_is_off(self):
+		from periskope_connector import autoreply
+
+		frappe.db.savepoint("periskope_boundary_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_boundary_test")
+		frappe.db.set_single_value("Periskope Settings", "enable_auto_reply", 0)
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Auto Reply",
+				"chat_id": "919600000999@c.us",
+				"status": "Waiting",
+				"due_on": "2020-01-01 00:00:00",
+			}
+		).insert()
+		with patch.object(autoreply, "send_message") as send:
+			self.assertEqual(autoreply.run_due(), 0)
+		send.assert_not_called()
 
 
 class TestDisabledIntegration(FrappeTestCase):

@@ -63,6 +63,11 @@ scheduler_events = {
 		"*/10 * * * *": ["periskope_connector.reminders.run"],
 		# Classify up to 20 waiting customer messages with the AI.
 		"*/5 * * * *": ["periskope_connector.ai.classifier.run_batch"],
+		# The background learning agent: reads new conversations, builds the knowledge base and
+		# emails suggested changes for approval (nothing is applied without a manager's approval).
+		"*/15 * * * *": ["periskope_connector.agent.run"],
+		# Send the AI replies that are due (after the delay; a rep's reply or a new message moves or cancels them).
+		"* * * * *": ["periskope_connector.autoreply.run_due"],
 		# Re-queue webhook logs whose background job never ran (dead-letter recovery).
 		"*/30 * * * *": ["periskope_connector.messages.sweep_unprocessed"],
 		# Read the chat history from Periskope and save messages a missed webhook never delivered.

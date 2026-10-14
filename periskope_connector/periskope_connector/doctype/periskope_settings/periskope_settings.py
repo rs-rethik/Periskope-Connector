@@ -28,6 +28,24 @@ class PeriskopeSettings(Document):
 		if not (self.ai_instructions or "").strip():
 			self.ai_instructions = DEFAULT_INSTRUCTIONS
 		self.validate_reminders()
+		self.validate_assistant()
+
+	def validate_assistant(self):
+		from frappe.utils import validate_email_address
+
+		if flt(self.reply_delay_minutes) < 0 or flt(self.reply_delay_minutes) > 120:
+			frappe.throw(_("Reply Delay must be between 0 and 120 minutes"))
+		if not 0 <= (self.reply_delay_jitter_percent or 0) <= 100:
+			frappe.throw(_("Random Variation must be between 0 and 100 percent"))
+		if not 0 <= flt(self.reply_min_confidence) <= 100:
+			frappe.throw(_("Minimum Confidence must be between 0 and 100"))
+		emails = [e.strip() for e in re.split(r"[,\n;]", self.suggestion_recipients or "") if e.strip()]
+		for email in emails:
+			if not validate_email_address(email):
+				frappe.throw(_("{0} is not a valid email address").format(email))
+		self.suggestion_recipients = ", ".join(emails)
+		if self.enable_auto_reply and not (self.holding_message or "").strip():
+			frappe.throw(_("Set a Holding Message before switching Auto Reply on"))
 
 	def validate_reminders(self):
 		from frappe.utils import get_time, validate_email_address

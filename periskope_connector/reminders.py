@@ -169,10 +169,20 @@ def needs_reply(message, extra_words: list[str] | None = None) -> bool:
 	return True
 
 
+def _is_reply(m) -> bool:
+	"""A message from our side that answers the customer. The assistant's holding message does not:
+	it only says a rep will come back."""
+	return (
+		m.direction == "Outgoing"
+		and bool(m.message_timestamp)
+		and getattr(m, "agent_reply", None) != "Holding"
+	)
+
+
 def unanswered(messages: list, extra_words: list[str] | None = None) -> list:
 	"""Customer messages, oldest first, sent after the rep's last message and needing a reply."""
 	last_reply = max(
-		(m.message_timestamp for m in messages if m.direction == "Outgoing" and m.message_timestamp),
+		(m.message_timestamp for m in messages if _is_reply(m)),
 		default=None,
 	)
 	return [
@@ -354,7 +364,7 @@ def close(reminder, now: datetime, messages: list | None = None, cfg=None):
 	values = {"status": "Closed", "closed_on": now}
 	if messages and cfg:
 		reply = max(
-			(m.message_timestamp for m in messages if m.direction == "Outgoing" and m.message_timestamp),
+			(m.message_timestamp for m in messages if _is_reply(m)),
 			default=None,
 		)
 		if reply:
@@ -444,6 +454,7 @@ def _run(now: datetime | None) -> dict:
 			"classification_status",
 			"needs_reply",
 			"severity",
+			"agent_reply",
 		],
 		order_by="message_timestamp asc",
 	)

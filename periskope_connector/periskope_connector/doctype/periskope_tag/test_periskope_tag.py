@@ -1,11 +1,13 @@
 """Tests for the Periskope Tag doctype and the code that works on it."""
 
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, now_datetime
 
-from periskope_connector import actions, install, messages, tags
+from periskope_connector import actions, dashboard, install, messages, tags
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system
 from periskope_connector.tests.utils import event
@@ -138,6 +140,11 @@ class TestTagActions(FrappeTestCase):
 		self.mail.assert_not_called()
 
 	def test_the_starting_actions_match_the_old_behaviour(self):
+		# Start from an empty table, as on a new site: the team's own edits on this site must not count.
+		frappe.db.delete("Periskope Tag Action")
+		frappe.db.delete("Periskope Tag")
+		install._ensure_tags()
+
 		def rows(tag):
 			return {
 				(r.action, r.min_severity, r.chat_type) for r in frappe.get_doc("Periskope Tag", tag).actions
@@ -233,3 +240,61 @@ class TestTagActions(FrappeTestCase):
 			self._tag_with([])
 			self.assertIsNone(timeline_comments.add_comment(doc.name))
 		self.assertIn("general", tags.names())
+
+
+class TestDashboardGroups(FrappeTestCase):
+	"""The workspace cards count the tags in a dashboard group, not fixed tag names."""
+
+	def setUp(self):
+		for target in (
+			patch.object(frappe.db, "commit"),
+			patch("periskope_connector.messages.fetch_chat_name", lambda *a, **k: ""),
+		):
+			target.start()
+			self.addCleanup(target.stop)
+		frappe.db.savepoint("periskope_dashboard_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_dashboard_test")
+		install._ensure_tags()
+
+	def _message(self, tag, message_id):
+		now = datetime.now(timezone.utc).isoformat()
+		name = messages.create_message(
+			event(message_id=message_id, chat_id="919000000088@c.us", timestamp=now)
+		)
+		frappe.db.set_value("Periskope Message", name, "ai_category", tag)
+		return name
+
+	def test_the_starting_tags_are_grouped(self):
+		groups = {
+			t.name: t.dashboard_group
+			for t in frappe.get_all("Periskope Tag", fields=["name", "dashboard_group"])
+		}
+		self.assertEqual(groups["order_or_enquiry"], "Enquiry")
+		self.assertEqual((groups["quality_complaint"], groups["payment_issue"]), ("Issue", "Issue"))
+		self.assertFalse(groups["general"])
+
+	def test_a_card_counts_the_recent_messages_of_the_tags_in_its_group(self):
+		before = dashboard.issues()["value"]
+		self._message("quality_complaint", "dg_1")
+		self._message("general", "dg_2")  # no group: not counted
+		self.assertEqual(dashboard.issues()["value"], before + 1)
+
+	def test_a_tag_moved_into_a_group_is_counted_at_once(self):
+		before = dashboard.enquiries()["value"]
+		self._message("sample_request", "dg_3")
+		self.assertEqual(dashboard.enquiries()["value"], before)
+		recent = frappe.db.count(
+			"Periskope Message",
+			{
+				"ai_category": "sample_request",
+				"direction": "Incoming",
+				"message_timestamp": [">=", add_days(now_datetime(), -dashboard.DAYS)],
+			},
+		)  # includes the one above, and any the site already has
+		frappe.db.set_value("Periskope Tag", "sample_request", "dashboard_group", "Enquiry")
+		self.assertEqual(dashboard.enquiries()["value"], before + recent)
+
+	def test_the_card_opens_the_list_filtered_to_the_group(self):
+		result = dashboard.issues()
+		self.assertEqual(result["route"], ["List", "Periskope Message"])
+		self.assertIn("quality_complaint", result["route_options"]["ai_category"][1])

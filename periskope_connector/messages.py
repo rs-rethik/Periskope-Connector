@@ -6,6 +6,8 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
+from periskope_connector.autoreply import match_sent
+from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
 from periskope_connector.keywords import check_message
@@ -91,10 +93,14 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	else:
 		skip = "Not a text message" if not is_text else analysis_skip_reason(data.get("body"))
 
+	# Our own assistant's message arrives through the webhook like any other from our number.
+	agent_reply = match_sent(chat_id, data.get("body")) if from_me else ""
+
 	doc = frappe.get_doc(
 		{
 			"doctype": "Periskope Message",
 			"message_id": message_id,
+			"agent_reply": agent_reply,
 			# Only the customer's text chats are analysed, and tiny ones ('ok', 'done', emoji) are not
 			# worth the tokens: they are marked skipped right away and never sent to the AI. The rest
 			# wait for the scheduled job (ai/classifier.py, every 5 minutes).
@@ -139,7 +145,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		frappe.db.rollback()
 		return None
 
-	if from_me:
+	if from_me and agent_reply != "Holding":
 		# The rep has answered: the customer's earlier messages in this chat are replied to.
 		frappe.db.sql(
 			"""update `tabPeriskope Message` set replied = 1
@@ -157,6 +163,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		ensure_contact(doc)
 	if not from_me and (doc.body or "").strip():
 		check_message(doc.name)
+	autoreply_on_message(doc)
 
 	return doc.name
 

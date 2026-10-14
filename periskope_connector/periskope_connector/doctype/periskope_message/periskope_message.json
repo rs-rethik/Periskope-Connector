@@ -68,7 +68,8 @@
   "performed_by",
   "column_meta",
   "webhook_log",
-  "raw_payload"
+  "raw_payload",
+  "agent_reply"
  ],
  "fields": [
   {
@@ -500,6 +501,14 @@
    "fieldtype": "Check",
    "label": "High Severity Alert Sent",
    "read_only": 1
+  },
+  {
+   "fieldname": "agent_reply",
+   "fieldtype": "Select",
+   "label": "Agent Reply",
+   "options": "\nAnswer\nHolding",
+   "read_only": 1,
+   "description": "Set when the AI assistant sent this message"
   }
  ],
  "index_web_pages_for_search": 1,

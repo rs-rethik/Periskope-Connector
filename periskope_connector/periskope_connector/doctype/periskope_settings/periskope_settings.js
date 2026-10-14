@@ -55,6 +55,28 @@ frappe.ui.form.on("Periskope Settings", {
 });
 
 frappe.ui.form.on("Periskope Settings", {
+	// Button on the AI Assistant tab: one pass of the learning agent now, instead of waiting 15 minutes.
+	run_agent_now(frm) {
+		with_saved(frm, () => {
+			frappe.call({
+				method: "periskope_connector.agent.run_now",
+				freeze: true,
+				freeze_message: __("The agent is reading new conversations..."),
+				callback(r) {
+					const out = r.message || {};
+					frappe.msgprint(
+						out.skipped
+							? __("Skipped: {0}", [out.skipped])
+							: __(
+									"Read {0} message(s), learned {1} thing(s), {2} suggestion(s) now waiting for approval.",
+									[out.messages || 0, out.knowledge || 0, out.suggestions || 0]
+							  )
+					);
+				},
+			});
+		});
+	},
+
 	// Button under "Instructions for the AI". Nothing changes until the user accepts the result.
 	optimize_instructions(frm) {
 		const ask = new frappe.ui.Dialog({

@@ -40,6 +40,14 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 	return response.json()
 
 
+def send_message(chat_id: str, text: str, phone: str) -> dict:
+	"""Send a WhatsApp text from one of the linked numbers (POST /message/send). The reply carries a
+	queue id, not the final delivery state: Periskope queues the message and sends it itself."""
+	if not chat_id or not text or not phone:
+		frappe.throw(_("A chat, a text and a sending number are needed to send a message"))
+	return request("POST", "message/send", phone=phone, json={"chat_id": chat_id, "message": text})
+
+
 def fetch_chat_name(chat_id: str, phone: str | None = None) -> str:
 	"""The name of a WhatsApp chat from Periskope (the group name, or a contact's name), or "".
 

@@ -78,6 +78,27 @@
   "comment_mode",
   "burst_minutes",
   "reps_see_own_numbers",
+  "tab_assistant",
+  "section_agent",
+  "enable_agent",
+  "learning_lookback_days",
+  "learning_min_evidence",
+  "column_agent",
+  "suggestion_recipients",
+  "suggestion_expiry_days",
+  "suggestion_email_gap_hours",
+  "run_agent_now",
+  "section_auto_reply",
+  "enable_auto_reply",
+  "reply_delay_minutes",
+  "reply_delay_jitter_percent",
+  "reply_min_confidence",
+  "column_reply",
+  "reply_working_hours_only",
+  "reply_group_chats",
+  "reply_max_per_chat_per_day",
+  "section_holding",
+  "holding_message",
   "tab_health",
   "section_health",
   "health_last_webhook",
@@ -591,6 +612,129 @@
    "in_list_view": 1,
    "label": "Periskope API Address",
    "reqd": 1
+  },
+  {
+   "fieldname": "tab_assistant",
+   "fieldtype": "Tab Break",
+   "label": "AI Assistant"
+  },
+  {
+   "fieldname": "section_agent",
+   "fieldtype": "Section Break",
+   "label": "Learning Agent",
+   "description": "A background agent reads new conversations, builds the knowledge base and suggests changes to the tags, keyword rules, SLA levels and settings. Nothing is applied until a manager approves it."
+  },
+  {
+   "fieldname": "enable_agent",
+   "fieldtype": "Check",
+   "label": "Enable Learning Agent"
+  },
+  {
+   "fieldname": "learning_lookback_days",
+   "fieldtype": "Int",
+   "label": "First Look-back (days)",
+   "default": "14",
+   "description": "How far back the agent reads the first time it runs"
+  },
+  {
+   "fieldname": "learning_min_evidence",
+   "fieldtype": "Int",
+   "label": "Minimum Evidence",
+   "default": "3",
+   "description": "A suggestion must be based on at least this many messages"
+  },
+  {
+   "fieldname": "column_agent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "suggestion_recipients",
+   "fieldtype": "Small Text",
+   "label": "Approval Emails",
+   "description": "Who gets the Approve / Reject emails. Empty means the Manager Emails."
+  },
+  {
+   "fieldname": "suggestion_expiry_days",
+   "fieldtype": "Int",
+   "label": "Suggestion Valid For (days)",
+   "default": "7"
+  },
+  {
+   "fieldname": "suggestion_email_gap_hours",
+   "fieldtype": "Int",
+   "label": "Hours Between Emails",
+   "default": "6",
+   "description": "New suggestions are sent together, not one email each"
+  },
+  {
+   "fieldname": "run_agent_now",
+   "fieldtype": "Button",
+   "label": "Run Agent Now"
+  },
+  {
+   "fieldname": "section_auto_reply",
+   "fieldtype": "Section Break",
+   "label": "Auto Reply"
+  },
+  {
+   "fieldname": "enable_auto_reply",
+   "fieldtype": "Check",
+   "label": "Enable Auto Reply",
+   "description": "Reply to customers from the system's data after a delay. Off means no message is ever sent by the app."
+  },
+  {
+   "fieldname": "reply_delay_minutes",
+   "precision": "1",
+   "fieldtype": "Float",
+   "label": "Reply Delay (minutes)",
+   "default": "3",
+   "description": "Wait this long after the customer's last message"
+  },
+  {
+   "fieldname": "reply_delay_jitter_percent",
+   "fieldtype": "Int",
+   "label": "Random Variation (%)",
+   "default": "20",
+   "description": "Adds up to this much extra delay so replies do not look robotic"
+  },
+  {
+   "fieldname": "reply_min_confidence",
+   "fieldtype": "Percent",
+   "label": "Minimum Confidence",
+   "default": "80",
+   "description": "Below this the holding message is sent instead of an answer"
+  },
+  {
+   "fieldname": "column_reply",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reply_working_hours_only",
+   "fieldtype": "Check",
+   "label": "Only in Working Hours",
+   "default": "1"
+  },
+  {
+   "fieldname": "reply_group_chats",
+   "fieldtype": "Check",
+   "label": "Reply in Groups"
+  },
+  {
+   "fieldname": "reply_max_per_chat_per_day",
+   "fieldtype": "Int",
+   "label": "Max Replies per Chat per Day",
+   "default": "3"
+  },
+  {
+   "fieldname": "section_holding",
+   "fieldtype": "Section Break",
+   "label": "Holding Message"
+  },
+  {
+   "fieldname": "holding_message",
+   "fieldtype": "Small Text",
+   "label": "Holding Message",
+   "default": "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
   }
  ],
  "hide_toolbar": 1,

@@ -9,6 +9,7 @@
   "active",
   "is_default",
   "sort_order",
+  "dashboard_group",
   "description",
   "section_actions",
   "actions"
@@ -47,6 +48,13 @@
    "fieldtype": "Int",
    "label": "Sort Order",
    "description": "The order the tags are listed to the AI."
+  },
+  {
+   "fieldname": "dashboard_group",
+   "fieldtype": "Select",
+   "label": "Dashboard Group",
+   "options": "\nEnquiry\nIssue",
+   "description": "Which workspace card counts this tag: Enquiries or Issues. Leave empty for neither."
   },
   {
    "fieldname": "description",

@@ -1001,6 +1001,11 @@
 			frm.add_custom_button(__("Flow"), () => openFlow(frm))
 				.removeClass("btn-default")
 				.addClass("btn-primary");
+			// the workspace shortcut opens the settings with ?flow=1: show the dialog straight away
+			if (new URLSearchParams(window.location.search).get("flow") === "1") {
+				window.history.replaceState(null, "", window.location.pathname);
+				openFlow(frm);
+			}
 		},
 		after_save(frm) {
 			if (frm._pf && frm._pf.dialog && frm._pf.dialog.display) load(frm);
