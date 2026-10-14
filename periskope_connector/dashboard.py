@@ -5,8 +5,9 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, now_datetime
 
+from periskope_connector.api.permission import require_manager
+
 DAYS = 7
-ROLES = ("System Manager", "Sales Manager", "WhatsApp Manager")
 
 
 def _count_group(group: str) -> dict:
@@ -31,12 +32,12 @@ def _count_group(group: str) -> dict:
 @frappe.whitelist()
 def enquiries() -> dict:
 	"""Incoming messages of the last 7 days whose tag is in the Enquiry group."""
-	frappe.only_for(ROLES)
+	require_manager()
 	return _count_group("Enquiry")
 
 
 @frappe.whitelist()
 def issues() -> dict:
 	"""Incoming messages of the last 7 days whose tag is in the Issue group."""
-	frappe.only_for(ROLES)
+	require_manager()
 	return _count_group("Issue")

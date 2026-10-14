@@ -126,9 +126,17 @@ class TestSystemWrites(FrappeTestCase):
 			source = inspect.getsource(fn)
 			if fn.__name__ == "receive":
 				self.assertIn("_has_valid_signature", source)  # guests allowed, signature required
+			elif "decide_by_token" in source:
+				pass  # the emailed link: the single-use token is the credential
 			else:
-				# every other endpoint must gate the caller (System Manager, or a manager tuple/constant)
-				self.assertIn("frappe.only_for(", source, fn.__name__)
+				# every other endpoint gates the caller (api/permission.py)
+				self.assertTrue(
+					any(
+						check in source
+						for check in ("require_admin(", "require_manager(", "require_record_access(")
+					),
+					fn.__name__,
+				)
 
 	def test_the_whole_guest_ingest_chain_works_without_any_user(self):
 		"""Webhook log -> message -> AI tags: a queued job runs as the user who queued it, which

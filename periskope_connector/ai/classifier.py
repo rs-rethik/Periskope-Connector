@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime
 
 from periskope_connector import actions, tags
+from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
 from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system, save_as_system
@@ -646,7 +647,7 @@ def classify_pending(limit: int = 500):
 
 @frappe.whitelist()
 def reclassify(message: str) -> None:
-	frappe.only_for("System Manager")
+	require_admin()
 	_mark(message, classification_status="Pending", classification_attempts=0, classification_error="")
 	frappe.enqueue(
 		"periskope_connector.ai.classifier.classify",

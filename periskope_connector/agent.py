@@ -17,6 +17,7 @@ from frappe.utils import add_days, get_datetime, now_datetime
 
 from periskope_connector import knowledge, learner, suggestions
 from periskope_connector.ai import assistant
+from periskope_connector.api.permission import require_admin
 from periskope_connector.health import month_tokens
 from periskope_connector.system import insert_as_system
 
@@ -166,5 +167,5 @@ def _pass(settings) -> dict:
 
 @frappe.whitelist()
 def run_now() -> dict:
-	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	require_admin()
 	return run(force=True)

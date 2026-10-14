@@ -18,6 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, escape_html, get_datetime, now_datetime
 
+from periskope_connector.api.permission import require_manager
 from periskope_connector.system import insert_as_system, save_as_system
 
 KINDS = ("Tag", "Keyword Rule", "SLA Level", "Setting", "Knowledge Entry")
@@ -387,7 +388,7 @@ def send_digest(force: bool = False) -> int:
 @frappe.whitelist()
 def decide(name: str, decision: str) -> str:
 	"""Approve or reject from the desk (managers only)."""
-	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	require_manager()
 	doc = frappe.get_doc("Periskope Suggestion", name)
 	if doc.status != "Pending":
 		frappe.throw(_("This suggestion is already {0}").format(doc.status.lower()))
