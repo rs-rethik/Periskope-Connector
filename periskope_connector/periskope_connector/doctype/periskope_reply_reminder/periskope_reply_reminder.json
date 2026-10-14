@@ -21,6 +21,7 @@
   "message_preview",
   "last_message",
   "todo",
+  "crm_task",
   "chat_id",
   "fired_rows"
  ],
@@ -149,6 +150,13 @@
    "read_only": 1,
    "hidden": 1,
    "description": "The SLA steps already taken in this waiting period, one per line."
+  },
+  {
+   "fieldname": "crm_task",
+   "fieldtype": "Link",
+   "options": "CRM Task",
+   "label": "CRM Task",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

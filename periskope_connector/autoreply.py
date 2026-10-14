@@ -19,7 +19,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
-from periskope_connector import answer, chat, reminders, safety
+from periskope_connector import answer, chat, crm_context, reminders, safety, writeback
+from periskope_connector.ai import analyse
 from periskope_connector.outbound import send as send_message
 from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
@@ -170,15 +171,17 @@ def run_due() -> int:
 
 
 def _follow_up(row, pending: list, rep: str | None):
-	"""The rep must pick this up: a reminder (so the SLA ladder follows) and a ToDo and a bell."""
+	"""The rep must pick this up: a reminder (so the SLA ladder follows), a task and a bell. On a
+	chat with a lead or deal these are a CRM Task and a CRM notification, so the rep sees them in
+	the CRM; otherwise a desk ToDo and notification."""
 	cfg = reminders.get_config()
 	now = now_datetime()
 	reminder = reminders._open_reminder(row.chat_id) or reminders.create_reminder(
 		row.chat_id, pending, rep, cfg, now, 0.0
 	)
-	if rep:
+	if rep or crm_context.record_of(row.chat_id):
 		reminders._create_todo(reminder, 0.0)
-		reminders._bell(rep, pending[-1], 0.0)
+		reminders._bell(rep, pending[-1], 0.0, row.chat_id)
 	return reminder.name
 
 
@@ -243,7 +246,9 @@ def process(name: str) -> str:
 
 	result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
 	try:
-		result = answer.build(customer_text, row.contact_number or "", bool(pending[-1].is_group))
+		result = answer.build(
+			customer_text, row.contact_number or "", bool(pending[-1].is_group), chat_id=row.chat_id
+		)
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not prepare the answer for {row.chat_id}")
 
@@ -300,6 +305,18 @@ def process(name: str) -> str:
 	if not confident:
 		values["follow_up"] = _follow_up(row, pending, rep)
 	frappe.db.set_value("Periskope Auto Reply", name, values)
+	# What the rep sees on the lead or deal: the reply (or that a rep must answer) on the timeline,
+	# and soon after an updated summary, notes and follow-up (ai/analyse.py).
+	if confident:
+		writeback.timeline(row.chat_id, _("AI replied on WhatsApp: {0}").format(text))
+	else:
+		writeback.timeline(
+			row.chat_id,
+			_(
+				"AI could not answer from the data and told the customer a rep will reply. Customer asked: {0}"
+			).format(customer_text[:500]),
+		)
+	analyse.queue(row.chat_id)
 	for source in result["used_sources"]:
 		if source.startswith("KB:"):
 			frappe.db.set_value(

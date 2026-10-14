@@ -42,6 +42,8 @@ has_permission = {
 doc_events = {
 	# Test mode: drop every email recipient that is not on the allow list (safety.py).
 	"Email Queue": {"before_insert": "periskope_connector.safety.filter_email_queue"},
+	# A rep marking the WhatsApp reply task done closes the reply reminder.
+	"CRM Task": {"on_update": "periskope_connector.writeback.on_task_update"},
 	"CRM Lead": {
 		"after_insert": "periskope_connector.linking.update_phone_fields",
 		"on_update": "periskope_connector.linking.update_phone_fields",

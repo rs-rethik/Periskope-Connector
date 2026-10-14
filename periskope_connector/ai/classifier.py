@@ -512,6 +512,10 @@ def apply_result(doc, result: dict):
 	save_as_system(doc)
 	link_message(doc.name)
 	actions.run(doc.name)
+	# Keep the CRM record's summary, notes and follow-ups current (throttled per chat).
+	from periskope_connector.ai import analyse
+
+	analyse.queue(doc.chat_id)
 
 
 def _mark(name: str, **values):

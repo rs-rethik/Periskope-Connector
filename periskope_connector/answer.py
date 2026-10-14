@@ -15,7 +15,7 @@ import re
 import frappe
 from frappe.utils import flt
 
-from periskope_connector import knowledge
+from periskope_connector import crm_context, knowledge
 from periskope_connector.ai import assistant
 from periskope_connector.linking import number_key
 
@@ -54,7 +54,8 @@ SYSTEM_PROMPT = """You write the reply to a customer's WhatsApp message for a co
 - If the customer asks several things and the data covers only some, set can_answer to false.
 - Reply in the customer's language and style, short and friendly, plain text, no markdown, no greeting more than one word, no signature.
 - confidence is 0-100: how sure you are the answer is fully supported by the data.
-- used_sources lists the ids of the sources you used."""
+- used_sources lists the ids of the sources you used.
+- CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source."""
 
 SCHEMA = {
 	"type": "object",
@@ -212,16 +213,23 @@ def grounded(answer: str, sources: list[dict], customer_text: str) -> bool:
 	return _numbers(answer) <= allowed
 
 
-def build(customer_text: str, contact_number: str = "", is_group: bool = False) -> dict:
+def build(customer_text: str, contact_number: str = "", is_group: bool = False, chat_id: str = "") -> dict:
 	"""{can_answer, answer, confidence, used_sources, sources}. can_answer is False when there is
-	no data, the AI is unsure, or the answer fails the checks."""
-	sources = gather(customer_text, contact_number, is_group)
+	no data, the AI is unsure, or the answer fails the checks.
+
+	With the chat known, the CRM record is read first: its last quotation and deal stage join the
+	data (they may be quoted), the rest is internal context (crm_context.py)."""
+	context = crm_context.build(chat_id) if chat_id else None
+	sources = gather(customer_text, contact_number, is_group) + crm_context.customer_sources(context)
 	result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": sources}
 	if not sources:
 		return result
 	data = "\n".join(f"[{s['id']}] {s['title']}: {s['text']}" for s in sources)
+	background = (
+		f"CRM CONTEXT (internal, never quote):\n{crm_context.internal_text(context)}\n\n" if context else ""
+	)
 	reply = assistant.complete_json(
-		SYSTEM_PROMPT, f"DATA:\n{data}\n\nCUSTOMER MESSAGES:\n{customer_text}", SCHEMA, 800
+		SYSTEM_PROMPT, f"{background}DATA:\n{data}\n\nCUSTOMER MESSAGES:\n{customer_text}", SCHEMA, 800
 	)
 	ids = {s["id"] for s in sources}
 	used = [i for i in reply.get("used_sources") or [] if i in ids]

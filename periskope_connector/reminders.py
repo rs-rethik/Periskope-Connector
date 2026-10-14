@@ -223,8 +223,20 @@ def _done(reminder) -> set[str]:
 	return {key for key in (reminder.fired_rows or "").split("\n") if key}
 
 
-def _bell(rep: str | None, last, hours: float):
-	"""L1: a notification for the rep, no email yet."""
+def _bell(rep: str | None, last, hours: float, chat_id: str | None = None):
+	"""L1: a notification for the rep, no email yet. In the CRM bell when the chat has a lead or
+	deal (reps work in the CRM), else a desk notification."""
+	from periskope_connector import crm_context, writeback
+
+	if chat_id and crm_context.record_of(chat_id):
+		writeback.notify(
+			chat_id,
+			_("A customer is waiting for your WhatsApp reply: {0}").format(
+				(last.body or _("(attachment)"))[:120]
+			),
+			user=rep if rep and rep != "Administrator" else None,
+		)
+		return
 	if not rep or not frappe.db.get_value("User", rep, "enabled"):
 		return
 	frappe.get_doc(
@@ -319,6 +331,24 @@ def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: date
 
 
 def _create_todo(reminder, hours: float) -> bool:
+	"""The rep's to-do for a waiting customer: a CRM Task on the lead or deal (one per chat, shared
+	with the auto reply's holding-message task), else a desk ToDo."""
+	from periskope_connector import crm_context, writeback
+
+	if crm_context.record_of(reminder.chat_id):
+		task = writeback.upsert_task(
+			reminder.chat_id,
+			"reply",
+			_("Reply to the customer on WhatsApp: {0}").format((reminder.message_preview or "")[:80]),
+			_("The customer has been waiting {0:.1f} working hours since {1}. Latest message: {2}").format(
+				hours, reminder.waiting_since, reminder.message_preview or ""
+			),
+			priority="High" if hours >= 3 else "Medium",
+			assignee=reminder.rep if reminder.rep and reminder.rep != "Administrator" else None,
+		)
+		if task:
+			reminder.db_set("crm_task", task)
+		return True
 	if reminder.todo:
 		return True
 	todo = frappe.get_doc(
@@ -346,7 +376,7 @@ def perform(row, reminder, last, cfg, now: datetime, hours: float) -> bool:
 	that could not be sent)."""
 	action = row.action
 	if action == NOTIFY_REP:
-		_bell(reminder.rep, last, hours)
+		_bell(reminder.rep, last, hours, reminder.chat_id)
 		return True
 	if action == TODO_FOR_REP:
 		return _create_todo(reminder, hours)
@@ -379,6 +409,9 @@ def close(reminder, now: datetime, messages: list | None = None, cfg=None):
 	reminder.db_set(values)
 	if reminder.todo and frappe.db.get_value("ToDo", reminder.todo, "status") == "Open":
 		frappe.db.set_value("ToDo", reminder.todo, "status", "Closed")
+	task = reminder.get("crm_task")
+	if task and frappe.db.get_value("CRM Task", task, "status") in ("Backlog", "Todo", "In Progress"):
+		frappe.db.set_value("CRM Task", task, "status", "Done")
 
 
 # --- The engine --------------------------------------------------------------------------------------

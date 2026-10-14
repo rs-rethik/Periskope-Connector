@@ -21,7 +21,7 @@ TODO_FOR_REP = "ToDo for Rep"
 
 # The message fields each step reads. The message is only read here, so no document is built.
 TAG_FIELDS = ["ai_category", "severity", "is_group"]
-TODO_FIELDS = ["rep", "severity", "ai_summary", "body", "ai_category"]
+TODO_FIELDS = ["rep", "severity", "ai_summary", "body", "ai_category", "chat_id"]
 
 SEVERITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
 ONE_TO_ONE, GROUP = "1-to-1", "Group"
@@ -70,9 +70,21 @@ def run(message: str):
 
 
 def create_rep_todo(message: str) -> str | None:
-	"""A ToDo for the rep to look at this message. Never raises; one per message."""
+	"""A task for the rep to look at this message: a CRM Task on the lead or deal (one per chat and
+	tag, updated while open), else a desk ToDo (one per message). Never raises."""
 	try:
 		doc = frappe.db.get_value("Periskope Message", message, TODO_FIELDS, as_dict=True)
+		if doc and doc.chat_id:
+			from periskope_connector import crm_context, writeback
+
+			if crm_context.record_of(doc.chat_id):
+				return writeback.upsert_task(
+					doc.chat_id,
+					f"tag:{doc.ai_category}",
+					doc.ai_summary or (doc.body or "")[:100],
+					_("WhatsApp message tagged {0}: {1}").format(doc.ai_category, (doc.body or "")[:500]),
+					priority="High" if doc.severity == "High" else "Medium",
+				)
 		if not doc or not doc.rep or not frappe.db.get_value("User", doc.rep, "enabled"):
 			return None
 		if frappe.db.exists(

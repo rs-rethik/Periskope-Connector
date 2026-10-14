@@ -28,6 +28,7 @@ LOGS = (
 	"Periskope Webhook Log",
 	"Periskope Keyword Alert",
 	"Periskope Reply Reminder",
+	"Periskope CRM Record",
 )
 CHECKS = {"require_admin", "require_manager", "require_record_access"}
 SELF_AUTHENTICATED = {("api/webhook.py", "receive"), ("api/suggestions.py", "decide")}
