@@ -486,6 +486,9 @@ class TestFlowTab(FrappeTestCase):
 			"waiting",
 			"sla",
 			"people",
+			"autoreply",
+			"crm",
+			"agent",
 		}
 		self.assertEqual(set(data), steps | {"settings"})  # the settings the panels edit
 		for name in steps - {"actions"}:

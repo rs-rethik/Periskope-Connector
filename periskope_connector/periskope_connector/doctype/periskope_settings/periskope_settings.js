@@ -286,6 +286,12 @@ function refresh_health(frm) {
 				health_unprocessed: `${h.unprocessed ?? 0}`,
 				health_month_tokens: `${h.month_tokens ?? 0}`,
 				health_phones: h.phones || "-",
+				health_agent: h.agent || "-",
+				health_auto_reply: h.auto_reply || "-",
+				health_crm: h.crm || "-",
+				health_budget: h.budget || "-",
+				health_test_mode: h.test_mode || "-",
+				health_last_problem: h.last_problem || "-",
 			};
 			Object.entries(values).forEach(([field, value]) => {
 				frm.doc[field] = value;

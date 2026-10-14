@@ -97,6 +97,10 @@ class TestSendGuard(FrappeTestCase):
 		self.assertEqual(outbound.match_sent(ALLOWED, {"unique_id": "3EB0AA"}), "Holding")
 		self.assertEqual(outbound.match_sent(ALLOWED, {"message_id": f"true_{ALLOWED}_OTHER"}), "")
 
+	def test_a_write_that_returns_a_name_without_a_doctype_is_still_logged(self):
+		safety.crm_write(ALLOWED, "Notification", "Told the rep", lambda: "someone@example.com")
+		self.assertEqual(_actions(chat_id=ALLOWED)[0].action, "Notification")
+
 	def test_crm_writes_run_only_for_allowed_chats(self):
 		done = []
 		safety.crm_write(OTHER, "Create Note", "Note", lambda: done.append(1))

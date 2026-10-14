@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, now_datetime, nowdate
 
-from periskope_connector import actions, health
+from periskope_connector import actions, health, safety
 from periskope_connector.setup_status import feature_on
 
 # The action columns of the tag matrix, and the rows a tick adds. Email alerts start at High so a
@@ -38,6 +38,10 @@ SETTING_FIELDS = (
 	"working_hours_end",
 	"alert_emails",
 	"escalation_emails",
+	"enable_agent",
+	"enable_auto_reply",
+	"reply_delay_minutes",
+	"holding_message",
 )
 ROW_FIELDS = {
 	"sla_levels": ("wait_minutes", "min_severity", "action", "recipients"),
@@ -261,6 +265,80 @@ def _people(settings) -> dict:
 	}
 
 
+def _autoreply(settings) -> dict:
+	today = {
+		r.status: r.n
+		for r in frappe.get_all(
+			"Periskope Auto Reply",
+			filters={"modified": [">=", nowdate()]},
+			fields=["status", "count(name) as n"],
+			group_by="status",
+		)
+	}
+	paused = _count("Periskope Chat", {"ai_paused": 1})
+	return {
+		"status": _status(off=not feature_on("enable_auto_reply", settings), warn=today.get("Failed", 0) > 0),
+		"headline": _("{0} answered, {1} holding today").format(
+			today.get("Sent", 0), today.get("Holding Sent", 0)
+		),
+		"today": today,
+		"waiting": _count("Periskope Auto Reply", {"status": "Waiting"}),
+		"paused": paused,
+	}
+
+
+def _crm(settings) -> dict:
+	rows = frappe.get_all(
+		"Periskope Agent Action",
+		filters={
+			"creation": [">=", nowdate()],
+			"action": [
+				"in",
+				["Create Note", "Update Note", "Create Task", "Update Task", "Status Change", "Timeline"],
+			],
+		},
+		fields=["action", "mode", "count(name) as n"],
+		group_by="action, mode",
+	)
+	live = {r.action: r.n for r in rows if r.mode == "Live"}
+	dry = sum(r.n for r in rows if r.mode != "Live")
+	notes = live.get("Create Note", 0) + live.get("Update Note", 0)
+	tasks = live.get("Create Task", 0) + live.get("Update Task", 0)
+	return {
+		"status": _status(off=not settings.enable_agent, warn=dry > 0),
+		"headline": _("{0} notes, {1} tasks today").format(notes, tasks),
+		"notes": notes,
+		"tasks": tasks,
+		"status_changes": live.get("Status Change", 0),
+		"timeline": live.get("Timeline", 0),
+		"dry_runs": dry,
+	}
+
+
+def _agent(settings) -> dict:
+	last = frappe.get_all(
+		"Periskope Agent Run",
+		filters={"status": ["!=", "Skipped"]},
+		fields=["status", "started_on", "messages_read", "suggestions_added", "error"],
+		order_by="started_on desc",
+		limit=1,
+	)
+	last = last[0] if last else None
+	pending = _count("Periskope Suggestion", {"status": "Pending"})
+	return {
+		"status": _status(
+			off=not settings.enable_agent, bad=bool(last and last.status == "Failed"), warn=pending > 0
+		),
+		"headline": _("{0} waiting for approval").format(pending),
+		"last_run": _ago(last.started_on) if last else _("never"),
+		"last_status": last.status if last else "",
+		"last_error": (last.error or "")[:200] if last else "",
+		"pending": pending,
+		"knowledge": _count("Periskope Knowledge Entry", {"status": "Approved"}),
+		"test_mode": safety.test_mode(),
+	}
+
+
 def _settings_values(settings) -> dict:
 	"""The settings the panels show and edit, so the dialog never reads the open form."""
 	values = {name: settings.get(name) for name in SETTING_FIELDS}
@@ -300,6 +378,9 @@ def get_flow() -> dict:
 		"waiting": _waiting(settings),
 		"sla": _sla(settings),
 		"people": _people(settings),
+		"autoreply": _autoreply(settings),
+		"crm": _crm(settings),
+		"agent": _agent(settings),
 	}
 
 

@@ -104,7 +104,7 @@ def crm_write(chat_id: str | None, action: str, summary: str, fn, **values):
 		log(action, mode, summary, chat_id=chat_id, **values)
 		return None
 	result = fn()
-	if isinstance(result, str) and not values.get("target_name"):
+	if isinstance(result, str) and values.get("target_doctype") and not values.get("target_name"):
 		values["target_name"] = result
 	log(action, LIVE, summary, chat_id=chat_id, **values)
 	return result

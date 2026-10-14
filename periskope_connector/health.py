@@ -189,6 +189,49 @@ def get_health() -> dict:
 		)
 		or _("no messages in the last 15 days"),
 		"today": nowdate(),
+		**agent_health(),
+	}
+
+
+def agent_health() -> dict:
+	"""The agent's part of the Health tab (the Flow dialog shows the same figures in more detail)."""
+	from periskope_connector import flow
+
+	settings = frappe.get_doc("Periskope Settings")
+	agent, reply, crm = flow._agent(settings), flow._autoreply(settings), flow._crm(settings)
+	budget = settings.ai_monthly_budget_tokens or 0
+	used = month_tokens()
+	problem = frappe.get_all(
+		"Error Log",
+		filters={"method": ["like", "Periskope%"]},
+		fields=["method", "creation"],
+		order_by="creation desc",
+		limit=1,
+	)
+	return {
+		"agent": (
+			_("off")
+			if not settings.enable_agent
+			else _("last run {0} ({1}), {2} waiting for approval").format(
+				agent["last_run"], agent["last_status"] or "-", agent["pending"]
+			)
+		),
+		"auto_reply": _("{0} answered, {1} holding, {2} dry run, {3} failed").format(
+			reply["today"].get("Sent", 0),
+			reply["today"].get("Holding Sent", 0),
+			reply["today"].get("Dry Run", 0) + reply["today"].get("Blocked", 0),
+			reply["today"].get("Failed", 0),
+		),
+		"crm": _("{0} notes, {1} tasks, {2} status changes").format(
+			crm["notes"], crm["tasks"], crm["status_changes"]
+		),
+		"budget": f"{used:,} / {budget:,} ({used * 100 // budget}%)"
+		if budget
+		else _("{0:,} tokens, no budget set").format(used),
+		"test_mode": _("on: only the allowed chats and emails") if agent["test_mode"] else _("off"),
+		"last_problem": f"{problem[0].method} ({frappe.utils.pretty_date(problem[0].creation)})"
+		if problem
+		else _("none"),
 	}
 
 

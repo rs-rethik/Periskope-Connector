@@ -5,7 +5,7 @@
 (() => {
 	const WIDE_AT = 1120; // px of dialog width from which the panel sits to the right
 	const COL = { A: 24, B: 272, C: 520, D: 768 };
-	const ROW = { 1: 60, 2: 255, 3: 450 };
+	const ROW = { 1: 60, 2: 255, 3: 450, 4: 645 };
 	const NODES = [
 		{
 			id: "periskope",
@@ -66,6 +66,27 @@
 			sub: __("bell, ToDo, email, owner"),
 		},
 		{ id: "people", col: "D", row: 3, title: __("People told"), sub: __("Email and bell") },
+		{
+			id: "autoreply",
+			col: "A",
+			row: 4,
+			title: __("Auto reply"),
+			sub: __("From data, after a delay"),
+		},
+		{
+			id: "crm",
+			col: "B",
+			row: 4,
+			title: __("CRM updates"),
+			sub: __("Summary, notes, tasks"),
+		},
+		{
+			id: "agent",
+			col: "C",
+			row: 4,
+			title: __("Learning agent"),
+			sub: __("Suggests, you approve"),
+		},
 	];
 	const EDGES = [
 		["M224 105H272"],
@@ -81,6 +102,8 @@
 		["M868 345V448", "", __("alert, ToDo"), 876, 400],
 		["M868 255V190H620V152", "dash", __("lead, timeline comment"), 636, 184],
 		["M124 345V582H868V552", "dash", __("keyword match"), 140, 576],
+		["M372 540V598H124V643", "", __("auto reply"), 250, 592],
+		["M224 690H272"],
 	];
 	const ACTION_LABELS = {
 		"Create Lead": __("Lead"),
@@ -188,17 +211,18 @@
 	}
 
 	function drawSvg(data, selected) {
-		let s = `<svg viewBox="0 0 1000 610" role="group" aria-label="${e(
+		let s = `<svg viewBox="0 0 1000 805" role="group" aria-label="${e(
 			__("How a WhatsApp message moves through the app")
 		)}">`;
 		s += `<defs><marker id="pf-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--text-muted)"/></marker></defs>`;
-		[20, 215, 410].forEach(
+		[20, 215, 410, 605].forEach(
 			(y) => (s += `<rect class="band" x="0" y="${y}" width="1000" height="150"/>`)
 		);
 		[
 			[38, __("1 · Capture")],
 			[233, __("2 · Understand")],
 			[428, __("3 · Follow up")],
+			[623, __("4 · AI agent")],
 		].forEach(([y, t]) => (s += `<text class="lane" x="14" y="${y}">${e(t)}</text>`));
 		EDGES.forEach(([d, cls, label, x, y, anchor]) => {
 			s += `<path class="edge ${cls || ""}" marker-end="url(#pf-ar)" d="${d}"/>`;
@@ -269,6 +293,97 @@
 	}
 
 	const PANELS = {
+		autoreply(frm, d) {
+			const f = d.autoreply;
+			const t = f.today || {};
+			return {
+				k: __("Step 4"),
+				h: __("Auto reply"),
+				p: __(
+					"After the delay the agent answers from the knowledge base, ERPNext and the deal's last quotation. When the data does not answer it, the customer gets the holding message and the rep a task in the CRM. A rep's reply pauses the AI in that chat."
+				),
+				body:
+					kv([
+						[__("Answered today"), t.Sent || 0],
+						[__("Holding messages today"), t["Holding Sent"] || 0],
+						[__("Dry runs today (test mode)"), (t["Dry Run"] || 0) + (t.Blocked || 0)],
+						[__("Failed today"), t.Failed || 0],
+						[__("Waiting now"), f.waiting],
+						[__("Chats a rep took over"), f.paused],
+					]) +
+					box(
+						__("Settings"),
+						switchRow(frm, __("AI Agent"), "enable_agent") +
+							switchRow(frm, __("Auto reply"), "enable_auto_reply") +
+							`<div class="pf-row"><span>${__(
+								"Delay (minutes)"
+							)}</span><input type="number" min="0" max="120" data-text="reply_delay_minutes" value="${e(
+								field(frm, "reply_delay_minutes")
+							)}" style="width:80px"></div><div class="pf-row" style="display:block"><span>${__(
+								"Holding message"
+							)}</span><textarea data-text="holding_message" rows="3" style="width:100%">${e(
+								field(frm, "holding_message")
+							)}</textarea></div>`
+					) +
+					`<div class="pf-btns">${btn(
+						__("All auto replies"),
+						`data-list="Periskope Auto Reply"`,
+						true
+					)}${btn(__("Chats"), `data-list="Periskope Chat"`)}</div>`,
+			};
+		},
+		crm(frm, d) {
+			const f = d.crm;
+			return {
+				k: __("Step 4b"),
+				h: __("CRM updates"),
+				p: __(
+					"On every lead or deal the agent keeps one WhatsApp summary note, notes for what the customer told us, follow-up tasks for the rep, a timeline entry for each AI reply, and the status when the conversation clearly moves on. Won and Lost are only proposed to the owner."
+				),
+				body:
+					kv([
+						[__("Notes written today"), f.notes],
+						[__("Tasks written today"), f.tasks],
+						[__("Status changes today"), f.status_changes],
+						[__("Timeline entries today"), f.timeline],
+						[__("Dry runs today (test mode)"), f.dry_runs],
+					]) +
+					`<div class="pf-btns">${btn(
+						__("What the agent did"),
+						`data-list="Periskope Agent Action"`,
+						true
+					)}</div>`,
+			};
+		},
+		agent(frm, d) {
+			const f = d.agent;
+			return {
+				k: __("Step 4c"),
+				h: __("Learning agent"),
+				p: __(
+					"Every 15 minutes the agent reads the finished conversations, builds the knowledge base and suggests changes to tags, keyword rules, escalation levels, group mappings, ignored numbers and lead rules. Nothing changes until an approver says yes."
+				),
+				body:
+					kv([
+						[
+							__("Last run"),
+							`${f.last_run}${f.last_status ? ` (${f.last_status})` : ""}`,
+						],
+						[__("Waiting for approval"), f.pending],
+						[__("Approved knowledge entries"), f.knowledge],
+						[__("Test mode"), f.test_mode ? __("On") : __("Off")],
+					]) +
+					(f.last_error ? `<div class="pf-warn">${e(f.last_error)}</div>` : "") +
+					`<div class="pf-btns">${btn(
+						__("Suggestions"),
+						`data-list="Periskope Suggestion"`,
+						true
+					)}${btn(__("Knowledge base"), `data-list="Periskope Knowledge Entry"`)}${btn(
+						__("Agent runs"),
+						`data-list="Periskope Agent Run"`
+					)}</div>`,
+			};
+		},
 		periskope(frm, d) {
 			const f = d.periskope;
 			const rows = f.phones
@@ -283,7 +398,7 @@
 				k: __("Step 1"),
 				h: __("Periskope"),
 				p: __(
-					"Your WhatsApp company numbers, linked in Periskope. The app only reads from them and never sends a message."
+					"Your WhatsApp company numbers, linked in Periskope. The app reads every message; it sends only the AI replies and the reps' replies typed in the CRM (in test mode only to the allowed numbers)."
 				),
 				body:
 					kv([[__("Connection"), f.connection]]) +

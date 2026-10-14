@@ -45,6 +45,14 @@
   "health_unprocessed",
   "health_month_tokens",
   "health_phones",
+  "section_health_agent",
+  "health_agent",
+  "health_auto_reply",
+  "health_crm",
+  "column_health_agent",
+  "health_budget",
+  "health_test_mode",
+  "health_last_problem",
   "tab_advanced",
   "base_url",
   "section_adv_ai",
@@ -760,6 +768,51 @@
    "fieldtype": "Data",
    "label": "Gemini Model",
    "default": "gemini-2.5-flash"
+  },
+  {
+   "fieldname": "section_health_agent",
+   "fieldtype": "Section Break",
+   "label": "AI Agent (live)"
+  },
+  {
+   "fieldname": "health_agent",
+   "fieldtype": "Data",
+   "label": "Learning Agent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_auto_reply",
+   "fieldtype": "Data",
+   "label": "Auto Replies Today",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_crm",
+   "fieldtype": "Data",
+   "label": "CRM Updates Today",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_health_agent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "health_budget",
+   "fieldtype": "Data",
+   "label": "AI Budget Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_test_mode",
+   "fieldtype": "Data",
+   "label": "Test Mode",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_last_problem",
+   "fieldtype": "Small Text",
+   "label": "Last Problem",
+   "read_only": 1
   }
  ],
  "hide_toolbar": 1,

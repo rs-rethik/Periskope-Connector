@@ -368,7 +368,12 @@ def set_status(chat_id: str, proposed: str, reason: str) -> str:
 		return doc.name
 
 	done = safety.crm_write(
-		chat_id, "Status Change", f"Status {current} → {target.name}: {reason}", write, **_ref(record)
+		chat_id,
+		"Status Change",
+		f"Status {current} → {target.name}: {reason}",
+		write,
+		target_doctype=record[0],
+		**_ref(record),
 	)
 	if done:
 		timeline(chat_id, _("AI moved the status from {0} to {1}: {2}").format(current, target.name, reason))
@@ -403,6 +408,7 @@ def link_organization(chat_id: str, organization: str) -> str | None:
 		"Link Organization",
 		f"Linked to organization {organization}",
 		write,
+		target_doctype="CRM Organization",
 		**(_ref(record) if record else {}),
 	)
 
