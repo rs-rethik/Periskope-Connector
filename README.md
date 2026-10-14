@@ -172,7 +172,7 @@ What the agent maintains itself has its own list, so the settings page stays sho
 | Numbers to ignore | **Periskope Contact** with an *Ignored* status (the *Ignore List* text field is gone) |
 | Group to customer mapping | **Periskope Group** (lead, deal or **organization**) |
 | Lead creation rule | The *Create Lead* action on a tag |
-| Knowledge for auto replies | **Periskope Knowledge Entry**, or the **Periskope Assistant** chat |
+| Knowledge for auto replies | The **Knowledge Base** canvas (each node is a **Periskope Knowledge Entry**) |
 
 Everything technical is in the collapsed sections of the **Advanced** tab: AI tagging options and instructions, auto reply details (variation, confidence, caps, holding message, when the AI resumes after a rep takes over), learning and approval timings, working hours and escalation emails, lead and contact options, CRM visibility, data retention, webhook events, voice notes (Gemini key) and **Test Mode**.
 
@@ -373,7 +373,7 @@ flowchart LR
   REP -->|reply in the tab| S
   REP -->|pause / resume AI| AR
   AG[Learning agent every 15 min] --> SUG[Suggestions] --> MAIL[Approval email] --> CFG[Tags, rules, levels, mappings, ignore list, lead rules]
-  KB[Periskope Assistant chat] -->|preview + confirm| KE[Knowledge entries]
+  KB[Knowledge Base canvas: topics, conditions, answers] --> CTX
 ```
 
 #### What the rep sees in the CRM
@@ -409,14 +409,18 @@ Every 15 minutes the agent reads the conversations that have been quiet for an h
 
 One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Periskope Suggestion** in Desk. Nothing changes until someone approves; a rejected suggestion is not proposed again for 30 days.
 
-#### Periskope Assistant (knowledge base chat)
+#### Knowledge Base canvas
 
-Admins (System Manager, WhatsApp Manager) open **Periskope Assistant** from the workspace and talk to it:
+Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the workspace, or from the *Learning agent* step of the Flow dialog. It shows the knowledge base as a node graph, like a workflow builder:
 
-- "Our delivery time for Chennai is 2 days, other states 5 days": it prepares the knowledge entries and shows a preview. **Confirm and save** writes them; **Discard** writes nothing.
-- "Change the Chennai delivery time to 3 days" or "Remove the Chennai entry": it finds the entry and shows the change first.
-- **Upload a document** (PDF, Excel, Word, CSV): it extracts entries from a price list, FAQ or catalogue, again with a preview.
-- Questions about the agent: "Why did the AI reply this way to customer X?", "What tags did you learn this week?", "Which conversations were escalated today?", "What can't you answer yet?" (the questions it answered with the holding message), "How are you set up?".
+- **Customer asks** starts the tree. **Topic** nodes (Delivery, Pricing) branch into **Condition** nodes (*Customer is in Chennai*, *Otherwise*) and end in **Answer** nodes (*Delivery to Chennai takes 2 days*). An answer can also hang straight under a topic or under Customer asks.
+- Click **+** after a node to add the next one, or drag from a node's right dot onto another node to connect them; drop it on empty canvas to add a node there. Hover a wire to remove it. Drag nodes to arrange them; scroll to move, Ctrl + scroll to zoom, and **Tidy up** lays the tree out again.
+- Click a node to edit it in the side panel. **Delete** retires the node and everything after it, so the agent stops using them.
+- **Import document** (PDF, Excel, Word, CSV): the AI extracts answers from a price list, FAQ or catalogue. You tick the ones to keep and pick where they go; nothing is saved before that.
+- **Knowledge gaps** lists what customers asked in the last 14 days that the agent answered with the holding message, each with *Add an answer*.
+- Answers the learning agent mined from rep replies appear with a dashed border and *Waiting for approval* until an approver accepts them.
+
+How a reply uses it: a customer's message matches an answer by its own words, or by one word of a topic's name or keywords. All answers under that topic go to the AI with their conditions (*Applies only when: Customer is in Chennai*). The AI uses an answer only when the chat or the CRM record shows its condition holds; when it cannot tell which branch applies, the customer gets the holding message.
 
 ### Reports and dashboard
 

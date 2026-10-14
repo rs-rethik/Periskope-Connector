@@ -1,6 +1,8 @@
 """The knowledge base the auto reply answers from.
 
-Entries are question and answer pairs. The agent mines them from conversations where a rep answered
+Entries are question and answer pairs, arranged as a tree on the Knowledge Base canvas: Topic nodes
+(Delivery) branch into Condition nodes (Customer is in Chennai, Otherwise) and end in Answer nodes.
+An answer with no parent hangs straight under "Customer asks". The agent mines them from conversations where a rep answered
 a customer's question; the team can also write them by hand. A mined entry starts as Suggested and
 is used for replies only after a manager approved it (see suggestions.py), because its text goes to
 customers. Repeats of the same question add to the entry instead of making a new one.
@@ -95,7 +97,7 @@ def record(item: dict, evidence: list[str]) -> str:
 		return ""
 	entries = frappe.get_all(
 		"Periskope Knowledge Entry",
-		filters={"status": ["!=", "Retired"]},
+		filters={"status": ["!=", "Retired"], "node_type": "Answer"},
 		fields=["name", "question", "answer", "status", "evidence_count"],
 	)
 	match = _similar(question, entries)
@@ -162,7 +164,7 @@ def flag_stale() -> int:
 	cutoff = add_days(now_datetime(), -STALE_DAYS)
 	rows = frappe.get_all(
 		"Periskope Knowledge Entry",
-		filters={"status": "Approved", "creation": ["<", cutoff]},
+		filters={"status": "Approved", "node_type": "Answer", "creation": ["<", cutoff]},
 		or_filters=[["last_seen", "<", cutoff], ["last_seen", "is", "not set"]],
 		fields=["name", "question", "last_used"],
 	)
@@ -181,17 +183,85 @@ def flag_stale() -> int:
 	return made
 
 
+OTHERWISE = {"otherwise", "else", "other", "default", "anything else"}
+MAX_BRANCHES = 10
+
+
+def _trail(entry, nodes: dict) -> list | None:
+	"""The topics and conditions above an answer, top first; None when one of them is not approved."""
+	trail, seen, parent = [], {entry.name}, entry.parent_entry
+	while parent:
+		node = nodes.get(parent)
+		if not node or node.name in seen:
+			return None
+		trail.insert(0, node)
+		seen.add(node.name)
+		parent = node.parent_entry
+	return trail
+
+
+def _describe(entry, trail: list) -> None:
+	"""Set entry.title (the path, for the AI) and entry.text (the answer with when it applies)."""
+	entry.title = " > ".join([n.question for n in trail if n.node_type == "Topic"] + [entry.question])
+	when = [
+		"none of the other conditions under it apply"
+		if (n.question or "").strip().lower().rstrip(".") in OTHERWISE
+		else n.question
+		for n in trail
+		if n.node_type == "Condition"
+	]
+	entry.text = (f"Applies only when: {'; '.join(when)}. " if when else "") + entry.answer
+
+
 def find(text: str, limit: int = 5) -> list:
-	"""Approved entries that match a customer's text, best first (for the auto reply)."""
-	entries = frappe.get_all(
-		"Periskope Knowledge Entry",
-		filters={"status": "Approved"},
-		fields=["name", "question", "answer", "keywords"],
-	)
-	scored = []
-	for entry in entries:
-		score = max(similarity(text, entry.question), similarity(text, entry.keywords or "") * 0.8)
-		overlap = len(words(text) & (words(entry.question) | words(entry.keywords or "")))
+	"""Approved answers that match a customer's text, best first (for the auto reply).
+
+	An answer matches by its own question and keywords, or by the topics and conditions above it; one
+	word of a topic's name or keywords is enough to bring in the answers under that topic.
+	The other answers under the same topic come along, so the AI sees every branch (Chennai: 2 days,
+	Otherwise: 5 days) and picks the one whose condition holds. Each has .title and .text."""
+	nodes = {
+		n.name: n
+		for n in frappe.get_all(
+			"Periskope Knowledge Entry",
+			filters={"status": "Approved"},
+			fields=["name", "node_type", "parent_entry", "question", "answer", "keywords"],
+		)
+	}
+	said = words(text)
+	topics = {
+		n.name
+		for n in nodes.values()
+		if n.node_type == "Topic" and said & (words(n.question) | words(n.keywords or ""))
+	}
+	scored, trails = [], {}
+	for entry in nodes.values():
+		if entry.node_type != "Answer":
+			continue
+		trail = _trail(entry, nodes)
+		if trail is None:
+			continue
+		trails[entry.name] = trail
+		path = " ".join(f"{n.question} {n.keywords or ''}" for n in trail)
+		score = max(
+			similarity(text, entry.question),
+			similarity(text, entry.keywords or "") * 0.8,
+			similarity(text, path) * 0.7,
+		)
+		overlap = len(said & (words(entry.question) | words(entry.keywords or "") | words(path)))
+		if any(n.name in topics for n in trail):
+			score = max(score, 0.15)
 		if score >= 0.15 or overlap >= 2:
 			scored.append((score + overlap * 0.01, entry))
-	return [e for _score, e in sorted(scored, key=lambda s: s[0], reverse=True)[:limit]]
+	best = [e for _score, e in sorted(scored, key=lambda s: s[0], reverse=True)[:limit]]
+	found = list(best)
+	for entry in best:
+		topic = next((n.name for n in reversed(trails[entry.name]) if n.node_type == "Topic"), None)
+		for name, trail in trails.items():
+			if len(found) >= MAX_BRANCHES:
+				break
+			if topic and any(n.name == topic for n in trail) and nodes[name] not in found:
+				found.append(nodes[name])
+	for entry in found:
+		_describe(entry, trails[entry.name])
+	return found

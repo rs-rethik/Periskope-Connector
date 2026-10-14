@@ -55,6 +55,7 @@ SYSTEM_PROMPT = """You write the reply to a customer's WhatsApp message for a co
 - Reply in the customer's language and style, short and friendly, plain text, no markdown, no greeting more than one word, no signature.
 - confidence is 0-100: how sure you are the answer is fully supported by the data.
 - used_sources lists the ids of the sources you used.
+- A source that says "Applies only when: ..." may be used only if the customer's messages or the CRM context show that condition holds. When several such sources fit the question and you cannot tell which condition holds, set can_answer to false.
 - CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source."""
 
 SCHEMA = {
@@ -183,7 +184,7 @@ def gather(text: str, contact_number: str = "", is_group: bool = False) -> list[
 	"""The data sources for a customer's text: [{id, title, text}]."""
 	sources = []
 	for entry in knowledge.find(text):
-		sources.append({"id": f"KB:{entry.name}", "title": entry.question, "text": entry.answer})
+		sources.append({"id": f"KB:{entry.name}", "title": entry.title, "text": entry.text})
 	for item in _items(text):
 		lines = ", ".join(f"{k}: {v}" for k, v in item.items() if v not in (None, "") and k != "item")
 		sources.append({"id": f"ITEM:{item['item']}", "title": item["name"] or item["item"], "text": lines})

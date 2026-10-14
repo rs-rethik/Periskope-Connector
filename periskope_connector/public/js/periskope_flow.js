@@ -378,7 +378,7 @@
 						__("Suggestions"),
 						`data-list="Periskope Suggestion"`,
 						true
-					)}${btn(__("Knowledge base"), `data-list="Periskope Knowledge Entry"`)}${btn(
+					)}${btn(__("Knowledge base"), `data-page="periskope-knowledge"`)}${btn(
 						__("Agent runs"),
 						`data-list="Periskope Agent Run"`
 					)}</div>`,
@@ -1084,6 +1084,9 @@
 		);
 		on(root, "[data-report]", "click", (b) =>
 			leave(frm, () => frappe.set_route("query-report", b.dataset.report))
+		);
+		on(root, "[data-page]", "click", (b) =>
+			leave(frm, () => frappe.set_route(b.dataset.page))
 		);
 		on(root, "[data-new]", "click", (b) => leave(frm, () => frappe.new_doc(b.dataset.new)));
 		on(root, "[data-open]", "click", (a, ev) => {

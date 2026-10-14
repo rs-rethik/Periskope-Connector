@@ -1,16 +1,16 @@
 {
  "content": null,
- "creation": "2026-10-14 18:00:00.000000",
+ "creation": "2026-10-14 20:00:00.000000",
  "docstatus": 0,
  "doctype": "Page",
  "icon": "",
  "idx": 0,
- "modified": "2026-10-14 18:00:00.000000",
+ "modified": "2026-10-14 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
- "name": "periskope-assistant",
+ "name": "periskope-knowledge",
  "owner": "Administrator",
- "page_name": "periskope-assistant",
+ "page_name": "periskope-knowledge",
  "roles": [
   {
    "role": "System Manager"
@@ -23,5 +23,5 @@
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Periskope Assistant"
+ "title": "Knowledge Base"
 }
