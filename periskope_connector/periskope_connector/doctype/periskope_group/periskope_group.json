@@ -12,7 +12,8 @@
   "section_crm",
   "crm_lead",
   "column_crm",
-  "crm_deal"
+  "crm_deal",
+  "organization"
  ],
  "fields": [
   {
@@ -66,6 +67,13 @@
    "fieldtype": "Link",
    "label": "CRM Deal",
    "options": "CRM Deal"
+  },
+  {
+   "fieldname": "organization",
+   "fieldtype": "Link",
+   "options": "CRM Organization",
+   "label": "Organization",
+   "description": "The company this group is about. Set by the agent (after approval) or by hand; the group's messages then link to that company's deal or lead."
   }
  ],
  "index_web_pages_for_search": 1,
@@ -78,30 +86,30 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 0,
+   "create": 1,
    "delete": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "write": 1
-  },
-  {
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "WhatsApp Manager",
-   "share": 1
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1,
+   "export": 1,
+   "role": "Sales Manager"
   }
  ],
  "sort_field": "modified",

@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from periskope_connector.api.permission import require_admin, require_manager
 from periskope_connector.client import request
 
 
@@ -28,7 +29,7 @@ def _set_status(status: str):
 
 @frappe.whitelist()
 def test_connection() -> dict:
-	frappe.only_for("System Manager")
+	require_admin()
 	try:
 		phones = _fetch_phones()
 		_save_phones(phones)
@@ -50,7 +51,7 @@ def test_connection() -> dict:
 @frappe.whitelist()
 def setup_webhooks() -> dict:
 	"""Register this site's webhook in Periskope (message.created and message.updated)."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.webhooks import ensure_webhooks
 
 	return ensure_webhooks()
@@ -58,7 +59,7 @@ def setup_webhooks() -> dict:
 
 @frappe.whitelist()
 def run_reminder_check() -> dict:
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.reminders import run
 
 	return run()
@@ -66,7 +67,7 @@ def run_reminder_check() -> dict:
 
 @frappe.whitelist()
 def optimize_ai_instructions(instructions: str = "", goal: str = "") -> str:
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.ai.classifier import get_settings, optimize_instructions
 
 	return optimize_instructions(get_settings(), instructions, goal)
@@ -74,7 +75,7 @@ def optimize_ai_instructions(instructions: str = "", goal: str = "") -> str:
 
 @frappe.whitelist()
 def get_default_ai_instructions() -> str:
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS
 
 	return DEFAULT_INSTRUCTIONS
@@ -82,15 +83,40 @@ def get_default_ai_instructions() -> str:
 
 @frappe.whitelist()
 def test_ai_connection() -> dict:
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.ai.classifier import get_settings, ping
 
-	return {"model": ping(get_settings())}
+	try:
+		model = ping(get_settings())
+	except Exception as e:
+		frappe.db.rollback()
+		_save_ai_status(f"Failed: {str(e)[:100]}")
+		raise
+	_save_ai_status(f"Working ({model})")
+	return {"model": model}
+
+
+def _save_ai_status(status: str):
+	try:
+		frappe.db.set_single_value("Periskope Settings", "ai_status", status)
+		frappe.db.commit()
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Periskope: could not save the AI status")
+
+
+@frappe.whitelist()
+def get_setup_status() -> dict:
+	"""The setup steps for the panel at the top of the settings."""
+	require_admin()
+	from periskope_connector.setup_status import get_status
+
+	return get_status()
 
 
 @frappe.whitelist()
 def sync_phones() -> list[dict]:
-	frappe.only_for("System Manager")
+	require_admin()
 	return _save_phones(_fetch_phones())
 
 
@@ -119,7 +145,7 @@ def _save_phones(phones: list[dict]) -> list[dict]:
 @frappe.whitelist()
 def set_correct_category(message: str, category: str) -> None:
 	"""A sales manager marks the category the AI should have given. Kept for the later learning loop"""
-	frappe.only_for(("Sales Manager", "System Manager"))
+	require_manager()
 	from periskope_connector.tags import names
 
 	if category not in names():
@@ -130,7 +156,7 @@ def set_correct_category(message: str, category: str) -> None:
 @frappe.whitelist()
 def get_health() -> dict:
 	"""The live figures for the Health tab of the settings page."""
-	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	require_manager()
 	from periskope_connector.health import get_health as figures
 
 	return figures()
@@ -139,7 +165,7 @@ def get_health() -> dict:
 @frappe.whitelist()
 def backfill_messages(days: int = 7) -> dict:
 	"""Fetch the last `days` days of chat history from Periskope and save what webhooks missed."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.backfill import run
 
 	return run(days=min(max(int(days), 1), 30))
@@ -148,7 +174,7 @@ def backfill_messages(days: int = 7) -> dict:
 @frappe.whitelist()
 def get_flow() -> dict:
 	"""The health and figures of each step, for the Flow tab of the settings page."""
-	frappe.only_for(("System Manager", "WhatsApp Manager"))
+	require_manager()
 	from periskope_connector.flow import get_flow as figures
 
 	return figures()
@@ -157,7 +183,7 @@ def get_flow() -> dict:
 @frappe.whitelist()
 def set_tag_active(tag: str, active: int = 1) -> None:
 	"""Flow tab: switch a tag on or off."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import set_tag_active as switch
 
 	switch(tag, bool(int(active)))
@@ -166,7 +192,7 @@ def set_tag_active(tag: str, active: int = 1) -> None:
 @frappe.whitelist()
 def set_tag_action(tag: str, action: str, on: int = 1) -> None:
 	"""Flow tab: give a tag an action, or take it away."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import set_tag_action as change
 
 	change(tag, action, bool(int(on)))
@@ -175,16 +201,16 @@ def set_tag_action(tag: str, action: str, on: int = 1) -> None:
 @frappe.whitelist()
 def set_flow_setting(field: str, value=None) -> None:
 	"""Flow dialog: change one setting and save it."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import set_setting
 
 	set_setting(field, value)
 
 
 @frappe.whitelist()
-def set_flow_row(table: str, idx: int, field: str, value=None) -> None:
+def set_flow_row(table: str, idx: str, field: str, value=None) -> None:
 	"""Flow dialog: change one field of an SLA level or keyword rule row and save."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import set_row
 
 	set_row(table, idx, field, value)
@@ -193,16 +219,16 @@ def set_flow_row(table: str, idx: int, field: str, value=None) -> None:
 @frappe.whitelist()
 def add_flow_sla_level() -> None:
 	"""Flow dialog: add an SLA step."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import add_sla_level
 
 	add_sla_level()
 
 
 @frappe.whitelist()
-def remove_flow_sla_level(idx: int) -> None:
+def remove_flow_sla_level(idx: str) -> None:
 	"""Flow dialog: remove an SLA step."""
-	frappe.only_for("System Manager")
+	require_admin()
 	from periskope_connector.flow import remove_sla_level
 
 	remove_sla_level(idx)

@@ -20,6 +20,11 @@
   "sender_phone",
   "section_content",
   "body",
+  "transcript",
+  "is_deleted",
+  "deleted_on",
+  "edited_on",
+  "previous_body",
   "quoted_message_id",
   "section_ai",
   "ai_category",
@@ -45,6 +50,7 @@
   "language",
   "section_crm",
   "crm_deal",
+  "whatsapp_message",
   "column_crm",
   "crm_lead",
   "link_status",
@@ -68,7 +74,8 @@
   "performed_by",
   "column_meta",
   "webhook_log",
-  "raw_payload"
+  "raw_payload",
+  "agent_reply"
  ],
  "fields": [
   {
@@ -500,6 +507,52 @@
    "fieldtype": "Check",
    "label": "High Severity Alert Sent",
    "read_only": 1
+  },
+  {
+   "fieldname": "agent_reply",
+   "fieldtype": "Select",
+   "label": "Agent Reply",
+   "options": "\nAnswer\nHolding",
+   "read_only": 1,
+   "description": "Set when the AI assistant sent this message"
+  },
+  {
+   "fieldname": "whatsapp_message",
+   "fieldtype": "Data",
+   "label": "CRM WhatsApp Message",
+   "read_only": 1,
+   "description": "Its copy in the CRM WhatsApp tab."
+  },
+  {
+   "fieldname": "transcript",
+   "fieldtype": "Long Text",
+   "label": "Voice Note Transcript",
+   "read_only": 1
+  },
+  {
+   "fieldname": "is_deleted",
+   "fieldtype": "Check",
+   "label": "Deleted on WhatsApp",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "deleted_on",
+   "fieldtype": "Datetime",
+   "label": "Deleted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "edited_on",
+   "fieldtype": "Datetime",
+   "label": "Edited On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_body",
+   "fieldtype": "Small Text",
+   "label": "Text Before the Edit",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -513,28 +566,23 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "read": 1,
+   "report": 1,
+   "export": 1,
    "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1
+   "role": "System Manager"
   },
   {
    "read": 1,
    "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
    "role": "Sales Manager"
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "WhatsApp Manager",
-   "share": 1
   }
  ],
  "sort_field": "message_timestamp",

@@ -13,9 +13,11 @@ from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime
 
 from periskope_connector import actions, tags
+from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system, save_as_system
-from periskope_connector.text_rules import analysis_skip_reason, skip_fields
+from periskope_connector.text_rules import analysis_skip_reason, readable_text, skip_fields
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
@@ -68,17 +70,20 @@ TEXT_MESSAGE_TYPE = "text"
 
 
 def skip_reason(doc, settings) -> str | None:
-	# For now only text chats are analysed: no images, documents, voice notes, contacts, etc.
+	# Text chats, and attachments that carry words: a caption, or a voice note's transcript.
 	if doc.direction == "Outgoing":
 		return "Sent by the rep"
-	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE:
+	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE and not readable_text(doc):
 		return "Not a text message"
 	if doc.is_group and not settings.classify_group_chats:
 		return "Group chat"
+	words = " ".join(
+		p for p in ((doc.body or "").strip(), (getattr(doc, "transcript", "") or "").strip()) if p
+	)
 	min_length = flt(getattr(settings, "min_length", None)) or 2
-	if len((doc.body or "").strip()) < min_length:
+	if len(words) < min_length:
 		return "Too short to tag"
-	return analysis_skip_reason(doc.body)
+	return analysis_skip_reason(words)
 
 
 # --- Prompt and schema -------------------------------------------------------------------------
@@ -208,13 +213,13 @@ def build_user_message(doc, history: list[dict], quoted: str | None = None) -> s
 		lines.append("Earlier messages in this chat (context only, oldest first):")
 		for h in history:
 			when = h.message_timestamp.strftime("%Y-%m-%d %H:%M") if h.message_timestamp else ""
-			lines.append(f"[{_speaker(h)} {when}] {(h.body or '').strip()[:500]}")
+			lines.append(f"[{_speaker(h)} {when}] {readable_text(h)[:500]}")
 		lines.append("")
 	when = doc.message_timestamp.strftime("%Y-%m-%d %H:%M") if doc.message_timestamp else ""
 	if quoted:
 		lines.append(f"The message below replies to this earlier message: {quoted.strip()[:500]}")
 	lines.append("Message to classify:")
-	lines.append(f"[{_speaker(doc)} {when}] {(doc.body or '').strip()[:2000]}")
+	lines.append(f"[{_speaker(doc)} {when}] {readable_text(doc)[:2000]}")
 	return "\n".join(lines)
 
 
@@ -233,17 +238,25 @@ def get_quoted_body(doc) -> str | None:
 def get_history(doc, limit: int) -> list[dict]:
 	if not doc.chat_id or limit <= 0:
 		return []
-	filters = {"chat_id": doc.chat_id, "name": ["!=", doc.name], "message_type": TEXT_MESSAGE_TYPE}
+	filters = {"chat_id": doc.chat_id, "name": ["!=", doc.name], "is_deleted": 0}
 	if doc.message_timestamp:
 		filters["message_timestamp"] = ["<=", doc.message_timestamp]
 	rows = frappe.get_all(
 		"Periskope Message",
 		filters=filters,
-		fields=["direction", "body", "message_timestamp", "sender_phone", "is_group"],
+		fields=[
+			"direction",
+			"body",
+			"message_type",
+			"transcript",
+			"message_timestamp",
+			"sender_phone",
+			"is_group",
+		],
 		order_by="message_timestamp desc",
 		limit=limit,
 	)
-	return list(reversed(rows))
+	return [r for r in reversed(rows) if readable_text(r)]
 
 
 # --- Claude ------------------------------------------------------------------------------------
@@ -510,6 +523,10 @@ def apply_result(doc, result: dict):
 	save_as_system(doc)
 	link_message(doc.name)
 	actions.run(doc.name)
+	# Keep the CRM record's summary, notes and follow-ups current (throttled per chat).
+	from periskope_connector.ai import analyse
+
+	analyse.queue(doc.chat_id)
 
 
 def _mark(name: str, **values):
@@ -557,7 +574,7 @@ def _is_expected_error(e: Exception) -> bool:
 
 def _ready_to_run() -> bool:
 	settings = get_settings()
-	if not settings.enable_classification:
+	if not feature_on("enable_classification", settings):
 		return False
 	if uses_jarvis(settings):
 		return True
@@ -645,7 +662,7 @@ def classify_pending(limit: int = 500):
 
 @frappe.whitelist()
 def reclassify(message: str) -> None:
-	frappe.only_for("System Manager")
+	require_admin()
 	_mark(message, classification_status="Pending", classification_attempts=0, classification_error="")
 	frappe.enqueue(
 		"periskope_connector.ai.classifier.classify",

@@ -38,6 +38,7 @@ Sales conversations usually live on each rep's phone, so management cannot see t
   * [Daily use](#daily-use)
   * [Customise it](#customise-it)
   * [The Flow dialog](#the-flow-dialog)
+  * [The AI agent](#the-ai-agent)
   * [Reports and dashboard](#reports-and-dashboard)
   * [Keeping it healthy](#keeping-it-healthy)
   * [Troubleshooting](#troubleshooting)
@@ -101,7 +102,7 @@ bench --site $SITE_NAME migrate
 
 ## Setup
 
-Open **Periskope Settings**. The tabs walk you through it: **Connection** (API key, webhook events, signing secret, phone-to-rep assignment; **Test Connection** creates the webhook in Periskope for the selected events, so only the signing secret is pasted by hand), **AI Tagging** (provider, key, model, instructions, business context), **Lead Capture** (auto-create switch, ignore list, digest recipients), **Reply Reminders** (working hours, holiday list, SLA levels, manager and MD emails, acknowledgement words), **Keyword Alerts** (rules and dedupe window — a rule sends nothing until it has recipients), **Data & Cost** (token budget, max tokens, retention, media download), **CRM Visibility** (comment mode, rep self-visibility) and **Health** (live figures). The **Flow** button next to Save opens the whole pipeline as a diagram you can edit. Step-by-step instructions with screenshots are in the [User Manual](#user-manual).
+Open **Periskope Settings**. The **Setup** tab has four steps (connect Periskope, AI key and budget, approvers and sales reps, switch the AI agent on) with a status panel that shows what is still missing; **Health** shows live figures; everything else is in the collapsed sections of **Advanced**. The **Flow** button next to Save opens the whole pipeline as a diagram you can edit. Step-by-step instructions are in the [User Manual](#user-manual).
 
 ## User Manual
 
@@ -117,7 +118,7 @@ Your sales reps talk to customers on WhatsApp from their company numbers. Perisk
 4. **Reacts** to the tag with the actions you choose: create a lead, email people, add a timeline comment, give the rep a ToDo.
 5. **Escalates** when a customer waits too long for a reply: a bell for the rep, then a ToDo and an email to managers, then an email to the owner.
 
-> **Note** The app never sends a WhatsApp message. Reps keep using WhatsApp or WhatsApp Business as they do today.
+> **Note** The app sends a WhatsApp message only for the AI agent's replies and for a rep's reply typed in the CRM's WhatsApp tab (see [The AI agent](#the-ai-agent)). The agent is off until you switch it on, and test mode limits who can receive messages. Reps can keep using WhatsApp or WhatsApp Business as they do today.
 
 ##### Who uses it
 
@@ -144,88 +145,46 @@ Have these ready. Setup takes about fifteen minutes.
 
 ### Set it up
 
-Everything is configured on one page: **Periskope Settings**. Open it from the **Periskope** workspace in the sidebar.
+Everything is configured on **Periskope Settings** (open it from the **Periskope** workspace). The **Setup** tab has four steps, and the panel at the top shows which are done and what is still missing. The AI agent cannot be switched on until steps 1 to 3 are done.
 
-![The Periskope workspace. The shortcuts, number cards and charts fill with data once messages arrive.](docs/manual/01-the-periskope-workspace-the-shortcuts-nu.jpg)
-*The Periskope workspace. The shortcuts, number cards and charts fill with data once messages arrive.*
+| Step | What you enter | Check |
+|---|---|---|
+| 1. Connect Periskope | Tick **Enable Periskope Integration**, paste the **Periskope API Key** (Periskope console, Settings, Integrations, API), save. Under *Receive Messages* copy the **Webhook Signing Secret** from Periskope (Settings, Webhooks). | **Test Connection**: checks the key, fills the company numbers and registers the webhook. |
+| 2. AI | The **AI Provider** and **AI API Key** (Anthropic), and a **Monthly Token Budget**. | **Test AI**: the result is shown in *AI Status*. |
+| 3. Team | **Approver Emails**: who approves the changes the agent suggests (users with the WhatsApp Manager, Sales Manager or System Manager role). The **Default Sales Rep** and the rep for each company number: they get the follow-up tasks. | The panel names any approver that is not an active user with an approver role. |
+| 4. AI Agent | Tick **Enable AI Agent**, and set the **Reply Delay**. | The panel shows *Running*. |
 
-A new install already contains the starting tags, SLA levels, keyword rules and AI instructions, so you only connect and switch things on.
+A new install already contains the starting tags, keyword rules, SLA levels, AI instructions and holding message, so these four steps are all that is needed.
 
-#### 1. Connect to Periskope
+> **Important** The keys and the signing secret are secrets. Enter them in the form yourself and do not share them.
 
-1. Open **Periskope Settings**, tab **Connection**. Tick **Enable Periskope Integration**. While it is off, the webhook still answers Periskope but nothing is stored.
-2. Paste the **Periskope API Key** (Periskope console, Settings, Integrations, API). It is shown once, so keep a copy.
-3. Press **Save**. The **Webhook URL** appears, built from the site's public address.
-4. Open **Actions** and choose **Test Connection**.
+> **Tip** If the Webhook URL shows a local address, set the site's public address first (`host_name` in the site config, for example your ngrok address) and save again. Periskope can only call an https address.
 
-![After saving, the Webhook URL shows the public address.](docs/manual/02-after-saving-the-webhook-url-shows-the-p.jpg)
-*After saving, the Webhook URL shows the public address.*
+#### Where everything else lives
 
-![The Actions menu has the buttons for each setup step.](docs/manual/03-the-actions-menu-has-the-buttons-for-eac.jpg)
-*The Actions menu has the buttons for each setup step.*
+What the agent maintains itself has its own list, so the settings page stays short. The agent changes these only through approved suggestions; admins can still open and edit them.
 
-Test Connection checks the key, fills in the **Linked WhatsApp Phones** table and registers the webhook in Periskope for the events listed under **Webhook Events**. Running it again does nothing if the webhook already exists.
+| What | Where it lives now |
+|---|---|
+| Tags and what each tag does (lead, alert, timeline note, task) | **Periskope Tag** |
+| Keyword rules | **Periskope Keyword Rule** (was a table in the settings) |
+| SLA / escalation levels | **Periskope SLA Level** (was a table in the settings) |
+| Numbers to ignore | **Periskope Contact** with an *Ignored* status (the *Ignore List* text field is gone) |
+| Group to customer mapping | **Periskope Group** (lead, deal or **organization**) |
+| Lead creation rule | The *Create Lead* action on a tag |
+| Knowledge for auto replies | The **Knowledge Base** canvas (each node is a **Periskope Knowledge Entry**) |
 
-![A successful test: connected, one phone found, the webhook registered.](docs/manual/04-a-successful-test-connected-one-phone-fo.jpg)
-*A successful test: connected, one phone found, the webhook registered.*
+Everything technical is in the collapsed sections of the **Advanced** tab: AI tagging options and instructions, auto reply details (variation, confidence, caps, holding message, when the AI resumes after a rep takes over), learning and approval timings, working hours and escalation emails, lead and contact options, CRM visibility, data retention, webhook events, voice notes (Gemini key) and **Test Mode**.
 
-> **Note** Periskope does not give out the signing secret through its API. In Periskope, open Settings, then Webhooks, generate the signing key, and paste it into **Webhook Signing Secret**. Messages with a wrong signature are refused.
+#### Test mode
 
-> **Tip** If the Webhook URL shows a local address, set the site's public address first (`host_name` in the site config, for example your ngrok address) and save the form again. Periskope can only call an https address.
+Test mode is on until an admin switches it off (Advanced, Test Mode). While it is on:
 
-#### 2. Choose the events
+- a WhatsApp message (auto reply, holding message, or a rep's reply from the CRM) goes out only to the **Allowed Chats**; a group never gets one, even when it is listed. For every other chat the reply is prepared and logged as a dry run, and nothing is sent;
+- the agent writes notes, tasks and status changes only for allowed chats; for the others it logs what it would have written;
+- email reaches only the **Allowed Emails**. Other recipients are dropped from every email the site sends.
 
-The **Webhook Events** table lists what Periskope should send. A new site starts with `message.created` and `message.updated`. Only `message.created` is saved as a message. The others are logged. Add a row to ask Periskope for more events, then run Test Connection again.
-
-#### 3. Assign each phone to a rep
-
-In **Linked WhatsApp Phones**, choose the **Sales Rep** for each number. Every message on that number is stored with that rep, and the rep receives the bells and ToDos for it. The choice is kept when you sync phones again.
-
-![The phone table after Test Connection. Pick the Sales Rep in the last column.](docs/manual/05-the-phone-table-after-test-connection-pi.jpg)
-*The phone table after Test Connection. Pick the Sales Rep in the last column.*
-
-#### 4. Turn on AI tags
-
-1. Open the **AI Tagging** tab and tick **Tag New Messages with AI**.
-2. Paste your Anthropic key in **AI API Key** and save.
-3. Choose **Actions, Test AI Connection**. A green message names the model.
-4. Optional: write a few lines in **About Your Business**. They are given to the AI with every message and help it tell your products and terms apart.
-
-![AI tagging switched on.](docs/manual/06-ai-tagging-switched-on.jpg)
-*AI tagging switched on.*
-
-![The AI key works.](docs/manual/07-the-ai-key-works.jpg)
-*The AI key works.*
-
-Only customer text messages are tagged. Messages sent by your reps, attachments, groups (unless you tick **Also Tag Group Chats**), and replies such as "ok" or "thanks" are never sent to the AI. The AI sees the five earlier messages of the chat as context.
-
-#### 5. Decide about lead creation
-
-On the **Lead Capture** tab, **Create Leads from New Enquiries** lets the app make a CRM lead when an unknown number sends an enquiry. It is off by default. The same tab has the **Ignore List** for numbers that must never become leads (staff, vendors), options to ignore supplier and employee numbers, and the **Digest Recipients** who get a daily list of new unknown numbers.
-
-![Lead Capture settings.](docs/manual/08-lead-capture-settings.jpg)
-*Lead Capture settings.*
-
-#### 6. Reply reminders and working hours
-
-1. Open **Reply Reminders** and tick **Enable Reply Reminders**.
-2. Set **Working Hours Start** and **End**, the **Working Days** and, if you have one, a **Holiday List**. Only these hours count as waiting time, so nothing fires at night.
-3. Enter **Manager Emails** and **Escalation Emails** (the owner or MD). Escalation Emails falls back to the Manager Emails when empty.
-4. Review the **SLA Levels** table (see Customise, below).
-
-![Working hours, emails and the SLA Levels table.](docs/manual/09-working-hours-emails-and-the-sla-levels-.jpg)
-*Working hours, emails and the SLA Levels table.*
-
-> **Note** Working hours must be at least 30 minutes long. A new install stores 09:00 to 19:00, Monday to Saturday.
-
-#### 7. Keyword alerts
-
-On **Keyword Alerts**, each rule has a name, a list of words and the people to email. Three rules are provided (quality, payment and PO, legal). **A rule with no recipients sends nothing**, so add recipients to switch it on. Matching is whole-word and ignores case, and works for Tamil written in English letters. The **Dedupe Window** stops one long argument from sending an alert for every message.
-
-![Keyword rules with their recipients.](docs/manual/10-keyword-rules-with-their-recipients.jpg)
-*Keyword rules with their recipients.*
-
-Press **Save**. Setup is finished. Send a WhatsApp message to the linked number and it appears in **Periskope Message** within seconds.
+Everything that was sent, blocked or only simulated is a row in **Periskope Agent Action**.
 
 ### Daily use
 
@@ -346,7 +305,7 @@ Each tag has an **Actions** table. Each row says what the app does for a message
 
 #### SLA levels
 
-On **Reply Reminders**, the **SLA Levels** table is the escalation ladder. Each row has the working minutes to wait, the lowest severity it applies to, and an action: *Notify Rep*, *ToDo for Rep*, *Email Managers*, *Email Escalation List* or *Email Recipients* (with addresses on the row). Rows run in order of waiting time. The same action to the same recipients runs once per waiting period, and an email that fails is tried again at the next check.
+The **Periskope SLA Level** list is the escalation ladder (the agent may suggest changes; you approve them, or edit the list yourself). Each row has the working minutes to wait, the lowest severity it applies to, and an action: *Notify Rep*, *ToDo for Rep*, *Email Managers*, *Email Escalation List* or *Email Recipients* (with addresses on the row). Rows run in order of waiting time. The same action to the same recipients runs once per waiting period, and an email that fails is tried again at the next check.
 
 ![Editing the SLA levels.](docs/manual/24-editing-the-sla-levels.jpg)
 *Editing the SLA levels.*
@@ -364,16 +323,11 @@ On **Reply Reminders**, the **SLA Levels** table is the escalation ladder. Each 
 
 #### Other settings
 
-| Tab | What you can change |
-|---|---|
-| Data & Cost | A monthly token budget (tagging pauses when it is reached and managers are emailed), tokens per AI call, minimum message length, how long raw webhook data and message text are kept, whether attachments are downloaded. |
-| CRM Visibility | Timeline comments: one per message, one shared comment per burst of messages, or none. Whether reps can read the messages of their own number. |
-| Reply Reminders | Acknowledgement words that need no reply, for example local-language equivalents of ok. |
-| Advanced | The Periskope API address. |
+See *Where everything else lives* above: the rarely needed options are in the collapsed sections of the **Advanced** tab.
 
 ### The Flow dialog
 
-The **Flow** button next to **Save** on Periskope Settings opens a dialog that draws the whole pipeline: capture, linking, AI tagging, tags and their actions, the contact queue, and the reply escalation. Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel on the right of the diagram (under it on a narrow screen).
+The **Flow** button next to **Save** on Periskope Settings opens a dialog that draws the whole pipeline: capture, linking, AI tagging, tags and their actions, the contact queue, the reply escalation, and the AI agent (auto reply, CRM updates, learning agent). Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel on the right of the diagram (under it on a narrow screen).
 
 ![The Flow dialog with the SLA ladder open](docs/manual/31-flow-dialog-sla-ladder.jpg)
 *The Flow dialog with the SLA ladder open. The waiting times are the shortened ones from the test site; a new install starts at 60, 180 and 480 minutes.*
@@ -397,9 +351,87 @@ What you can change in a panel:
 
 A tick adds the usual row (an email alert starts at High severity); open the tag to change severity, chat type or recipients. The default tag and the last active tag cannot be switched off. The buttons that open other pages (a tab, a list or a report) close the dialog first.
 
+### The AI agent
+
+With **Enable AI Agent** on, the agent handles conversations by itself: it tags messages, replies, links and updates CRM records, alerts, escalates and creates follow-ups. It asks for approval only when it wants to change the setup.
+
+```mermaid
+flowchart LR
+  C[Customer] --> P[Periskope] -->|created / updated / deleted| M[Message saved]
+  M --> CH[Chat linked to deal, lead, organization]
+  M --> TAB[CRM WhatsApp tab]
+  M --> V[Voice note to text - Gemini]
+  M --> T[AI tags, alerts, escalation]
+  M --> AR{Auto reply: delay, reset, paused?}
+  AR --> CTX[Deal / lead context + knowledge + ERPNext]
+  CTX --> ANS[Answer from data only]
+  ANS -->|grounded| S[Send - test mode guard]
+  ANS -->|no data / no budget| H[Holding message + CRM task]
+  S --> WB[CRM write-back: summary, notes, tasks, status, timeline]
+  H --> WB
+  WB --> REP[Rep in /crm: WhatsApp tab, notes, tasks, bell]
+  REP -->|reply in the tab| S
+  REP -->|pause / resume AI| AR
+  AG[Learning agent every 15 min] --> SUG[Suggestions] --> MAIL[Approval email] --> CFG[Tags, rules, levels, mappings, ignore list, lead rules]
+  KB[Knowledge Base canvas: topics, conditions, answers] --> CTX
+```
+
+#### What the rep sees in the CRM
+
+Reps work only in **/crm**. On each lead or deal:
+
+- **WhatsApp tab**: the whole conversation. Messages from the agent start with *AI assistant:*. A rep can reply in the tab; the message goes out through Periskope from the company number, and the AI pauses in that chat (it resumes on its own after *AI Resumes After*, default 24 hours, or with **Resume AI replies**).
+- **Pause AI replies / Resume AI replies** in the page header.
+- **Notes**: one *WhatsApp summary* (what the customer wants, what was answered, what is pending), kept up to date, and one note per topic the customer told us about (requirements, quantities, delivery, payment terms, contact person, complaint), updated instead of repeated.
+- **Tasks**: a follow-up when the rep must act, with a clear title, reason and due date, and always one when the agent sent the holding message. One open task per chat and reason; marking the reply task done closes the reply reminder.
+- **Activity**: a comment for each AI reply.
+- **Bell**: new customer messages, waiting customers and escalations.
+- **Status**: moved forward when the conversation clearly shows it (for example New to Contacted). Won, Lost and On Hold are never set by the agent; it creates a *Confirm: mark as ...?* task for the owner instead.
+
+No ids, confidence figures or raw data appear on these records.
+
+#### Auto reply
+
+After the **Reply Delay** (plus a small random variation) since the customer's last message:
+
+- A newer message moves the timer; a rep's reply cancels it and pauses the AI in that chat.
+- Before answering, the agent reads the deal (or lead): status, owner, notes, open tasks, recent activity and the last quotation. The last quotation and the deal stage may be quoted to the customer; the rest is background only.
+- The answer may use only the approved knowledge entries, ERPNext items (price and stock), open sales orders and the last quotation. Every number in it must appear in that data.
+- If the data does not answer the question, or there is no AI key, or the monthly budget is used up, the customer gets the **Holding Message** and the rep a task. The admins get one email a day about a missing key or budget.
+- Captions of photos and documents are read; voice notes are transcribed with Google Gemini when a key is set (Advanced, Voice Notes).
+- An edited message is tagged again; a deleted message no longer waits for a reply, and the CRM tab shows *This message was deleted*.
+
+Each attempt is a **Periskope Auto Reply** row; each action the agent took is a **Periskope Agent Action** row.
+
+#### The learning agent and approvals
+
+Every 15 minutes the agent reads the conversations that have been quiet for an hour. It builds the knowledge base from answers the reps gave, and suggests changes to tags, keyword rules, SLA levels, a few settings, **group to customer mappings**, **numbers to ignore** and **lead creation rules**. A suggestion needs evidence from several conversations, and its target must exist.
+
+One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Periskope Suggestion** in Desk. Nothing changes until someone approves; a rejected suggestion is not proposed again for 30 days.
+
+#### Knowledge Base canvas
+
+Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the workspace, or from the *Learning agent* step of the Flow dialog. It shows the knowledge base as a node graph, like a workflow builder:
+
+- **Customer asks** starts the tree. **Topic** nodes (Delivery, Pricing) branch into **Condition** nodes (*Customer is in Chennai*, *Otherwise*) and end in **Answer** nodes (*Delivery to Chennai takes 2 days*). An answer can also hang straight under a topic or under Customer asks.
+- Click **+** after a node to add the next one, or drag from a node's right dot onto another node to connect them; drop it on empty canvas to add a node there. Hover a wire to remove it. Drag nodes to arrange them; scroll to move, Ctrl + scroll to zoom, and **Tidy up** lays the tree out again.
+- Click a node to edit it in the side panel. **Delete** retires the node and everything after it, so the agent stops using them.
+- **Import document** (PDF, Excel, Word, CSV): the AI extracts answers from a price list, FAQ or catalogue. You tick the ones to keep and pick where they go; nothing is saved before that.
+- **Knowledge gaps** lists what customers asked in the last 14 days that the agent answered with the holding message, each with *Add an answer*.
+- Answers the learning agent mined from rep replies appear with a dashed border and *Waiting for approval* until an approver accepts them.
+
+How a reply uses it: a customer's message matches an answer by its own words, or by one word of a topic's name or keywords. All answers under that topic go to the AI with their conditions (*Applies only when: Customer is in Chennai*). The AI uses an answer only when the chat or the CRM record shows its condition holds; when it cannot tell which branch applies, the customer gets the holding message.
+
 ### Reports and dashboard
 
-The **Periskope** workspace opens on a dashboard. The cards count messages today, customers waiting for a rep, high severity issues, new enquiries, complaints and payment issues, and AI tagging failures. The charts show messages per day, by tag, by sentiment and by severity.
+The **Periskope** workspace opens on a dashboard with the things that need attention first.
+
+- **Needs attention:** customers waiting for a rep reply, open escalations, high severity issues, new contacts in the queue, AI tagging failures, and the issues of the last 7 days.
+- **Overview:** messages today and the enquiries of the last 7 days, then charts of messages per day, by tag, by sentiment and by severity.
+- **Shortcuts:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, Tags, Reply Reminders, Contact Queue, Keyword Alerts and Webhook Logs.
+- **Reports:** every report below, and a list of all the app's pages.
+
+The *Enquiries* and *Issues* cards follow your tags, not fixed tag names. Each tag has a **Dashboard Group** field (Enquiry, Issue, or empty): a card counts the incoming messages of the last 7 days whose tag is in its group. A new site starts with `order_or_enquiry` as Enquiry and `quality_complaint` and `payment_issue` as Issue.
 
 ![The workspace with live counts and charts.](docs/manual/26-the-workspace-with-live-counts-and-chart.jpg)
 *The workspace with live counts and charts.*
@@ -487,6 +519,8 @@ Low: ordinary. Medium: a real problem that is not yet serious. High: an angry cu
 |---|---|
 | Tag waiting messages with the AI | Every 5 minutes, 20 messages |
 | Reply reminder and escalation check | Every 10 minutes, in working hours |
+| Learning agent (knowledge base, suggestions, approval email) | Every 15 minutes, when enabled |
+| Auto reply: send the replies that are due | Every minute, when enabled |
 | Re-queue webhook logs that were never saved | Every 30 minutes |
 | Catch up on missed messages | Every hour, last 24 hours |
 | Silent number check, token budget check, contact digest | Daily |
@@ -495,7 +529,7 @@ Low: ordinary. Medium: a real problem that is not yet serious. High: an angry cu
 
 ## Privacy
 
-Message text is sent to the AI provider you configure — Anthropic by default; the GLM/Z.ai and Jarvis options send it to those providers instead, so choose them only if that fits your policy. Only company numbers linked in Periskope are captured; personal or mixed-use numbers can be excluded on the ignore list, and staff should be told that business WhatsApp numbers are monitored for record-keeping. Raw webhook payloads are cleared after 90 days by default and message text can be given its own retention. Under India's DPDP Act 2023 the operator remains the data fiduciary for this processing.
+The learning agent and the auto reply send message text (and, for the reply, the matching item, price and order data) to the same AI provider. Message text is sent to the AI provider you configure — Anthropic by default; the GLM/Z.ai and Jarvis options send it to those providers instead, so choose them only if that fits your policy. Only company numbers linked in Periskope are captured; personal or mixed-use numbers can be excluded on the ignore list, and staff should be told that business WhatsApp numbers are monitored for record-keeping. Raw webhook payloads are cleared after 90 days by default and message text can be given its own retention. Under India's DPDP Act 2023 the operator remains the data fiduciary for this processing.
 
 ## Roadmap
 

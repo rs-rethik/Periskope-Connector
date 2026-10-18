@@ -1,0 +1,54 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div class="container" style="max-width: 640px; margin: 40px auto;">
+	<h2>Periskope assistant suggestion</h2>
+	{% if not suggestion %}
+		<p>This link is not valid.</p>
+	{% elif suggestion.status != "Pending" %}
+		<p>This suggestion was already {{ suggestion.status | lower }}.</p>
+	{% else %}
+		<p><b>{{ suggestion.kind }} &middot; {{ suggestion.operation }}</b>{% if suggestion.target %} &middot; {{ suggestion.target }}{% endif %}</p>
+		<p>{{ suggestion.summary }}</p>
+		{% if suggestion.reason %}<p class="text-muted">Why: {{ suggestion.reason }}</p>{% endif %}
+		<pre>{{ payload_text }}</pre>
+		<div id="result" class="mb-3"></div>
+		<div id="buttons">
+			<button class="btn btn-success" data-decision="approve">Approve</button>
+			<button class="btn btn-danger" data-decision="reject">Reject</button>
+		</div>
+		<p class="text-muted mt-3">Nothing changes until you press a button.</p>
+		<script>
+			(function () {
+				var token = {{ token | tojson }};
+				var preset = {{ decision | tojson }};
+				var buttons = document.querySelectorAll("#buttons button");
+				if (preset) {
+					document.querySelector('[data-decision="' + preset + '"]').classList.add("btn-lg");
+				}
+				buttons.forEach(function (button) {
+					button.addEventListener("click", function () {
+						buttons.forEach(function (b) { b.disabled = true; });
+						frappe.call({
+							method: "periskope_connector.api.suggestions.decide",
+							type: "POST",
+							args: { token: token, decision: button.dataset.decision },
+							callback: function (r) {
+								var m = r.message || {};
+								var text = m.ok ? "Done: " + m.outcome : (m.message || "Could not be completed");
+								if (m.error) { text += " (" + m.error + ")"; }
+								document.getElementById("result").textContent = text;
+								document.getElementById("buttons").style.display = "none";
+							},
+							error: function () {
+								document.getElementById("result").textContent = "Something went wrong. Please try again.";
+								buttons.forEach(function (b) { b.disabled = false; });
+							},
+						});
+					});
+				});
+			})();
+		</script>
+	{% endif %}
+</div>
+{% endblock %}

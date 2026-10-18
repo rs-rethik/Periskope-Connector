@@ -25,6 +25,13 @@ DEFAULT_TAGS = [
 ]
 FALLBACK_DEFAULT = "general"
 
+# Which workspace card counts a starting tag: the Enquiries card or the Issues card.
+DASHBOARD_GROUPS = {
+	"order_or_enquiry": "Enquiry",
+	"quality_complaint": "Issue",
+	"payment_issue": "Issue",
+}
+
 
 def default_actions(tag_name: str) -> list[dict]:
 	"""The starting actions of a tag: the behaviour the app had before actions were configurable.

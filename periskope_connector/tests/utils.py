@@ -63,3 +63,25 @@ def msg(body="", message_type="text", needs_reply=0, status="", severity=None):
 		classification_status=status,
 		severity=severity,
 	)
+
+
+def isolate(case, name: str = "periskope_test"):
+	"""Make a test on the real site DB leave nothing behind: commits become no-ops, no email is sent,
+	and the whole test is rolled back. Returns the patched frappe.sendmail."""
+	from unittest.mock import patch
+
+	commit = patch.object(frappe.db, "commit")
+	commit.start()
+	case.addCleanup(commit.stop)
+	mail = patch.object(frappe, "sendmail")
+	sent = mail.start()
+	case.addCleanup(mail.stop)
+	frappe.db.savepoint(name)
+	case.addCleanup(frappe.db.rollback, save_point=name)
+	return sent
+
+
+def settings(**values):
+	"""Set values on Periskope Settings for the current test (rolled back with it)."""
+	for field, value in values.items():
+		frappe.db.set_single_value("Periskope Settings", field, value)

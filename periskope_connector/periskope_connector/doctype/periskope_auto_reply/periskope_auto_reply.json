@@ -1,0 +1,172 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-13 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "chat_id",
+  "contact_number",
+  "org_phone",
+  "rep",
+  "column_state",
+  "status",
+  "due_on",
+  "last_customer_message",
+  "cancel_reason",
+  "section_reply",
+  "customer_text",
+  "reply_text",
+  "confidence",
+  "sources",
+  "column_result",
+  "sent_on",
+  "follow_up",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Chat Id",
+   "reqd": 1,
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "contact_number",
+   "fieldtype": "Data",
+   "label": "Contact Number",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "org_phone",
+   "fieldtype": "Data",
+   "label": "Org Phone"
+  },
+  {
+   "fieldname": "rep",
+   "fieldtype": "Link",
+   "label": "Rep",
+   "options": "User"
+  },
+  {
+   "fieldname": "column_state",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Waiting\nSent\nHolding Sent\nDry Run\nBlocked\nCancelled\nSkipped\nFailed",
+   "default": "Waiting",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "due_on",
+   "fieldtype": "Datetime",
+   "label": "Due On",
+   "search_index": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "last_customer_message",
+   "fieldtype": "Link",
+   "label": "Last Customer Message",
+   "options": "Periskope Message"
+  },
+  {
+   "fieldname": "cancel_reason",
+   "fieldtype": "Data",
+   "label": "Cancel Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_reply",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "customer_text",
+   "fieldtype": "Text",
+   "label": "Customer Text",
+   "description": "The customer's messages read together",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reply_text",
+   "fieldtype": "Text",
+   "label": "Reply Text",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Percent",
+   "label": "Confidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sources",
+   "fieldtype": "Small Text",
+   "label": "Sources",
+   "description": "The data the answer was based on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sent_on",
+   "fieldtype": "Datetime",
+   "label": "Sent On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "follow_up",
+   "fieldtype": "Link",
+   "label": "Follow Up",
+   "options": "Periskope Reply Reminder",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-13 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Auto Reply",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "delete": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "chat_id"
+}

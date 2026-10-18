@@ -9,6 +9,7 @@
   "active",
   "is_default",
   "sort_order",
+  "dashboard_group",
   "description",
   "section_actions",
   "actions"
@@ -49,6 +50,13 @@
    "description": "The order the tags are listed to the AI."
   },
   {
+   "fieldname": "dashboard_group",
+   "fieldtype": "Select",
+   "label": "Dashboard Group",
+   "options": "\nEnquiry\nIssue",
+   "description": "Which workspace card counts this tag: Enquiries or Issues. Leave empty for neither."
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description for the AI",
@@ -80,22 +88,26 @@
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "write": 1,
+   "role": "System Manager"
   },
   {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
    "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
+   "report": 1,
+   "write": 1,
    "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
   }
  ],
  "sort_field": "sort_order",

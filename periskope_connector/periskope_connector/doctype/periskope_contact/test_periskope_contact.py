@@ -16,7 +16,6 @@ test_ignore = ["CRM Lead", "CRM Deal"]
 
 def _settings(**kw):
 	base = {
-		"ignore_numbers": "",
 		"ignore_suppliers": 0,
 		"ignore_employees": 0,
 		"digest_recipients": "",
@@ -31,12 +30,10 @@ class TestPeriskopeContact(FrappeTestCase):
 
 
 class TestIgnoreList(FrappeTestCase):
-	def test_numbers_in_the_ignore_list_are_ignored(self):
-		with patch.object(contacts, "_settings", lambda: _settings(ignore_numbers="919600000001")):
-			self.assertTrue(contacts.is_ignored("919600000001"))
-			self.assertTrue(contacts.is_ignored("+91 96000 00001"))
-			self.assertFalse(contacts.is_ignored("919600000002"))
+	def test_a_missing_number_counts_as_ignored(self):
+		with patch.object(contacts, "_settings", lambda: _settings()):
 			self.assertTrue(contacts.is_ignored(""))  # no number at all is not queueable
+			self.assertFalse(contacts.is_ignored("919600000002"))
 
 	def test_an_ignored_contact_row_blocks_the_number(self):
 		contacts.insert_as_system(
@@ -90,10 +87,14 @@ class TestQueue(FrappeTestCase):
 
 	def test_groups_and_ignored_numbers_are_not_queued(self):
 		self._message("q4", chat_id="1203630@g.us")
-		with patch.object(contacts, "_settings", lambda: _settings(ignore_numbers="919600000001")):
-			self._message("q5")
-		# the site carries real queue rows from the upgrade; only this number must be absent
-		self.assertFalse(frappe.db.exists("Periskope Contact", {"phone": "919600000001"}))
+		contacts.insert_as_system(
+			{"doctype": "Periskope Contact", "phone": "919600000001", "status": "Ignored (Spam)"}
+		)
+		self._message("q5")
+		# The ignore list is the ignored contact rows: the number stays ignored, nothing is queued.
+		self.assertEqual(
+			frappe.db.get_value("Periskope Contact", {"phone": "919600000001"}, "status"), "Ignored (Spam)"
+		)
 
 	def test_create_lead_action_resolves_the_row_and_backfills_history(self):
 		self._message("q6", body="Hi, I am Meena, please send prices")

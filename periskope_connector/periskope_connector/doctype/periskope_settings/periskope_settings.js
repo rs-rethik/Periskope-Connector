@@ -51,10 +51,41 @@ frappe.ui.form.on("Periskope Settings", {
 		);
 
 		refresh_health(frm);
+		render_setup(frm);
+	},
+
+	// Buttons inside the setup steps.
+	test_periskope(frm) {
+		test_connection(frm);
+	},
+	test_ai(frm) {
+		test_ai(frm);
 	},
 });
 
 frappe.ui.form.on("Periskope Settings", {
+	// Button on the AI Assistant tab: one pass of the learning agent now, instead of waiting 15 minutes.
+	run_agent_now(frm) {
+		with_saved(frm, () => {
+			frappe.call({
+				method: "periskope_connector.agent.run_now",
+				freeze: true,
+				freeze_message: __("The agent is reading new conversations..."),
+				callback(r) {
+					const out = r.message || {};
+					frappe.msgprint(
+						out.skipped
+							? __("Skipped: {0}", [out.skipped])
+							: __(
+									"Read {0} message(s), learned {1} thing(s), {2} suggestion(s) now waiting for approval.",
+									[out.messages || 0, out.knowledge || 0, out.suggestions || 0]
+							  )
+					);
+				},
+			});
+		});
+	},
+
 	// Button under "Instructions for the AI". Nothing changes until the user accepts the result.
 	optimize_instructions(frm) {
 		const ask = new frappe.ui.Dialog({
@@ -255,6 +286,12 @@ function refresh_health(frm) {
 				health_unprocessed: `${h.unprocessed ?? 0}`,
 				health_month_tokens: `${h.month_tokens ?? 0}`,
 				health_phones: h.phones || "-",
+				health_agent: h.agent || "-",
+				health_auto_reply: h.auto_reply || "-",
+				health_crm: h.crm || "-",
+				health_budget: h.budget || "-",
+				health_test_mode: h.test_mode || "-",
+				health_last_problem: h.last_problem || "-",
 			};
 			Object.entries(values).forEach(([field, value]) => {
 				frm.doc[field] = value;
@@ -276,6 +313,11 @@ function test_ai(frm) {
 					message: __("AI connected ({0})", [r.message.model]),
 					indicator: "green",
 				});
+				frm.reload_doc();
+			},
+			error() {
+				// The server stored the failure in AI Status.
+				frm.reload_doc();
 			},
 		});
 	});
@@ -295,5 +337,48 @@ function sync_phones(frm) {
 				frm.reload_doc();
 			},
 		});
+	});
+}
+
+// The four setup steps at the top of the Setup tab, and a red banner while test mode is on.
+function render_setup(frm) {
+	const field = frm.fields_dict.setup_status;
+	if (!field) return;
+	frappe.call({
+		method: "periskope_connector.api.settings.get_setup_status",
+		callback(r) {
+			const status = r.message;
+			if (!status) return;
+			const e = frappe.utils.escape_html;
+			const rows = status.steps
+				.map(
+					(step, i) =>
+						`<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border-color)">
+							<span class="indicator-pill ${step.ok ? "green" : "orange"}">${
+							step.ok ? __("Done") : __("To do")
+						}</span>
+							<b>${i + 1}. ${e(step.title)}</b>
+							<span class="text-muted">${e(step.message || "")}</span>
+						</div>`
+				)
+				.join("");
+			const headline = status.done
+				? __("Setup is complete. The AI agent is running.")
+				: status.ready
+				? __("Setup is done. Switch on Enable AI Agent in step 4 to start.")
+				: __(
+						"Finish the steps below; the AI agent can be switched on once steps 1 to 3 are done."
+				  );
+			field.$wrapper.html(`<p>${e(headline)}</p>${rows}`);
+			frm.dashboard.clear_headline();
+			if (status.test_mode) {
+				frm.dashboard.set_headline_alert(
+					__(
+						"Test mode is on: WhatsApp messages go only to the allowed chats, emails only to the allowed addresses. Everything else is a dry run (see Periskope Agent Action)."
+					),
+					"red"
+				);
+			}
+		},
 	});
 }

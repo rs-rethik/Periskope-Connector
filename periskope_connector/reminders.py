@@ -5,7 +5,7 @@ Runs every 10 minutes. Per chat (not per message), with a tiered clock in workin
 2. Only working hours count (site time, e.g. 09:00-19:00, Monday-Saturday, minus a Holiday
    List), so a message sent at night starts counting the next morning and nothing fires
    outside working hours.
-3. The SLA levels (Periskope Settings > Reply Reminders) say what happens and when: each row has
+3. The SLA levels (the Periskope SLA Level list) say what happens and when: each row has
    the working minutes to wait, the lowest severity it applies to, and an action: notify the rep
    (bell), a ToDo for the rep, an email to the managers, to the escalation list (the MD), or to
    the recipients on the row. The starting rows are: notify at 1 working hour, ToDo plus managers
@@ -26,6 +26,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, flt, get_datetime, get_time, get_url_to_form, now_datetime, today
 
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import is_acknowledgement
 
@@ -89,12 +90,16 @@ def get_config(settings=None) -> SimpleNamespace:
 			action=row.action,
 			recipients=row.recipients or "",
 		)
-		for row in sorted(settings.get("sla_levels") or [], key=lambda r: (flt(r.wait_minutes), r.idx))
+		for row in frappe.get_all(
+			"Periskope SLA Level",
+			fields=["wait_minutes", "min_severity", "action", "recipients"],
+			order_by="wait_minutes asc, creation asc",
+		)
 		if row.action
 	]
 	extra_words = [w.strip().lower() for w in re.split(r"[,\n;]", settings.ack_words or "") if w.strip()]
 	return SimpleNamespace(
-		enabled=bool(settings.enable_reply_reminders),
+		enabled=feature_on("enable_reply_reminders", settings),
 		start=get_time(settings.working_hours_start or "09:00:00"),
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),
@@ -159,6 +164,8 @@ def needs_reply(message, extra_words: list[str] | None = None) -> bool:
 	"""False for acknowledgements, emoji-only and 1-2 character texts. A short real question
 	such as "Price?" still needs a reply. If the AI already tagged the message and decided no
 	reply is needed, that is respected."""
+	if getattr(message, "is_deleted", 0):
+		return False  # the customer deleted it
 	body = (message.body or "").strip()
 	if not body:
 		return bool(message.message_type and message.message_type != "text")  # an attachment
@@ -169,10 +176,20 @@ def needs_reply(message, extra_words: list[str] | None = None) -> bool:
 	return True
 
 
+def _is_reply(m) -> bool:
+	"""A message from our side that answers the customer. The assistant's holding message does not:
+	it only says a rep will come back."""
+	return (
+		m.direction == "Outgoing"
+		and bool(m.message_timestamp)
+		and getattr(m, "agent_reply", None) != "Holding"
+	)
+
+
 def unanswered(messages: list, extra_words: list[str] | None = None) -> list:
 	"""Customer messages, oldest first, sent after the rep's last message and needing a reply."""
 	last_reply = max(
-		(m.message_timestamp for m in messages if m.direction == "Outgoing" and m.message_timestamp),
+		(m.message_timestamp for m in messages if _is_reply(m)),
 		default=None,
 	)
 	return [
@@ -208,8 +225,20 @@ def _done(reminder) -> set[str]:
 	return {key for key in (reminder.fired_rows or "").split("\n") if key}
 
 
-def _bell(rep: str | None, last, hours: float):
-	"""L1: a notification for the rep, no email yet."""
+def _bell(rep: str | None, last, hours: float, chat_id: str | None = None):
+	"""L1: a notification for the rep, no email yet. In the CRM bell when the chat has a lead or
+	deal (reps work in the CRM), else a desk notification."""
+	from periskope_connector import crm_context, writeback
+
+	if chat_id and crm_context.record_of(chat_id):
+		writeback.notify(
+			chat_id,
+			_("A customer is waiting for your WhatsApp reply: {0}").format(
+				(last.body or _("(attachment)"))[:120]
+			),
+			user=rep if rep and rep != "Administrator" else None,
+		)
+		return
 	if not rep or not frappe.db.get_value("User", rep, "enabled"):
 		return
 	frappe.get_doc(
@@ -304,6 +333,24 @@ def create_reminder(chat_id: str, pending: list, rep: str | None, cfg, now: date
 
 
 def _create_todo(reminder, hours: float) -> bool:
+	"""The rep's to-do for a waiting customer: a CRM Task on the lead or deal (one per chat, shared
+	with the auto reply's holding-message task), else a desk ToDo."""
+	from periskope_connector import crm_context, writeback
+
+	if crm_context.record_of(reminder.chat_id):
+		task = writeback.upsert_task(
+			reminder.chat_id,
+			"reply",
+			_("Reply to the customer on WhatsApp: {0}").format((reminder.message_preview or "")[:80]),
+			_("The customer has been waiting {0:.1f} working hours since {1}. Latest message: {2}").format(
+				hours, reminder.waiting_since, reminder.message_preview or ""
+			),
+			priority="High" if hours >= 3 else "Medium",
+			assignee=reminder.rep if reminder.rep and reminder.rep != "Administrator" else None,
+		)
+		if task:
+			reminder.db_set("crm_task", task)
+		return True
 	if reminder.todo:
 		return True
 	todo = frappe.get_doc(
@@ -331,7 +378,7 @@ def perform(row, reminder, last, cfg, now: datetime, hours: float) -> bool:
 	that could not be sent)."""
 	action = row.action
 	if action == NOTIFY_REP:
-		_bell(reminder.rep, last, hours)
+		_bell(reminder.rep, last, hours, reminder.chat_id)
 		return True
 	if action == TODO_FOR_REP:
 		return _create_todo(reminder, hours)
@@ -354,7 +401,7 @@ def close(reminder, now: datetime, messages: list | None = None, cfg=None):
 	values = {"status": "Closed", "closed_on": now}
 	if messages and cfg:
 		reply = max(
-			(m.message_timestamp for m in messages if m.direction == "Outgoing" and m.message_timestamp),
+			(m.message_timestamp for m in messages if _is_reply(m)),
 			default=None,
 		)
 		if reply:
@@ -364,6 +411,9 @@ def close(reminder, now: datetime, messages: list | None = None, cfg=None):
 	reminder.db_set(values)
 	if reminder.todo and frappe.db.get_value("ToDo", reminder.todo, "status") == "Open":
 		frappe.db.set_value("ToDo", reminder.todo, "status", "Closed")
+	task = reminder.get("crm_task")
+	if task and frappe.db.get_value("CRM Task", task, "status") in ("Backlog", "Todo", "In Progress"):
+		frappe.db.set_value("CRM Task", task, "status", "Done")
 
 
 # --- The engine --------------------------------------------------------------------------------------
@@ -444,6 +494,7 @@ def _run(now: datetime | None) -> dict:
 			"classification_status",
 			"needs_reply",
 			"severity",
+			"agent_reply",
 		],
 		order_by="message_timestamp asc",
 	)

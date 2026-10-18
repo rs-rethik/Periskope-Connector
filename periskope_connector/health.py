@@ -9,6 +9,7 @@ Two watchers:
 Plus get_health(), the numbers shown on the settings page's Health tab.
 """
 
+import re
 from datetime import timedelta
 
 import frappe
@@ -188,4 +189,93 @@ def get_health() -> dict:
 		)
 		or _("no messages in the last 15 days"),
 		"today": nowdate(),
+		**agent_health(),
 	}
+
+
+def agent_health() -> dict:
+	"""The agent's part of the Health tab (the Flow dialog shows the same figures in more detail)."""
+	from periskope_connector import flow
+
+	settings = frappe.get_doc("Periskope Settings")
+	agent, reply, crm = flow._agent(settings), flow._autoreply(settings), flow._crm(settings)
+	budget = settings.ai_monthly_budget_tokens or 0
+	used = month_tokens()
+	problem = frappe.get_all(
+		"Error Log",
+		filters={"method": ["like", "Periskope%"]},
+		fields=["method", "creation"],
+		order_by="creation desc",
+		limit=1,
+	)
+	return {
+		"agent": (
+			_("off")
+			if not settings.enable_agent
+			else _("last run {0} ({1}), {2} waiting for approval").format(
+				agent["last_run"], agent["last_status"] or "-", agent["pending"]
+			)
+		),
+		"auto_reply": _("{0} answered, {1} holding, {2} dry run, {3} failed").format(
+			reply["today"].get("Sent", 0),
+			reply["today"].get("Holding Sent", 0),
+			reply["today"].get("Dry Run", 0) + reply["today"].get("Blocked", 0),
+			reply["today"].get("Failed", 0),
+		),
+		"crm": _("{0} notes, {1} tasks, {2} status changes").format(
+			crm["notes"], crm["tasks"], crm["status_changes"]
+		),
+		"budget": f"{used:,} / {budget:,} ({used * 100 // budget}%)"
+		if budget
+		else _("{0:,} tokens, no budget set").format(used),
+		"test_mode": _("on: only the allowed chats and emails") if agent["test_mode"] else _("off"),
+		"last_problem": f"{problem[0].method} ({frappe.utils.pretty_date(problem[0].creation)})"
+		if problem
+		else _("none"),
+	}
+
+
+NOT_READY = {
+	"budget": (
+		"Periskope AI budget reached: the agent sends holding messages",
+		"The monthly AI token budget is used up. Customers get the holding message and the reps get a "
+		"task for each chat until the budget is raised in Periskope Settings or the month ends.",
+	),
+	"no_key": (
+		"Periskope AI key missing: the agent sends holding messages",
+		"No AI key is set in Periskope Settings. Customers get the holding message and the reps get a "
+		"task for each chat until a key is entered.",
+	),
+}
+
+
+def notify_admin_once(reason: str) -> bool:
+	"""Tell the approvers (else the managers) once a day that the agent cannot call the AI."""
+	if reason not in NOT_READY or _alerted_recently(f"not_ready:{reason}"):
+		return False
+	subject, body = NOT_READY[reason]
+	raw = frappe.db.get_single_value("Periskope Settings", "approver_emails") or ""
+	emails = [e.strip() for e in re.split(r"[,\n;]", raw) if e.strip()] or _manager_emails()
+	if not emails:
+		return False
+	try:
+		frappe.sendmail(
+			recipients=emails,
+			subject=_(subject),
+			message=f"<p>{_(body)}</p><p><a href='/app/periskope-settings'>Periskope Settings</a></p>",
+		)
+	except Exception:
+		log_once("Periskope: could not email the AI warning")
+		return False
+	frappe.cache().set_value(f"periskope_alert:not_ready:{reason}", 1, expires_in_sec=24 * 3600)
+	return True
+
+
+def log_once(title: str, hours: int = 1) -> None:
+	"""frappe.log_error at most once per `hours` for the same title, so one cause that repeats on
+	every message does not flood the Error Log."""
+	key = f"periskope_logged:{title}"
+	if frappe.cache().get_value(key, expires=True) is not None:
+		return
+	frappe.cache().set_value(key, 1, expires_in_sec=hours * 3600)
+	frappe.log_error(title=title)

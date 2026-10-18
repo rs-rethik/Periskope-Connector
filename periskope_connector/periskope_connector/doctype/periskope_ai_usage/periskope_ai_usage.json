@@ -103,21 +103,22 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
-   "share": 1
+   "export": 1,
+   "delete": 1,
+   "role": "System Manager"
   },
   {
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
    "role": "Sales Manager"
   }
  ],
