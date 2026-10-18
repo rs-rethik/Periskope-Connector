@@ -8,10 +8,9 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
 from periskope_connector import contacts, leads, messages
-from periskope_connector.tests.utils import event
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event
 
-# The CRM link fields would otherwise make the runner build test leads and deals.
-test_ignore = ["CRM Lead", "CRM Deal"]
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 def _settings(**kw):

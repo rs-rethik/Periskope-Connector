@@ -18,7 +18,9 @@ from periskope_connector.ai import classifier
 from periskope_connector.api import settings as settings_api
 from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import at, cfg
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, at, cfg
+
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 SECRET = "test-secret"
 

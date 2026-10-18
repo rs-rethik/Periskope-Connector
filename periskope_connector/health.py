@@ -16,6 +16,8 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime, nowdate
 
+from periskope_connector import query
+
 # A number with at least this much average daily traffic is expected to say something today.
 MIN_DAILY_TRAFFIC = 3
 ALERT_AGAIN_AFTER_HOURS = 20  # one alert per silent phone per day, not per run
@@ -172,14 +174,8 @@ def get_health() -> dict:
 	"""The live figures shown on the settings page."""
 	phones = phone_counts()
 	return {
-		"last_webhook": str(
-			frappe.db.get_value("Periskope Webhook Log", {"creation": ["is", "set"]}, "max(creation)")
-			or _("never")
-		),
-		"last_ai_run": str(
-			frappe.db.get_value("Periskope Message", {"classified_at": ["is", "set"]}, "max(classified_at)")
-			or _("never")
-		),
+		"last_webhook": str(query.latest("Periskope Webhook Log", "creation") or _("never")),
+		"last_ai_run": str(query.latest("Periskope Message", "classified_at") or _("never")),
 		"pending": frappe.db.count("Periskope Message", {"classification_status": "Pending"}),
 		"failed": frappe.db.count("Periskope Message", {"classification_status": "Failed"}),
 		"unprocessed": _unprocessed_logs(),

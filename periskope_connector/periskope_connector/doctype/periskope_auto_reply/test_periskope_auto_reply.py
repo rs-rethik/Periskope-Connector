@@ -10,7 +10,9 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
 from periskope_connector import answer, autoreply, knowledge, messages, reminders, safety
-from periskope_connector.tests.utils import event, isolate, settings
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, settings
+
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 CHAT = "919600000777@c.us"
 HOLDING = "Holding text for the test."
@@ -30,6 +32,10 @@ class TestAutoReply(FrappeTestCase):
 		self.sends = patch.object(autoreply, "send_message")
 		self.send = self.sends.start()
 		self.addCleanup(self.sends.stop)
+		# The AI counts as usable whether or not the site has a key; answer.build is mocked per test.
+		ready = patch.object(autoreply.assistant, "readiness", return_value=(True, ""))
+		ready.start()
+		self.addCleanup(ready.stop)
 		settings(
 			enable_agent=1,
 			enable_auto_reply=1,
@@ -41,6 +47,8 @@ class TestAutoReply(FrappeTestCase):
 			holding_message=HOLDING,
 			enable_classification=0,
 		)
+		# Only this test's replies may fall due: the site's own waiting ones are put aside (rolled back).
+		frappe.db.delete("Periskope Auto Reply", {"status": "Waiting"})
 		frappe.db.delete("Periskope Auto Reply", {"chat_id": CHAT})
 		self.n = 0
 

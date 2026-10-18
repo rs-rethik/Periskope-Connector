@@ -10,9 +10,10 @@ from frappe.utils import get_datetime, now_datetime
 
 from periskope_connector import autoreply, chat, messages, mirror, outbound
 from periskope_connector.api import crm as crm_api
-from periskope_connector.tests.utils import event, isolate, settings
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, settings
 
-test_ignore = ["CRM Lead", "CRM Deal"]
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
+
 
 NUMBER = "919600000321"
 CHAT = f"{NUMBER}@c.us"

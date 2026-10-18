@@ -15,7 +15,7 @@ from datetime import timedelta
 import frappe
 from frappe.utils import add_days, get_datetime, now_datetime
 
-from periskope_connector import knowledge, learner, suggestions
+from periskope_connector import knowledge, learner, query, suggestions
 from periskope_connector.ai import assistant
 from periskope_connector.api.permission import require_admin
 from periskope_connector.health import month_tokens
@@ -43,11 +43,7 @@ FIELDS = [
 
 
 def _last_cursor():
-	return frappe.db.get_value(
-		"Periskope Agent Run",
-		{"status": ["in", ["Done", "Skipped"]], "cursor_to": ["is", "set"]},
-		"max(cursor_to)",
-	)
+	return query.latest("Periskope Agent Run", "cursor_to", {"status": ["in", ["Done", "Skipped"]]})
 
 
 def transcript(chats: dict[str, list]) -> tuple[str, dict[int, list[str]]]:

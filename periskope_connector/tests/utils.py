@@ -7,6 +7,22 @@ import frappe
 
 from periskope_connector import reminders
 
+# Doctypes of other apps that ours link to. The tests make their own records, so the test runner must
+# not make these: on Frappe v16 with ERPNext that walks User > Email Account > Company > ... into
+# doctypes of apps that may not be installed (Payment Gateway). Doctype test modules set this as
+# IGNORE_TEST_RECORD_DEPENDENCIES (v16) and test_ignore (v15).
+OTHER_APP_DOCTYPES = [
+	"CRM Deal",
+	"CRM Lead",
+	"CRM Organization",
+	"CRM Task",
+	"FCRM Note",
+	"Holiday List",
+	"Sales Person",
+	"ToDo",
+	"User",
+]
+
 # A team group, used by the tests that need a chat with no single customer.
 GROUP_CHAT = "1203639999@g.us"
 

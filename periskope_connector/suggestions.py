@@ -18,6 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, escape_html, get_datetime, now_datetime
 
+from periskope_connector import query
 from periskope_connector.api.permission import require_manager
 from periskope_connector.system import insert_as_system, save_as_system
 
@@ -491,7 +492,7 @@ def send_digest(force: bool = False) -> int:
 		return 0
 	gap = frappe.db.get_single_value("Periskope Settings", "suggestion_email_gap_hours")
 	gap = 6 if gap is None else int(gap)
-	last = frappe.db.get_value("Periskope Suggestion", {"emailed_on": ["is", "set"]}, "max(emailed_on)")
+	last = query.latest("Periskope Suggestion", "emailed_on")
 	if not force and last and get_datetime(last) > now_datetime() - timedelta(hours=gap):
 		return 0
 	recipients = _recipients()
