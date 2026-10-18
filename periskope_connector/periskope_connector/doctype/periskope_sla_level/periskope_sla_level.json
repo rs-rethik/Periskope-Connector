@@ -2,7 +2,6 @@
  "actions": [],
  "creation": "2026-10-09 17:00:00.000000",
  "doctype": "DocType",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "wait_minutes",
@@ -17,7 +16,6 @@
    "in_list_view": 1,
    "label": "Waiting (working minutes)",
    "reqd": 1,
-   "columns": 2,
    "description": "Only working hours count."
   },
   {
@@ -26,8 +24,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "From Severity",
-   "options": "Low\nMedium\nHigh",
-   "columns": 2
+   "options": "Low\nMedium\nHigh"
   },
   {
    "fieldname": "action",
@@ -35,28 +32,54 @@
    "in_list_view": 1,
    "label": "Action",
    "options": "\nNotify Rep\nToDo for Rep\nEmail Managers\nEmail Escalation List\nEmail Recipients",
-   "reqd": 1,
-   "columns": 3
+   "reqd": 1
   },
   {
    "fieldname": "recipients",
    "fieldtype": "Small Text",
    "in_list_view": 1,
    "label": "Recipients",
-   "columns": 3,
    "description": "Email Recipients only: comma-separated emails."
   }
  ],
- "index_web_pages_for_search": 1,
- "istable": 1,
+ "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-09 17:00:00.000000",
+ "modified": "2026-10-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope SLA Level",
  "owner": "Administrator",
- "permissions": [],
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "wait_minutes",
+ "sort_order": "ASC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "track_changes": 1,
+ "description": "The escalation ladder for customers waiting for a reply. Suggested by the agent, applied after approval; admins can edit them here."
 }

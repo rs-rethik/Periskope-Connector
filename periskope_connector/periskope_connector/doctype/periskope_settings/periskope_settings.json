@@ -1,83 +1,40 @@
 {
  "actions": [],
- "creation": "2026-09-29 10:00:00.000000",
+ "creation": "2026-09-29 10:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "tab_connection",
-  "enabled",
+  "tab_setup",
+  "section_setup_status",
+  "setup_status",
   "section_connect",
+  "enabled",
   "api_key",
   "column_status",
   "connection_status",
   "last_checked",
+  "test_periskope",
   "section_webhook",
   "webhook_url",
   "column_secret",
   "webhook_signing_secret",
-  "webhook_events",
-  "section_phones",
-  "phones",
-  "tab_ai",
   "section_ai",
-  "enable_classification",
   "ai_provider",
   "anthropic_api_key",
-  "ai_business_context",
-  "section_prompt",
-  "ai_instructions",
-  "optimize_instructions",
-  "section_ai_options",
-  "ai_model",
-  "ai_base_url",
-  "column_ai_options",
-  "context_messages",
-  "classify_group_chats",
-  "tab_capture",
-  "section_capture",
-  "create_leads_from_enquiries",
-  "section_ignore",
-  "ignore_numbers",
-  "column_ignore",
-  "ignore_suppliers",
-  "ignore_employees",
-  "section_digest",
-  "digest_recipients",
-  "tab_reminders",
-  "section_reminders",
-  "enable_reply_reminders",
-  "working_hours_start",
-  "working_hours_end",
-  "working_days",
-  "holiday_list",
-  "column_reminders",
-  "alert_emails",
-  "escalation_emails",
-  "remind_group_chats",
-  "section_sla",
-  "sla_levels",
-  "section_ack",
-  "ack_words",
-  "tab_keywords",
-  "section_keywords",
-  "keyword_rules",
-  "column_keywords",
-  "keyword_dedupe_hours",
-  "tab_data",
-  "section_ai_cost",
-  "ai_max_tokens",
-  "min_length",
   "column_budget",
   "ai_monthly_budget_tokens",
-  "section_retention",
-  "raw_payload_retention_days",
-  "body_retention_days",
-  "download_media",
-  "tab_crm",
-  "section_crm",
-  "comment_mode",
-  "burst_minutes",
-  "reps_see_own_numbers",
+  "ai_status",
+  "test_ai",
+  "section_team",
+  "approver_emails",
+  "column_team",
+  "default_rep",
+  "section_phones",
+  "phones",
+  "section_agent",
+  "enable_agent",
+  "column_agent",
+  "reply_delay_minutes",
   "tab_health",
   "section_health",
   "health_last_webhook",
@@ -88,14 +45,103 @@
   "health_unprocessed",
   "health_month_tokens",
   "health_phones",
+  "section_health_agent",
+  "health_agent",
+  "health_auto_reply",
+  "health_crm",
+  "column_health_agent",
+  "health_budget",
+  "health_test_mode",
+  "health_last_problem",
   "tab_advanced",
-  "base_url"
+  "base_url",
+  "section_adv_ai",
+  "enable_classification",
+  "ai_business_context",
+  "ai_model",
+  "ai_base_url",
+  "column_ai_options",
+  "context_messages",
+  "classify_group_chats",
+  "ai_max_tokens",
+  "min_length",
+  "section_voice",
+  "gemini_api_key",
+  "column_voice",
+  "gemini_model",
+  "section_prompt",
+  "ai_instructions",
+  "optimize_instructions",
+  "section_auto_reply",
+  "enable_auto_reply",
+  "reply_delay_jitter_percent",
+  "reply_min_confidence",
+  "column_reply",
+  "reply_working_hours_only",
+  "reply_group_chats",
+  "reply_max_per_chat_per_day",
+  "ai_resume_after_hours",
+  "holding_message",
+  "section_learning",
+  "learning_lookback_days",
+  "learning_min_evidence",
+  "column_learning",
+  "suggestion_expiry_days",
+  "suggestion_email_gap_hours",
+  "run_agent_now",
+  "section_reminders",
+  "enable_reply_reminders",
+  "working_hours_start",
+  "working_hours_end",
+  "working_days",
+  "holiday_list",
+  "column_reminders",
+  "alert_emails",
+  "escalation_emails",
+  "remind_group_chats",
+  "ack_words",
+  "keyword_dedupe_hours",
+  "section_capture",
+  "create_leads_from_enquiries",
+  "ignore_suppliers",
+  "ignore_employees",
+  "column_capture",
+  "digest_recipients",
+  "section_crm",
+  "comment_mode",
+  "burst_minutes",
+  "reps_see_own_numbers",
+  "section_retention",
+  "raw_payload_retention_days",
+  "body_retention_days",
+  "section_events",
+  "webhook_events",
+  "section_test_mode",
+  "test_mode",
+  "column_test_mode",
+  "test_allowed_chats",
+  "test_allowed_emails"
  ],
  "fields": [
   {
-   "fieldname": "tab_connection",
+   "fieldname": "tab_setup",
    "fieldtype": "Tab Break",
-   "label": "Connection"
+   "label": "Setup"
+  },
+  {
+   "fieldname": "section_setup_status",
+   "fieldtype": "Section Break",
+   "label": "Setup Status"
+  },
+  {
+   "fieldname": "setup_status",
+   "fieldtype": "HTML",
+   "label": "Setup Status"
+  },
+  {
+   "fieldname": "section_connect",
+   "fieldtype": "Section Break",
+   "label": "1. Connect Periskope"
   },
   {
    "default": "0",
@@ -105,12 +151,7 @@
    "label": "Enable Periskope Integration"
   },
   {
-   "fieldname": "section_connect",
-   "fieldtype": "Section Break",
-   "label": "1. Connect to Periskope"
-  },
-  {
-   "description": "Paste the API key from Periskope (console.periskope.app > Settings > Integrations > API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
+   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "Periskope API Key"
@@ -134,7 +175,8 @@
   {
    "fieldname": "section_webhook",
    "fieldtype": "Section Break",
-   "label": "2. Receive Messages (Webhook)"
+   "label": "Receive Messages (Webhook)",
+   "collapsible": 1
   },
   {
    "fieldname": "webhook_url",
@@ -147,44 +189,15 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Paste the signing secret from Periskope (Settings > Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions > Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
+   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions &gt; Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
    "fieldname": "webhook_signing_secret",
    "fieldtype": "Password",
    "label": "Webhook Signing Secret"
   },
   {
-   "description": "The events Periskope should send to this site. Only message.created is stored as a message; the others are logged. Test Connection or Create Webhook in Periskope registers them.",
-   "fieldname": "webhook_events",
-   "fieldtype": "Table",
-   "label": "Webhook Events",
-   "options": "Periskope Webhook Event"
-  },
-  {
-   "fieldname": "section_phones",
-   "fieldtype": "Section Break",
-   "label": "3. Assign Phones to Sales Reps"
-  },
-  {
-   "fieldname": "phones",
-   "fieldtype": "Table",
-   "label": "Linked WhatsApp Phones",
-   "options": "Periskope Phone"
-  },
-  {
-   "fieldname": "tab_ai",
-   "fieldtype": "Tab Break",
-   "label": "AI Tagging"
-  },
-  {
    "fieldname": "section_ai",
    "fieldtype": "Section Break",
-   "label": "Turn On AI Tagging"
-  },
-  {
-   "default": "0",
-   "fieldname": "enable_classification",
-   "fieldtype": "Check",
-   "label": "Tag New Messages with AI"
+   "label": "2. AI"
   },
   {
    "description": "<b>Direct API</b> sends messages to Anthropic (or Z.ai) with your own key. <b>Jarvis</b> (shown only when the Jarvis app is installed) uses the model already set up there, so no key is needed here.",
@@ -194,265 +207,11 @@
    "options": "Direct API\nJarvis"
   },
   {
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
    "description": "Paste the API key of your AI provider: Anthropic (console.anthropic.com) for Claude models, or Z.ai for GLM models. Message text is sent to that provider to be tagged. Then use <b>Actions &gt; Test AI Connection</b>. For GLM, also set <b>AI API Address</b> under AI Options to <b>https://api.z.ai/api/anthropic</b>.",
    "fieldname": "anthropic_api_key",
    "fieldtype": "Password",
-   "label": "AI API Key",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
-  },
-  {
-   "fieldname": "ai_business_context",
-   "fieldtype": "Small Text",
-   "label": "About Your Business"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_prompt",
-   "fieldtype": "Section Break",
-   "label": "AI Instructions"
-  },
-  {
-   "fieldname": "ai_instructions",
-   "fieldtype": "Long Text",
-   "label": "Instructions for the AI"
-  },
-  {
-   "fieldname": "optimize_instructions",
-   "fieldtype": "Button",
-   "label": "Improve Instructions with AI"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_ai_options",
-   "fieldtype": "Section Break",
-   "label": "AI Options"
-  },
-  {
-   "default": "claude-haiku-4-5",
-   "fieldname": "ai_model",
-   "fieldtype": "Select",
-   "label": "AI Model",
-   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
-  },
-  {
-   "fieldname": "ai_base_url",
-   "fieldtype": "Data",
-   "label": "AI API Address",
-   "depends_on": "eval:doc.ai_provider!=\"Jarvis\""
-  },
-  {
-   "fieldname": "column_ai_options",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "5",
-   "fieldname": "context_messages",
-   "fieldtype": "Int",
-   "label": "Earlier Messages Given to the AI"
-  },
-  {
-   "default": "0",
-   "fieldname": "classify_group_chats",
-   "fieldtype": "Check",
-   "label": "Also Tag Group Chats"
-  },
-  {
-   "fieldname": "tab_capture",
-   "fieldtype": "Tab Break",
-   "label": "Lead Capture"
-  },
-  {
-   "fieldname": "section_capture",
-   "fieldtype": "Section Break",
-   "label": "New Enquiries from Unknown Numbers"
-  },
-  {
-   "default": "0",
-   "description": "When the AI tags a customer's message in a 1-to-1 chat as <b>New Enquiry</b> and the number is not on any lead or deal, a CRM Lead is created for the rep of that phone. Every unknown number appears in the <b>Periskope Contact</b> queue either way, where a manager can create or link a lead with one click.",
-   "fieldname": "create_leads_from_enquiries",
-   "fieldtype": "Check",
-   "label": "Create Leads from New Enquiries"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_ignore",
-   "fieldtype": "Section Break",
-   "label": "Numbers to Ignore"
-  },
-  {
-   "description": "One WhatsApp number per line (with country code). Personal, staff and vendor numbers here get no Contact queue entry and no lead.",
-   "fieldname": "ignore_numbers",
-   "fieldtype": "Small Text",
-   "label": "Ignore List"
-  },
-  {
-   "fieldname": "column_ignore",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "description": "Numbers found on an ERPNext Supplier's contact are ignored (needs ERPNext).",
-   "fieldname": "ignore_suppliers",
-   "fieldtype": "Check",
-   "label": "Ignore Supplier Numbers"
-  },
-  {
-   "default": "0",
-   "description": "Numbers found on an ERPNext Employee record are ignored (needs ERPNext).",
-   "fieldname": "ignore_employees",
-   "fieldtype": "Check",
-   "label": "Ignore Employee Numbers"
-  },
-  {
-   "fieldname": "section_digest",
-   "fieldtype": "Section Break",
-   "label": "Daily Digest"
-  },
-  {
-   "description": "Who gets the daily email of new unmatched contacts (comma-separated). Empty uses the Manager Emails on the Reply Reminders tab.",
-   "fieldname": "digest_recipients",
-   "fieldtype": "Small Text",
-   "label": "Digest Recipients"
-  },
-  {
-   "fieldname": "tab_reminders",
-   "fieldtype": "Tab Break",
-   "label": "Reply Reminders"
-  },
-  {
-   "fieldname": "section_reminders",
-   "fieldtype": "Section Break",
-   "label": "Remind Reps When a Customer Is Waiting"
-  },
-  {
-   "default": "0",
-   "fieldname": "enable_reply_reminders",
-   "fieldtype": "Check",
-   "label": "Enable Reply Reminders"
-  },
-  {
-   "default": "09:00:00",
-   "fieldname": "working_hours_start",
-   "fieldtype": "Time",
-   "label": "Working Hours Start"
-  },
-  {
-   "default": "19:00:00",
-   "fieldname": "working_hours_end",
-   "fieldtype": "Time",
-   "label": "Working Hours End"
-  },
-  {
-   "default": "Monday to Saturday",
-   "fieldname": "working_days",
-   "fieldtype": "Select",
-   "label": "Working Days",
-   "options": "Monday to Saturday\nMonday to Friday\nEvery day"
-  },
-  {
-   "description": "Holidays (for example the Diwali shutdown) do not count as waiting time.",
-   "fieldname": "holiday_list",
-   "fieldtype": "Link",
-   "label": "Holiday List",
-   "options": "Holiday List"
-  },
-  {
-   "fieldname": "column_reminders",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "alert_emails",
-   "fieldtype": "Small Text",
-   "label": "Manager Emails (L2)"
-  },
-  {
-   "description": "Who is emailed at L3 (comma-separated). Empty uses the Manager Emails.",
-   "fieldname": "escalation_emails",
-   "fieldtype": "Small Text",
-   "label": "Escalation Emails (L3, the MD)"
-  },
-  {
-   "default": "0",
-   "fieldname": "remind_group_chats",
-   "fieldtype": "Check",
-   "label": "Include Group Chats"
-  },
-  {
-   "fieldname": "section_sla",
-   "fieldtype": "Section Break",
-   "label": "SLA Levels",
-   "description": "What happens, and when, for a customer who is waiting for a reply. Rows run in order of waiting time; each action runs once per waiting period."
-  },
-  {
-   "fieldname": "sla_levels",
-   "fieldtype": "Table",
-   "label": "SLA Levels",
-   "options": "Periskope SLA Level"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_ack",
-   "fieldtype": "Section Break",
-   "label": "Messages That Need No Reply"
-  },
-  {
-   "description": "Comma-separated words that close a conversation ('ok', 'sari', 'seri', ...). Added to the built-in list.",
-   "fieldname": "ack_words",
-   "fieldtype": "Small Text",
-   "label": "Acknowledgement Words"
-  },
-  {
-   "fieldname": "tab_keywords",
-   "fieldtype": "Tab Break",
-   "label": "Keyword Alerts"
-  },
-  {
-   "fieldname": "section_keywords",
-   "fieldtype": "Section Break",
-   "label": "Alert Management on Keywords"
-  },
-  {
-   "description": "Checked on every incoming text message, independent of the AI. A rule sends nothing until it has recipients.",
-   "fieldname": "keyword_rules",
-   "fieldtype": "Table",
-   "label": "Keyword Rules",
-   "options": "Periskope Keyword Rule"
-  },
-  {
-   "fieldname": "column_keywords",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "6",
-   "description": "Two matches of the same rule in the same chat within this many hours send one alert.",
-   "fieldname": "keyword_dedupe_hours",
-   "fieldtype": "Int",
-   "label": "Dedupe Window (hours)"
-  },
-  {
-   "fieldname": "tab_data",
-   "fieldtype": "Tab Break",
-   "label": "Data & Cost"
-  },
-  {
-   "fieldname": "section_ai_cost",
-   "fieldtype": "Section Break",
-   "label": "AI Cost"
-  },
-  {
-   "default": "400",
-   "description": "Reply budget per classification. 400 fits the JSON answer with room; raise it (e.g. 4096) only for reasoning models.",
-   "fieldname": "ai_max_tokens",
-   "fieldtype": "Int",
-   "label": "Max Tokens per AI Call"
-  },
-  {
-   "default": "2",
-   "description": "Messages shorter than this are never sent to the AI.",
-   "fieldname": "min_length",
-   "fieldtype": "Int",
-   "label": "Minimum Message Length"
+   "label": "AI API Key"
   },
   {
    "fieldname": "column_budget",
@@ -460,68 +219,66 @@
   },
   {
    "default": "0",
-   "description": "Total tokens per calendar month. When reached, tagging pauses and the managers get an email. 0 = no budget.",
+   "description": "The most tokens the AI may use in a calendar month (tagging, replies, learning, transcription). The agent stops calling the AI when it is used up and sends the holding message instead.",
    "fieldname": "ai_monthly_budget_tokens",
    "fieldtype": "Int",
    "label": "Monthly Token Budget"
   },
   {
-   "fieldname": "section_retention",
+   "fieldname": "section_team",
    "fieldtype": "Section Break",
-   "label": "Retention & Media"
+   "label": "3. Team"
   },
   {
-   "default": "90",
-   "description": "The raw webhook payload of a message is cleared after this many days (0 = keep forever).",
-   "fieldname": "raw_payload_retention_days",
-   "fieldtype": "Int",
-   "label": "Keep Raw Payload (days)"
+   "fieldname": "approver_emails",
+   "fieldtype": "Small Text",
+   "label": "Approver Emails",
+   "description": "Who approves the changes the agent suggests (tags, keyword rules, escalation levels, settings). One email per line; each must be a user with the WhatsApp Manager, Sales Manager or System Manager role."
   },
   {
-   "default": "0",
-   "description": "Message text is cleared after this many days (0 = keep forever). Links, tags and summaries stay either way.",
-   "fieldname": "body_retention_days",
-   "fieldtype": "Int",
-   "label": "Keep Message Text (days)"
+   "fieldname": "column_team",
+   "fieldtype": "Column Break"
   },
   {
-   "default": "0",
-   "description": "Save WhatsApp attachments (images, documents, voice notes) as private Frappe Files, so they survive Periskope's expiring media paths.",
-   "fieldname": "download_media",
-   "fieldtype": "Check",
-   "label": "Download Attachments"
+   "fieldname": "default_rep",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Default Sales Rep",
+   "description": "Gets the follow-ups of chats on a number that has no rep below."
   },
   {
-   "fieldname": "tab_crm",
-   "fieldtype": "Tab Break",
-   "label": "CRM Visibility"
-  },
-  {
-   "fieldname": "section_crm",
+   "fieldname": "section_phones",
    "fieldtype": "Section Break",
-   "label": "WhatsApp in the Lead and Deal Timeline"
+   "label": ""
   },
   {
-   "default": "One per message",
-   "description": "'One per message' adds a comment to the lead or deal for every classified, non-general message. 'Burst' merges messages of the same chat within the window into one growing comment. 'Off' adds no comments.",
-   "fieldname": "comment_mode",
-   "fieldtype": "Select",
-   "label": "Timeline Comments",
-   "options": "One per message\nBurst\nOff"
+   "fieldname": "phones",
+   "fieldtype": "Table",
+   "label": "Company Numbers and Sales Reps",
+   "options": "Periskope Phone"
   },
   {
-   "default": "30",
-   "depends_on": "eval:doc.comment_mode==\"Burst\"",
-   "fieldname": "burst_minutes",
-   "fieldtype": "Int",
-   "label": "Burst Window (minutes)"
+   "fieldname": "section_agent",
+   "fieldtype": "Section Break",
+   "label": "4. AI Agent"
   },
   {
-   "default": "0",
-   "description": "Let reps read the WhatsApp messages of the company numbers assigned to them in the phones table. Managers always see everything. Off keeps reps out (the pilot default).",
-   "fieldname": "reps_see_own_numbers",
+   "fieldname": "enable_agent",
    "fieldtype": "Check",
-   "label": "Reps See Their Own Numbers"
+   "label": "Enable AI Agent",
+   "description": "Turns on everything the agent does on its own: tagging, auto replies, CRM notes and tasks, reminders and learning. Each part can be switched off under Advanced. Configuration changes always wait for an approver."
+  },
+  {
+   "fieldname": "column_agent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reply_delay_minutes",
+   "precision": "1",
+   "fieldtype": "Float",
+   "label": "Reply Delay (minutes)",
+   "default": "3",
+   "description": "How long the agent waits after the customer's last message before it replies. A new message restarts the wait; a rep's reply stops it."
   },
   {
    "fieldname": "tab_health",
@@ -588,14 +345,481 @@
    "default": "https://api.periskope.app/v1",
    "fieldname": "base_url",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Periskope API Address",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_adv_ai",
+   "fieldtype": "Section Break",
+   "label": "AI Tagging",
+   "collapsible": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_classification",
+   "fieldtype": "Check",
+   "label": "Tag New Messages with AI",
+   "description": "Part of the AI Agent: tag and summarise customer messages."
+  },
+  {
+   "fieldname": "ai_business_context",
+   "fieldtype": "Small Text",
+   "label": "About Your Business"
+  },
+  {
+   "default": "claude-haiku-4-5",
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
+   "fieldname": "ai_model",
+   "fieldtype": "Select",
+   "label": "AI Model",
+   "options": "claude-haiku-4-5\nclaude-sonnet-5-5\nclaude-opus-5-5\nglm-5.3\nglm-5.3-flash\nglm-4.7\nglm-4.5-air"
+  },
+  {
+   "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
+   "fieldname": "ai_base_url",
+   "fieldtype": "Data",
+   "label": "AI API Address"
+  },
+  {
+   "fieldname": "column_ai_options",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "fieldname": "context_messages",
+   "fieldtype": "Int",
+   "label": "Earlier Messages Given to the AI"
+  },
+  {
+   "default": "0",
+   "fieldname": "classify_group_chats",
+   "fieldtype": "Check",
+   "label": "Also Tag Group Chats"
+  },
+  {
+   "default": "400",
+   "description": "Reply budget per classification. 400 fits the JSON answer with room; raise it (e.g. 4096) only for reasoning models.",
+   "fieldname": "ai_max_tokens",
+   "fieldtype": "Int",
+   "label": "Max Tokens per AI Call"
+  },
+  {
+   "default": "2",
+   "description": "Messages shorter than this are never sent to the AI.",
+   "fieldname": "min_length",
+   "fieldtype": "Int",
+   "label": "Minimum Message Length"
+  },
+  {
+   "fieldname": "section_prompt",
+   "fieldtype": "Section Break",
+   "label": "AI Instructions",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "ai_instructions",
+   "fieldtype": "Long Text",
+   "label": "Instructions for the AI"
+  },
+  {
+   "fieldname": "optimize_instructions",
+   "fieldtype": "Button",
+   "label": "Improve Instructions with AI"
+  },
+  {
+   "fieldname": "section_auto_reply",
+   "fieldtype": "Section Break",
+   "label": "Auto Reply",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "enable_auto_reply",
+   "fieldtype": "Check",
+   "label": "Enable Auto Reply",
+   "description": "Part of the AI Agent: reply to customers from the knowledge base and ERPNext data.",
+   "default": "1"
+  },
+  {
+   "fieldname": "reply_delay_jitter_percent",
+   "fieldtype": "Int",
+   "label": "Random Variation (%)",
+   "default": "20",
+   "description": "Adds up to this much extra delay so replies do not look robotic"
+  },
+  {
+   "fieldname": "reply_min_confidence",
+   "fieldtype": "Percent",
+   "label": "Minimum Confidence",
+   "default": "80",
+   "description": "Below this the holding message is sent instead of an answer"
+  },
+  {
+   "fieldname": "column_reply",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reply_working_hours_only",
+   "fieldtype": "Check",
+   "label": "Only in Working Hours",
+   "default": "1"
+  },
+  {
+   "fieldname": "reply_group_chats",
+   "fieldtype": "Check",
+   "label": "Reply in Groups"
+  },
+  {
+   "fieldname": "reply_max_per_chat_per_day",
+   "fieldtype": "Int",
+   "label": "Max Replies per Chat per Day",
+   "default": "3"
+  },
+  {
+   "fieldname": "holding_message",
+   "fieldtype": "Small Text",
+   "label": "Holding Message",
+   "default": "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
+  },
+  {
+   "fieldname": "section_learning",
+   "fieldtype": "Section Break",
+   "label": "Learning and Approvals",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "learning_lookback_days",
+   "fieldtype": "Int",
+   "label": "First Look-back (days)",
+   "default": "14",
+   "description": "How far back the agent reads the first time it runs"
+  },
+  {
+   "fieldname": "learning_min_evidence",
+   "fieldtype": "Int",
+   "label": "Minimum Evidence",
+   "default": "3",
+   "description": "A suggestion must be based on at least this many messages"
+  },
+  {
+   "fieldname": "column_learning",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "suggestion_expiry_days",
+   "fieldtype": "Int",
+   "label": "Suggestion Valid For (days)",
+   "default": "7"
+  },
+  {
+   "fieldname": "suggestion_email_gap_hours",
+   "fieldtype": "Int",
+   "label": "Hours Between Emails",
+   "default": "6",
+   "description": "New suggestions are sent together, not one email each"
+  },
+  {
+   "fieldname": "run_agent_now",
+   "fieldtype": "Button",
+   "label": "Run Agent Now"
+  },
+  {
+   "fieldname": "section_reminders",
+   "fieldtype": "Section Break",
+   "label": "Working Hours and Escalation",
+   "collapsible": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_reply_reminders",
+   "fieldtype": "Check",
+   "label": "Enable Reply Reminders",
+   "description": "Part of the AI Agent: remind and escalate when a customer waits for a reply."
+  },
+  {
+   "default": "09:00:00",
+   "fieldname": "working_hours_start",
+   "fieldtype": "Time",
+   "label": "Working Hours Start"
+  },
+  {
+   "default": "19:00:00",
+   "fieldname": "working_hours_end",
+   "fieldtype": "Time",
+   "label": "Working Hours End"
+  },
+  {
+   "default": "Monday to Saturday",
+   "fieldname": "working_days",
+   "fieldtype": "Select",
+   "label": "Working Days",
+   "options": "Monday to Saturday\nMonday to Friday\nEvery day"
+  },
+  {
+   "description": "Holidays (for example the Diwali shutdown) do not count as waiting time.",
+   "fieldname": "holiday_list",
+   "fieldtype": "Link",
+   "label": "Holiday List",
+   "options": "Holiday List"
+  },
+  {
+   "fieldname": "column_reminders",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "alert_emails",
+   "fieldtype": "Small Text",
+   "label": "Manager Emails (L2)"
+  },
+  {
+   "description": "Who is emailed at L3 (comma-separated). Empty uses the Manager Emails.",
+   "fieldname": "escalation_emails",
+   "fieldtype": "Small Text",
+   "label": "Escalation Emails (L3, the MD)"
+  },
+  {
+   "default": "0",
+   "fieldname": "remind_group_chats",
+   "fieldtype": "Check",
+   "label": "Include Group Chats"
+  },
+  {
+   "description": "Comma-separated words that close a conversation ('ok', 'sari', 'seri', ...). Added to the built-in list.",
+   "fieldname": "ack_words",
+   "fieldtype": "Small Text",
+   "label": "Acknowledgement Words"
+  },
+  {
+   "default": "6",
+   "description": "Two matches of the same rule in the same chat within this many hours send one alert.",
+   "fieldname": "keyword_dedupe_hours",
+   "fieldtype": "Int",
+   "label": "Dedupe Window (hours)"
+  },
+  {
+   "fieldname": "section_capture",
+   "fieldtype": "Section Break",
+   "label": "Leads and Contacts",
+   "collapsible": 1
+  },
+  {
+   "default": "0",
+   "description": "When the AI tags a customer's message in a 1-to-1 chat as <b>New Enquiry</b> and the number is not on any lead or deal, a CRM Lead is created for the rep of that phone. Every unknown number appears in the <b>Periskope Contact</b> queue either way, where a manager can create or link a lead with one click.",
+   "fieldname": "create_leads_from_enquiries",
+   "fieldtype": "Check",
+   "label": "Create Leads from New Enquiries"
+  },
+  {
+   "default": "0",
+   "description": "Numbers found on an ERPNext Supplier's contact are ignored (needs ERPNext).",
+   "fieldname": "ignore_suppliers",
+   "fieldtype": "Check",
+   "label": "Ignore Supplier Numbers"
+  },
+  {
+   "default": "0",
+   "description": "Numbers found on an ERPNext Employee record are ignored (needs ERPNext).",
+   "fieldname": "ignore_employees",
+   "fieldtype": "Check",
+   "label": "Ignore Employee Numbers"
+  },
+  {
+   "fieldname": "column_capture",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Who gets the daily email of new unmatched contacts (comma-separated). Empty uses the Manager Emails on the Reply Reminders tab.",
+   "fieldname": "digest_recipients",
+   "fieldtype": "Small Text",
+   "label": "Digest Recipients"
+  },
+  {
+   "fieldname": "section_crm",
+   "fieldtype": "Section Break",
+   "label": "CRM Visibility",
+   "collapsible": 1
+  },
+  {
+   "default": "One per message",
+   "description": "'One per message' adds a comment to the lead or deal for every classified, non-general message. 'Burst' merges messages of the same chat within the window into one growing comment. 'Off' adds no comments.",
+   "fieldname": "comment_mode",
+   "fieldtype": "Select",
+   "label": "Timeline Comments",
+   "options": "One per message\nBurst\nOff"
+  },
+  {
+   "default": "30",
+   "depends_on": "eval:doc.comment_mode==\"Burst\"",
+   "fieldname": "burst_minutes",
+   "fieldtype": "Int",
+   "label": "Burst Window (minutes)"
+  },
+  {
+   "default": "0",
+   "description": "Let reps read the WhatsApp messages of the company numbers assigned to them in the phones table. Managers always see everything. Off keeps reps out (the pilot default).",
+   "fieldname": "reps_see_own_numbers",
+   "fieldtype": "Check",
+   "label": "Reps See Their Own Numbers"
+  },
+  {
+   "fieldname": "section_retention",
+   "fieldtype": "Section Break",
+   "label": "Data Retention",
+   "collapsible": 1
+  },
+  {
+   "default": "90",
+   "description": "The raw webhook payload of a message is cleared after this many days (0 = keep forever).",
+   "fieldname": "raw_payload_retention_days",
+   "fieldtype": "Int",
+   "label": "Keep Raw Payload (days)"
+  },
+  {
+   "default": "0",
+   "description": "Message text is cleared after this many days (0 = keep forever). Links, tags and summaries stay either way.",
+   "fieldname": "body_retention_days",
+   "fieldtype": "Int",
+   "label": "Keep Message Text (days)"
+  },
+  {
+   "fieldname": "section_events",
+   "fieldtype": "Section Break",
+   "label": "Webhook Events",
+   "collapsible": 1
+  },
+  {
+   "description": "The events Periskope should send to this site. Only message.created is stored as a message; the others are logged. Test Connection or Create Webhook in Periskope registers them.",
+   "fieldname": "webhook_events",
+   "fieldtype": "Table",
+   "label": "Webhook Events",
+   "options": "Periskope Webhook Event"
+  },
+  {
+   "fieldname": "section_test_mode",
+   "fieldtype": "Section Break",
+   "label": "Test Mode",
+   "description": "While test mode is on, WhatsApp messages go only to the chats listed here (never to a group), the agent writes to the CRM only for those chats, and emails reach only the addresses listed here. Everything else is logged as a dry run in Periskope Agent Action."
+  },
+  {
+   "fieldname": "test_mode",
+   "fieldtype": "Check",
+   "label": "Test Mode",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_test_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "test_allowed_chats",
+   "fieldtype": "Small Text",
+   "label": "Allowed Chats",
+   "description": "One number per line, with country code (e.g. 916374955805).",
+   "depends_on": "test_mode"
+  },
+  {
+   "fieldname": "test_allowed_emails",
+   "fieldtype": "Small Text",
+   "label": "Allowed Emails",
+   "description": "One email per line.",
+   "depends_on": "test_mode"
+  },
+  {
+   "fieldname": "test_periskope",
+   "fieldtype": "Button",
+   "label": "Test Connection"
+  },
+  {
+   "fieldname": "ai_status",
+   "fieldtype": "Data",
+   "label": "AI Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "test_ai",
+   "fieldtype": "Button",
+   "label": "Test AI"
+  },
+  {
+   "fieldname": "ai_resume_after_hours",
+   "fieldtype": "Int",
+   "label": "AI Resumes After (hours)",
+   "default": "24",
+   "description": "After a rep replies in a chat, the AI stays out of it for this long. 0 keeps it paused until someone clicks Resume AI replies in the CRM."
+  },
+  {
+   "fieldname": "section_voice",
+   "fieldtype": "Section Break",
+   "label": "Voice Notes",
+   "collapsible": 1,
+   "description": "With a Google Gemini key, voice notes are transcribed so the agent can tag, answer and learn from them. Without it, voice notes go to the rep as they are."
+  },
+  {
+   "fieldname": "gemini_api_key",
+   "fieldtype": "Password",
+   "label": "Google Gemini API Key"
+  },
+  {
+   "fieldname": "column_voice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gemini_model",
+   "fieldtype": "Data",
+   "label": "Gemini Model",
+   "default": "gemini-2.5-flash"
+  },
+  {
+   "fieldname": "section_health_agent",
+   "fieldtype": "Section Break",
+   "label": "AI Agent (live)"
+  },
+  {
+   "fieldname": "health_agent",
+   "fieldtype": "Data",
+   "label": "Learning Agent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_auto_reply",
+   "fieldtype": "Data",
+   "label": "Auto Replies Today",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_crm",
+   "fieldtype": "Data",
+   "label": "CRM Updates Today",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_health_agent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "health_budget",
+   "fieldtype": "Data",
+   "label": "AI Budget Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_test_mode",
+   "fieldtype": "Data",
+   "label": "Test Mode",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_last_problem",
+   "fieldtype": "Small Text",
+   "label": "Last Problem",
+   "read_only": 1
   }
  ],
+ "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-01 09:00:00.000000",
+ "modified": "2026-10-14 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",
@@ -604,24 +828,25 @@
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
-   "print": 1,
+   "export": 1,
    "read": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "write": 1,
+   "role": "System Manager"
   },
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
-   "print": 1,
+   "export": 1,
    "read": 1,
-   "role": "WhatsApp Manager",
-   "share": 1,
-   "write": 1
+   "write": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": []

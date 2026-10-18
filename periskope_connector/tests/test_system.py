@@ -9,6 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 from periskope_connector import leads, messages, reminders
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system, save_as_system
+from periskope_connector.tests.utils import settings
 
 MACHINE_WRITTEN = [
 	"Periskope Message",
@@ -27,6 +28,9 @@ class TestTranslatableMessages(FrappeTestCase):
 	def test_the_webhook_rejection_message_is_translatable(self):
 		from periskope_connector.api import webhook
 
+		frappe.db.savepoint("periskope_webhook_text_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_webhook_text_test")
+		settings(enabled=1)  # switched off, the call is refused before the signature is checked
 		frappe.local.request = MagicMock()
 		frappe.local.request.get_data.return_value = b"{}"
 		frappe.local.request_ip = "203.0.113.8"
@@ -126,9 +130,17 @@ class TestSystemWrites(FrappeTestCase):
 			source = inspect.getsource(fn)
 			if fn.__name__ == "receive":
 				self.assertIn("_has_valid_signature", source)  # guests allowed, signature required
+			elif "decide_by_token" in source:
+				pass  # the emailed link: the single-use token is the credential
 			else:
-				# every other endpoint must gate the caller (System Manager, or a manager tuple/constant)
-				self.assertIn("frappe.only_for(", source, fn.__name__)
+				# every other endpoint gates the caller (api/permission.py)
+				self.assertTrue(
+					any(
+						check in source
+						for check in ("require_admin(", "require_manager(", "require_record_access(")
+					),
+					fn.__name__,
+				)
 
 	def test_the_whole_guest_ingest_chain_works_without_any_user(self):
 		"""Webhook log -> message -> AI tags: a queued job runs as the user who queued it, which

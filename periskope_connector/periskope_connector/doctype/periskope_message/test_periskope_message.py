@@ -16,11 +16,10 @@ from periskope_connector import timeline_comments as timeline
 from periskope_connector.ai import classifier
 from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import GROUP_CHAT, event
+from periskope_connector.tests.utils import GROUP_CHAT, OTHER_APP_DOCTYPES, event
 from periskope_connector.text_rules import analysis_skip_reason, is_acknowledgement
 
-# The CRM link fields would otherwise make the runner build test leads and deals.
-test_ignore = ["CRM Lead", "CRM Deal"]
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 def _event(**data):
@@ -104,7 +103,8 @@ def _message(message_id, days_old=0, body="hello", raw='{"data": {}}'):
 class TestPeriskopeMessage(FrappeTestCase):
 	def test_the_customer_number_is_indexed_because_every_lookup_filters_on_it(self):
 		self.assertTrue(frappe.get_meta("Periskope Message").get_field("contact_number").search_index)
-		self.assertTrue(frappe.db.has_index("tabPeriskope Message", "contact_number_index"))
+		# By column: v15 names the index contact_number_index, v16 contact_number.
+		self.assertTrue(frappe.db.get_column_index("tabPeriskope Message", "contact_number"))
 
 	"""Runs on the real site DB: never commit, always roll back."""
 
@@ -539,6 +539,18 @@ class TestLinking(FrappeTestCase):
 		frappe.db.set_value("Periskope Group", GROUP_CHAT, "crm_lead", mapped.name)
 		linking.link_message(name)
 		self.assertEqual(self._link(name), (mapped.name, None, "Linked", "Group Mapping"))
+
+	def test_a_group_mapped_to_a_company_links_to_its_lead(self):
+		lead = self._lead(organization="Linking Test Spinners Ltd")
+		name = messages.create_message(event(message_id="g5", chat_id=GROUP_CHAT))
+		self.assertEqual(self._link(name)[2], "Internal")  # the group name does not say who it is
+		if not frappe.db.exists("CRM Organization", "Linking Test Spinners Ltd"):
+			frappe.get_doc(
+				{"doctype": "CRM Organization", "organization_name": "Linking Test Spinners Ltd"}
+			).insert(ignore_permissions=True)
+		frappe.db.set_value("Periskope Group", GROUP_CHAT, "organization", "Linking Test Spinners Ltd")
+		linking.link_message(name)
+		self.assertEqual(self._link(name), (lead.name, None, "Linked", "Group Mapping"))
 
 	def test_a_converted_lead_is_represented_by_its_deal(self):
 		lead = self._lead(mobile_no="9600000001")
@@ -1277,11 +1289,14 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(self._status(bad.name).classification_attempts, classifier.MAX_ATTEMPTS)
 		self.assertNotIn(bad.name, classifier._pending(100000))
 
-	def test_only_text_chats_are_analysed(self):
-		for kind in ("image", "document", "ptt", "video", "vcard", "sticker"):
+	def test_attachments_are_analysed_by_their_words_only(self):
+		for kind in ("image", "document"):
 			doc = self._message(
 				"Please see the attached quotation", message_id=f"m_{kind}", message_type=kind
 			)
+			self.assertIn("Please see the attached quotation", classifier.readable_text(doc))
+		for kind, body in (("image", ""), ("ptt", ""), ("vcard", "BEGIN:VCARD"), ("sticker", "x y z")):
+			doc = self._message(body, message_id=f"m_none_{kind}", message_type=kind)
 			with patch.object(classifier, "call_claude") as ai:
 				classifier.classify(doc.name)
 			ai.assert_not_called()
@@ -1292,17 +1307,19 @@ class TestClassify(FrappeTestCase):
 				(row.classification_status, row.classification_error), ("Skipped", "Not a text message"), kind
 			)
 
-	def test_new_messages_are_marked_by_type_when_tagging_is_on(self):
+	def test_a_caption_is_tagged_and_a_bare_photo_is_not(self):
 		with patch.object(frappe.db, "get_single_value", return_value=1):
 			text = self._message("Send the price list", message_id="n_text")
-			image = self._message("photo caption", message_id="n_image", message_type="image")
+			captioned = self._message("price of this design?", message_id="n_image", message_type="image")
+			bare = self._message("", message_id="n_bare", message_type="image")
 		self.assertEqual(text.classification_status, "Pending")
+		self.assertEqual(captioned.classification_status, "Pending")
 		self.assertEqual(
-			(image.classification_status, image.classification_error), ("Skipped", "Not a text message")
+			(bare.classification_status, bare.classification_error), ("Skipped", "Not a text message")
 		)
-		self.assertEqual((image.ai_category, image.severity), ("general", "Low"))
+		self.assertEqual((bare.ai_category, bare.severity), ("general", "Low"))
 
-	def test_history_context_contains_only_text_chats(self):
+	def test_history_context_includes_captions(self):
 		self._message("Do you have 10mm cable?", message_id="c1", timestamp="2026-09-29T06:00:00Z")
 		self._message(
 			"scan of the datasheet",
@@ -1310,9 +1327,13 @@ class TestClassify(FrappeTestCase):
 			message_type="document",
 			timestamp="2026-09-29T06:05:00Z",
 		)
+		self._message("", message_id="c2b", message_type="image", timestamp="2026-09-29T06:06:00Z")
 		current = self._message("Send price", message_id="c3", timestamp="2026-09-29T06:20:00Z")
 		history = classifier.get_history(current, 5)
-		self.assertEqual([h.body for h in history], ["Do you have 10mm cable?"])
+		self.assertEqual(
+			[classifier.readable_text(h) for h in history],
+			["Do you have 10mm cable?", "[document] scan of the datasheet"],
+		)
 
 	def test_failure_is_recorded_and_counted(self):
 		doc = self._message()
@@ -1432,6 +1453,7 @@ class TestClassify(FrappeTestCase):
 
 	def test_jarvis_provider_needs_no_api_key_and_hides_the_optimizer(self):
 		self.settings.ai_provider = "Jarvis"
+		self.settings.enable_agent = 1
 		self.settings.enable_classification = 1
 		self.settings.get_password = lambda field, **kw: None
 		with patch.object(classifier, "get_settings", lambda: self.settings):
@@ -1609,3 +1631,101 @@ class TestFeedbackLoop(FrappeTestCase):
 		examples = classifier.correction_examples()
 		self.assertLess(len(examples), classifier.MAX_EXAMPLES_CHARS + 200)
 		self.assertLessEqual(examples.count("->"), classifier.MAX_EXAMPLES)
+
+
+class TestEditsDeletesAndVoiceNotes(FrappeTestCase):
+	"""message.updated / message.deleted, and voice notes transcribed with Gemini."""
+
+	def setUp(self):
+		from periskope_connector.tests.utils import isolate, settings
+
+		isolate(self, "periskope_edit_test")
+		settings(enable_agent=1, enable_classification=1, enable_auto_reply=0)
+		p = patch.object(messages, "fetch_chat_name", lambda *a, **k: "")
+		p.start()
+		self.addCleanup(p.stop)
+
+	def _created(self, message_id, body="What is the price?", **kw):
+		from periskope_connector.tests.utils import event
+
+		return messages.create_message(event(message_id=message_id, body=body, **kw))
+
+	def _update(self, event_type, message_id, **data):
+		from periskope_connector.tests.utils import event
+
+		payload = event(message_id=message_id, **data)
+		payload["event_type"] = event_type
+		return messages.update_message(payload)
+
+	def test_an_edit_updates_the_text_and_tags_it_again(self):
+		name = self._created("edit_1")
+		frappe.db.set_value("Periskope Message", name, "classification_status", "Done")
+		self._update("message.updated", "edit_1", body="What is the price for 2000 kg?")
+		row = frappe.db.get_value(
+			"Periskope Message",
+			name,
+			["body", "previous_body", "edited_on", "classification_status"],
+			as_dict=True,
+		)
+		self.assertEqual(
+			(row.body, row.previous_body), ("What is the price for 2000 kg?", "What is the price?")
+		)
+		self.assertTrue(row.edited_on)
+		self.assertEqual(row.classification_status, "Pending")
+
+	def test_a_deleted_message_no_longer_waits_for_a_reply(self):
+		from periskope_connector import reminders
+
+		name = self._created("del_1")
+		self._update("message.deleted", "del_1")
+		doc = frappe.get_doc("Periskope Message", name)
+		self.assertTrue(doc.is_deleted)
+		self.assertFalse(reminders.needs_reply(doc))
+
+	def test_only_the_ticks_changing_touches_nothing_else(self):
+		name = self._created("ack_1", from_me=True)
+		self._update("message.updated", "ack_1", from_me=True, ack="3", body="What is the price?")
+		self.assertEqual(str(frappe.db.get_value("Periskope Message", name, "ack")), "3")
+		self.assertFalse(frappe.db.get_value("Periskope Message", name, "edited_on"))
+
+	def test_an_update_for_an_unknown_message_saves_it(self):
+		name = self._update("message.updated", "late_1", body="Saw this late")
+		self.assertTrue(name)
+		self.assertEqual(frappe.db.get_value("Periskope Message", name, "body"), "Saw this late")
+
+	def test_a_voice_note_is_transcribed_and_then_tagged(self):
+		from periskope_connector.ai import transcribe
+
+		name = self._created(
+			"ptt_1", body="", message_type="ptt", media={"path": "https://example.com/a.ogg"}
+		)
+		gemini = MagicMock(ok=True)
+		gemini.json.return_value = {
+			"candidates": [{"content": {"parts": [{"text": "Do you have 40s cotton in stock?"}]}}],
+			"usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 12},
+		}
+		with (
+			patch.object(transcribe, "_key", return_value="k"),
+			patch.object(transcribe, "_download", return_value=(b"audio", "audio/ogg")),
+			patch.object(transcribe.requests, "post", return_value=gemini) as post,
+			patch("periskope_connector.ai.assistant.readiness", return_value=(True, "")),
+		):
+			self.assertEqual(transcribe.run(name), "Do you have 40s cotton in stock?")
+		self.assertEqual(post.call_args.kwargs["headers"]["x-goog-api-key"], "k")
+		doc = frappe.get_doc("Periskope Message", name)
+		self.assertEqual(doc.classification_status, "Pending")
+		self.assertEqual(classifier.readable_text(doc), "[voice note] Do you have 40s cotton in stock?")
+		self.assertTrue(frappe.db.exists("Periskope AI Usage", {"message": name, "provider": "Gemini"}))
+
+	def test_no_gemini_key_means_no_transcription(self):
+		from periskope_connector.ai import transcribe
+
+		name = self._created(
+			"ptt_2", body="", message_type="ptt", media={"path": "https://example.com/a.ogg"}
+		)
+		with (
+			patch.object(transcribe, "_key", return_value=None),
+			patch.object(transcribe.requests, "post") as post,
+		):
+			self.assertEqual(transcribe.run(name), "")
+		post.assert_not_called()

@@ -7,7 +7,7 @@ guest call, and a queued job runs as whoever queued it (Guest, for the webhook).
 
 Permissions are therefore checked where a caller enters, not on each internal write:
 - the webhook is authenticated by its HMAC signature,
-- every whitelisted method starts with frappe.only_for("System Manager"),
+- every whitelisted method starts with a role check (api/permission.py),
 - the functions that use these helpers are not whitelisted, so they cannot be called over HTTP.
 
 Only use these helpers for documents the app generates itself. For a document a user is

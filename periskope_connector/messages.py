@@ -6,14 +6,20 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
+from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
 from periskope_connector.keywords import check_message
 from periskope_connector.linking import ensure_group, link_message, number_key
+from periskope_connector.outbound import match_sent
+from periskope_connector.setup_status import feature_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
 
 MESSAGE_CREATED = "message.created"
+MESSAGE_UPDATED = "message.updated"
+MESSAGE_DELETED = "message.deleted"
+MESSAGE_EVENTS = (MESSAGE_CREATED, MESSAGE_UPDATED, MESSAGE_DELETED)
 
 
 def _digits(chat_id: str | None) -> str:
@@ -84,17 +90,25 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# A group is saved once, with its name and type, so its messages can be linked to the CRM.
 	chat_name = (ensure_group(chat_id, org_phone).group_name or "") if is_group else ""
 
-	classify = bool(frappe.db.get_single_value("Periskope Settings", "enable_classification"))
-	is_text = (data.get("message_type") or "chat") == "chat"
+	classify = feature_on("enable_classification")
+	# A text, or an attachment with a caption, is tagged; a voice note waits for its transcript.
+	kind = normalise_type(data.get("message_type"))
+	has_words = kind == "text" or (
+		kind in ("image", "document", "video") and bool((data.get("body") or "").strip())
+	)
 	if from_me:
 		skip = "Sent by the rep"  # only the customer's messages are classified
 	else:
-		skip = "Not a text message" if not is_text else analysis_skip_reason(data.get("body"))
+		skip = "Not a text message" if not has_words else analysis_skip_reason(data.get("body"))
+
+	# Our own assistant's message arrives through the webhook like any other from our number.
+	agent_reply = match_sent(chat_id, data) if from_me else ""
 
 	doc = frappe.get_doc(
 		{
 			"doctype": "Periskope Message",
 			"message_id": message_id,
+			"agent_reply": agent_reply,
 			# Only the customer's text chats are analysed, and tiny ones ('ok', 'done', emoji) are not
 			# worth the tokens: they are marked skipped right away and never sent to the AI. The rest
 			# wait for the scheduled job (ai/classifier.py, every 5 minutes).
@@ -139,7 +153,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		frappe.db.rollback()
 		return None
 
-	if from_me:
+	if from_me and agent_reply != "Holding":
 		# The rep has answered: the customer's earlier messages in this chat are replied to.
 		frappe.db.sql(
 			"""update `tabPeriskope Message` set replied = 1
@@ -157,6 +171,11 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		ensure_contact(doc)
 	if not from_me and (doc.body or "").strip():
 		check_message(doc.name)
+	autoreply_on_message(doc)
+	if not from_me and doc.message_type == "audio":
+		from periskope_connector.ai import transcribe
+
+		transcribe.queue(doc.name)
 
 	return doc.name
 
@@ -166,10 +185,14 @@ def process_webhook_log(log: str):
 	row = frappe.db.get_value(
 		"Periskope Webhook Log", log, ["event_type", "signature_valid", "payload"], as_dict=True
 	)
-	if not row or not row.signature_valid or row.event_type != MESSAGE_CREATED:
+	if not row or not row.signature_valid or row.event_type not in MESSAGE_EVENTS:
 		return
 	try:
-		create_message(json.loads(row.payload), webhook_log=log)
+		payload = json.loads(row.payload)
+		if row.event_type == MESSAGE_CREATED:
+			create_message(payload, webhook_log=log)
+		else:
+			update_message(payload, webhook_log=log)
 	except Exception:
 		# Count the attempt, so the dead-letter sweep below stops re-trying a poison payload.
 		try:
@@ -180,6 +203,43 @@ def process_webhook_log(log: str):
 			frappe.db.rollback()
 		frappe.log_error(title=f"Periskope: could not save message from webhook log {log}")
 		raise
+
+
+def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
+	"""message.updated / message.deleted: the customer edited or deleted a message, or its delivery
+	ticks changed. The stored message follows, so does its copy in the CRM WhatsApp tab; an edited
+	customer message is tagged again, and a deleted one no longer waits for a reply."""
+	data = payload.get("data") or {}
+	message_id = data.get("message_id")
+	if not message_id:
+		return None
+	deleted = payload.get("event_type") == MESSAGE_DELETED or bool(data.get("is_deleted"))
+	name = frappe.db.get_value("Periskope Message", {"message_id": message_id})
+	if not name:
+		# An update for a message we never saw (a missed webhook): save it now, unless it is gone.
+		return None if deleted else create_message({**payload, "event_type": MESSAGE_CREATED}, webhook_log)
+	old = frappe.db.get_value(
+		"Periskope Message",
+		name,
+		["body", "ack", "is_deleted", "direction", "classification_status"],
+		as_dict=True,
+	)
+	values = {}
+	if data.get("ack") not in (None, "") and str(data.get("ack")) != str(old.ack or ""):
+		values["ack"] = data.get("ack")
+	if deleted and not old.is_deleted:
+		values.update(is_deleted=1, deleted_on=frappe.utils.now_datetime())
+	elif not deleted and data.get("body") is not None and (data.get("body") or "") != (old.body or ""):
+		values.update(previous_body=old.body, body=data.get("body"), edited_on=frappe.utils.now_datetime())
+		if old.direction == "Incoming" and feature_on("enable_classification"):
+			values.update(classification_status="Pending", classification_attempts=0)
+	if not values:
+		return name
+	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
+	from periskope_connector import mirror
+
+	mirror.upsert(name)
+	return name
 
 
 MAX_SWEEP_ATTEMPTS = 5  # per webhook log; past this it stays visible in Health as unprocessed

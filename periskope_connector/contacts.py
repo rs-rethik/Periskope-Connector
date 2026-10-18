@@ -33,10 +33,6 @@ def _recipients_text() -> list[str]:
 # --- Ignore list -------------------------------------------------------------------------------------
 
 
-def _numbers_from_text(text: str | None) -> set[str]:
-	return {phone_e164(n) for n in re.split(r"[,\n;]", text or "") if phone_e164(n)}
-
-
 def _erpnext_numbers() -> set[str]:
 	"""Supplier and Employee phone numbers, when ERPNext is installed and the lookups are on."""
 	settings = _settings()
@@ -71,12 +67,10 @@ def _erpnext_numbers() -> set[str]:
 
 
 def is_ignored(full_number: str) -> bool:
-	"""True for numbers on the ignore list, on an ignored Periskope Contact, or (when enabled) on
-	an ERPNext Supplier or Employee record."""
+	"""True for an ignored Periskope Contact (the ignore list: managers ignore a number from its form,
+	the agent suggests it), or (when enabled) for an ERPNext Supplier or Employee number."""
 	digits = phone_e164(full_number)
 	if not digits:
-		return True
-	if digits in _numbers_from_text(_settings().ignore_numbers):
 		return True
 	status = frappe.db.get_value("Periskope Contact", {"phone": digits}, "status")
 	if status in IGNORED_STATUSES:

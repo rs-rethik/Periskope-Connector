@@ -7,6 +7,22 @@ import frappe
 
 from periskope_connector import reminders
 
+# Doctypes of other apps that ours link to. The tests make their own records, so the test runner must
+# not make these: on Frappe v16 with ERPNext that walks User > Email Account > Company > ... into
+# doctypes of apps that may not be installed (Payment Gateway). Doctype test modules set this as
+# IGNORE_TEST_RECORD_DEPENDENCIES (v16) and test_ignore (v15).
+OTHER_APP_DOCTYPES = [
+	"CRM Deal",
+	"CRM Lead",
+	"CRM Organization",
+	"CRM Task",
+	"FCRM Note",
+	"Holiday List",
+	"Sales Person",
+	"ToDo",
+	"User",
+]
+
 # A team group, used by the tests that need a chat with no single customer.
 GROUP_CHAT = "1203639999@g.us"
 
@@ -63,3 +79,25 @@ def msg(body="", message_type="text", needs_reply=0, status="", severity=None):
 		classification_status=status,
 		severity=severity,
 	)
+
+
+def isolate(case, name: str = "periskope_test"):
+	"""Make a test on the real site DB leave nothing behind: commits become no-ops, no email is sent,
+	and the whole test is rolled back. Returns the patched frappe.sendmail."""
+	from unittest.mock import patch
+
+	commit = patch.object(frappe.db, "commit")
+	commit.start()
+	case.addCleanup(commit.stop)
+	mail = patch.object(frappe, "sendmail")
+	sent = mail.start()
+	case.addCleanup(mail.stop)
+	frappe.db.savepoint(name)
+	case.addCleanup(frappe.db.rollback, save_point=name)
+	return sent
+
+
+def settings(**values):
+	"""Set values on Periskope Settings for the current test (rolled back with it)."""
+	for field, value in values.items():
+		frappe.db.set_single_value("Periskope Settings", field, value)

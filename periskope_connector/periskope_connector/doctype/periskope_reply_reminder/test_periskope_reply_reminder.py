@@ -8,7 +8,9 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import messages, reminders
-from periskope_connector.tests.utils import at, cfg, msg
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, at, cfg, msg
+
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 class TestWorkingHours(FrappeTestCase):

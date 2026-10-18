@@ -14,7 +14,7 @@ from frappe.utils import get_url
 from periskope_connector.client import request
 
 # Starting selection for a new site. The user's own choice lives in Periskope Settings > Webhook Events.
-DEFAULT_EVENTS = ["message.created", "message.updated"]
+DEFAULT_EVENTS = ["message.created", "message.updated", "message.deleted"]
 WEBHOOK_METHOD = "periskope_connector.api.webhook.receive"
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1")
 
