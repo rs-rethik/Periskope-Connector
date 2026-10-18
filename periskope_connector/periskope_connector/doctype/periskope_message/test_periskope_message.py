@@ -16,11 +16,10 @@ from periskope_connector import timeline_comments as timeline
 from periskope_connector.ai import classifier
 from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import GROUP_CHAT, event
+from periskope_connector.tests.utils import GROUP_CHAT, OTHER_APP_DOCTYPES, event
 from periskope_connector.text_rules import analysis_skip_reason, is_acknowledgement
 
-# The CRM link fields would otherwise make the runner build test leads and deals.
-test_ignore = ["CRM Lead", "CRM Deal"]
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 def _event(**data):
@@ -104,7 +103,8 @@ def _message(message_id, days_old=0, body="hello", raw='{"data": {}}'):
 class TestPeriskopeMessage(FrappeTestCase):
 	def test_the_customer_number_is_indexed_because_every_lookup_filters_on_it(self):
 		self.assertTrue(frappe.get_meta("Periskope Message").get_field("contact_number").search_index)
-		self.assertTrue(frappe.db.has_index("tabPeriskope Message", "contact_number_index"))
+		# By column: v15 names the index contact_number_index, v16 contact_number.
+		self.assertTrue(frappe.db.get_column_index("tabPeriskope Message", "contact_number"))
 
 	"""Runs on the real site DB: never commit, always roll back."""
 

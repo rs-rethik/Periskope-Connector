@@ -11,7 +11,7 @@ import json
 import frappe
 from frappe.utils import add_days, now_datetime
 
-from periskope_connector import suggestions
+from periskope_connector import query, suggestions
 from periskope_connector.ai import assistant
 
 MAX_SUGGESTIONS = 8
@@ -78,24 +78,15 @@ def snapshot() -> dict:
 	"""The current configuration, as the AI sees it."""
 	settings = frappe.get_doc("Periskope Settings")
 	since = add_days(now_datetime(), -STATS_DAYS)
-	by_tag = frappe.get_all(
+	by_tag = query.counts(
+		"Periskope Message", ["ai_category"], {"ai_category": ["is", "set"], "creation": [">=", since]}
+	)
+	corrected = query.counts(
 		"Periskope Message",
-		filters={"ai_category": ["is", "set"], "creation": [">=", since]},
-		fields=["ai_category", "count(name) as n"],
-		group_by="ai_category",
+		["ai_category", "correct_category"],
+		{"correct_category": ["is", "set"], "creation": [">=", since]},
 	)
-	corrected = frappe.get_all(
-		"Periskope Message",
-		filters={"correct_category": ["is", "set"], "creation": [">=", since]},
-		fields=["ai_category", "correct_category", "count(name) as n"],
-		group_by="ai_category, correct_category",
-	)
-	alerts = frappe.get_all(
-		"Periskope Keyword Alert",
-		filters={"creation": [">=", since]},
-		fields=["rule", "count(name) as n"],
-		group_by="rule",
-	)
+	alerts = query.counts("Periskope Keyword Alert", ["rule"], {"creation": [">=", since]})
 	return {
 		"tags": [
 			{"name": t.name, "description": t.description, "active": bool(t.active)}

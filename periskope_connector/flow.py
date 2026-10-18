@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, now_datetime, nowdate
 
-from periskope_connector import actions, health, safety
+from periskope_connector import actions, health, query, safety
 from periskope_connector.setup_status import feature_on
 
 # The action columns of the tag matrix, and the rows a tick adds. Email alerts start at High so a
@@ -104,7 +104,7 @@ def _periskope(settings) -> dict:
 
 
 def _capture(settings) -> dict:
-	last = frappe.db.get_value("Periskope Webhook Log", {"creation": ["is", "set"]}, "max(creation)")
+	last = query.latest("Periskope Webhook Log", "creation")
 	today = _count("Periskope Message", {"creation": [">=", nowdate()]})
 	recovered = _count(
 		"Periskope Message",
@@ -189,12 +189,7 @@ def _tags() -> dict:
 	have = {(r.parent, r.action) for r in rows}
 	used = {
 		r.ai_category: r.n
-		for r in frappe.get_all(
-			"Periskope Message",
-			filters={"ai_category": ["is", "set"]},
-			fields=["ai_category", "count(name) as n"],
-			group_by="ai_category",
-		)
+		for r in query.counts("Periskope Message", ["ai_category"], {"ai_category": ["is", "set"]})
 	}
 	out = [
 		{
@@ -268,12 +263,7 @@ def _people(settings) -> dict:
 def _autoreply(settings) -> dict:
 	today = {
 		r.status: r.n
-		for r in frappe.get_all(
-			"Periskope Auto Reply",
-			filters={"modified": [">=", nowdate()]},
-			fields=["status", "count(name) as n"],
-			group_by="status",
-		)
+		for r in query.counts("Periskope Auto Reply", ["status"], {"modified": [">=", nowdate()]})
 	}
 	paused = _count("Periskope Chat", {"ai_paused": 1})
 	return {
@@ -288,17 +278,16 @@ def _autoreply(settings) -> dict:
 
 
 def _crm(settings) -> dict:
-	rows = frappe.get_all(
+	rows = query.counts(
 		"Periskope Agent Action",
-		filters={
+		["action", "mode"],
+		{
 			"creation": [">=", nowdate()],
 			"action": [
 				"in",
 				["Create Note", "Update Note", "Create Task", "Update Task", "Status Change", "Timeline"],
 			],
 		},
-		fields=["action", "mode", "count(name) as n"],
-		group_by="action, mode",
 	)
 	live = {r.action: r.n for r in rows if r.mode == "Live"}
 	dry = sum(r.n for r in rows if r.mode != "Live")

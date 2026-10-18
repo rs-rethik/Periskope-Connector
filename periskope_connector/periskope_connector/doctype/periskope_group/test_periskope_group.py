@@ -7,9 +7,9 @@ from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import leads, linking, messages
 from periskope_connector import timeline_comments as timeline
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES
 
-# The CRM link fields would otherwise make the runner build test leads and deals.
-test_ignore = ["CRM Lead", "CRM Deal"]
+IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 class TestPeriskopeGroup(FrappeTestCase):
