@@ -107,6 +107,7 @@ def setup():
 		_ensure_webhook_events,
 		_ensure_assistant_defaults,
 		_ensure_crm_ui,
+		_ensure_phone_fields,
 	):
 		try:
 			step()
@@ -209,6 +210,16 @@ def _ensure_assistant_defaults():
 				"test_allowed_emails": "rethik@praneraservices.com\npriyadharshini@agamnext.com",
 			},
 		)
+
+
+def _ensure_phone_fields():
+	"""Fill the normalised phone fields of the leads and deals that existed before the app (saves keep
+	them up to date afterwards), then link the messages that found no lead because of it."""
+	from periskope_connector import linking
+
+	filled = sum(linking.backfill_phone_fields(doctype) for doctype in ("CRM Lead", "CRM Deal"))
+	if filled:
+		linking.link_unlinked()
 
 
 def _stored(field: str) -> bool:

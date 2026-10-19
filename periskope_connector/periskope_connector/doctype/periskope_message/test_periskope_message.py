@@ -909,6 +909,21 @@ class TestIngestUsesTheIndexedMatching(FrappeTestCase):
 			by_mobile.assert_called_once()
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "crm_lead"), lead.name)
 
+	def test_a_migrate_links_messages_to_leads_that_existed_before_the_app(self):
+		from periskope_connector import install
+
+		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Old", "mobile_no": "+91-96000 00001"})
+		lead.flags.ignore_mandatory = True
+		lead.insert(ignore_permissions=True)
+		# A lead from before the install: its normalised phone fields were never filled.
+		frappe.db.set_value("CRM Lead", lead.name, {"periskope_phone_e164": "", "periskope_phone_key": ""})
+		name = messages.create_message(event(message_id="idx_old"))
+		self.assertFalse(frappe.db.get_value("Periskope Message", name, "crm_lead"))
+
+		install._ensure_phone_fields()
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "periskope_phone_key"), "9600000001")
+		self.assertEqual(frappe.db.get_value("Periskope Message", name, "crm_lead"), lead.name)
+
 
 class TestRetention(FrappeTestCase):
 	"""Runs on the real site DB: never commit, always roll back."""

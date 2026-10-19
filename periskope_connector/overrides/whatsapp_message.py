@@ -20,6 +20,29 @@ class PeriskopeWhatsAppMessage(WhatsAppMessage):
 	def _is_periskope(self) -> bool:
 		return self.whatsapp_account == mirror.ACCOUNT
 
+	def set_whatsapp_account(self):
+		# The CRM leaves the account empty and frappe_whatsapp would use the site's default, which can
+		# be a Meta number the customer never wrote to. A reply goes back the way they last wrote.
+		if not self.whatsapp_account and self.type == "Outgoing" and self._customer_wrote_to_periskope():
+			self.whatsapp_account = mirror.ACCOUNT
+		super().set_whatsapp_account()
+
+	def _customer_wrote_to_periskope(self) -> bool:
+		if not (self.reference_doctype and self.reference_name):
+			return False
+		last = frappe.get_all(
+			"WhatsApp Message",
+			filters={
+				"reference_doctype": self.reference_doctype,
+				"reference_name": self.reference_name,
+				"type": "Incoming",
+			},
+			pluck="whatsapp_account",
+			order_by="creation desc",
+			limit=1,
+		)
+		return bool(last) and last[0] == mirror.ACCOUNT
+
 	def before_insert(self):
 		self.set_whatsapp_account()
 		if not self._is_periskope():

@@ -203,6 +203,7 @@ class TestWorkingHoursSettings(FrappeTestCase):
 			"_ensure_webhook_events",
 			"_ensure_assistant_defaults",
 			"_ensure_crm_ui",
+			"_ensure_phone_fields",
 		]
 		steps = {}
 		for name in names:

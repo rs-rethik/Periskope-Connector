@@ -171,6 +171,45 @@ class TestWhatsAppTab(ChatCase):
 		meta.assert_not_called()
 		post.assert_not_called()
 
+	def test_a_reply_goes_through_periskope_even_when_a_meta_number_is_the_default(self):
+		# On a site with a real Meta account as the default, the CRM's reply went to Meta, from a
+		# number the customer never wrote to.
+		frappe.db.set_value(
+			"WhatsApp Account", mirror.ACCOUNT, {"is_default_outgoing": 0, "is_default_incoming": 0}
+		)
+		frappe.get_doc(
+			{
+				"doctype": "WhatsApp Account",
+				"account_name": "Meta Test",
+				"status": "Active",
+				"url": "https://graph.facebook.invalid",
+				"version": "v17.0",
+				"phone_id": "meta-test",
+				"token": "x",
+				"is_default_outgoing": 1,
+				"is_default_incoming": 1,
+			}
+		).insert(ignore_permissions=True)
+		self._msg()
+		with (
+			patch("frappe.integrations.utils.make_post_request") as meta,
+			patch.object(outbound, "send", return_value={"unique_id": "3EBMETA"}) as send,
+		):
+			doc = frappe.get_doc(
+				{
+					"doctype": "WhatsApp Message",
+					"type": "Outgoing",
+					"to": f"+{NUMBER}",
+					"message": "Will check and let you know",
+					"content_type": "text",
+					"reference_doctype": "CRM Lead",
+					"reference_name": self.lead,
+				}
+			).insert(ignore_permissions=True)
+		self.assertEqual(doc.whatsapp_account, mirror.ACCOUNT)
+		send.assert_called_once()
+		meta.assert_not_called()
+
 	def test_a_rep_cannot_send_to_a_chat_test_mode_does_not_allow(self):
 		other_lead = frappe.get_doc(
 			{"doctype": "CRM Lead", "first_name": "Other", "mobile_no": "+919600000654"}
