@@ -188,6 +188,37 @@ class TestWorkingHoursSettings(FrappeTestCase):
 			str(frappe.db.get_single_value("Periskope Settings", "working_hours_end")), "18:30:00"
 		)
 
+	def test_a_failing_install_step_does_not_skip_the_others(self):
+		# A site whose saved settings no longer validate made _ensure_webhook_events fail, and the old
+		# single try block then skipped test mode, the defaults and the CRM buttons.
+		names = [
+			"_ensure_role",
+			"_ensure_custom_fields",
+			"_ensure_lead_source",
+			"_ensure_tags",
+			"_ensure_sla_levels",
+			"_ensure_ai_instructions",
+			"_ensure_working_hours",
+			"_ensure_keyword_rules",
+			"_ensure_webhook_events",
+			"_ensure_assistant_defaults",
+			"_ensure_crm_ui",
+		]
+		steps = {}
+		for name in names:
+			mock = MagicMock(
+				__name__=name,
+				side_effect=frappe.ValidationError("bad hours") if name == "_ensure_webhook_events" else None,
+			)
+			patcher = patch.object(install, name, mock)
+			steps[name] = patcher.start()
+			self.addCleanup(patcher.stop)
+		with patch.object(frappe, "log_error") as log_error:
+			install.setup()
+		for step in steps.values():
+			step.assert_called_once()
+		log_error.assert_called_once_with(title="Periskope: install step _ensure_webhook_events failed")
+
 	def test_a_window_that_is_too_short_is_rejected(self):
 		settings = frappe.get_doc("Periskope Settings")
 		for start, end in (
