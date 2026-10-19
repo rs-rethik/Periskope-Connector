@@ -114,7 +114,8 @@ def update_phone_fields(doc, method: str | None = None):
 
 
 def backfill_phone_fields(doctype: str, page: int = 500) -> int:
-	"""One-off (patch): fill the normalised fields from existing mobile_no / phone values.
+	"""Fill the normalised fields from existing mobile_no / phone values (install and migrate run it,
+	see install._ensure_phone_fields). Returns how many records were filled.
 	Run with: bench --site <site> execute periskope_connector.linking.backfill_phone_fields --args '["CRM Lead"]'
 	"""
 	total = 0
