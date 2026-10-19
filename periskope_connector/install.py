@@ -87,23 +87,32 @@ def after_migrate():
 	setup()
 
 
+def _ensure_custom_fields():
+	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
+
+
 def setup():
-	"""Create the role, custom fields, lead source, starter keyword rules. Safe to re-run."""
-	try:
-		_ensure_role()
-		create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
-		_ensure_lead_source()
-		_ensure_tags()
-		_ensure_sla_levels()
-		_ensure_ai_instructions()
-		_ensure_working_hours()
-		_ensure_keyword_rules()
-		_ensure_webhook_events()
-		_ensure_assistant_defaults()
-		_ensure_crm_ui()
-	except Exception:
-		# A half-installed site must still be able to migrate; the gap shows in Health.
-		frappe.log_error(title="Periskope: install-time setup failed")
+	"""Create the role, custom fields, lead source, starter records and default settings. Safe to
+	re-run. Each step runs on its own: one that fails (say, settings an admin left invalid) is logged
+	and the rest still run, so test mode and the defaults are never skipped because of it."""
+	for step in (
+		_ensure_role,
+		_ensure_custom_fields,
+		_ensure_lead_source,
+		_ensure_tags,
+		_ensure_sla_levels,
+		_ensure_ai_instructions,
+		_ensure_working_hours,
+		_ensure_keyword_rules,
+		_ensure_webhook_events,
+		_ensure_assistant_defaults,
+		_ensure_crm_ui,
+	):
+		try:
+			step()
+		except Exception:
+			# A half-installed site must still be able to migrate; the gap shows in Health.
+			frappe.log_error(title=f"Periskope: install step {step.__name__} failed")
 
 
 def before_uninstall():
