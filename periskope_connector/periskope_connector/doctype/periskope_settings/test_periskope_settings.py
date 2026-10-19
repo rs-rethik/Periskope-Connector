@@ -219,6 +219,23 @@ class TestWorkingHoursSettings(FrappeTestCase):
 			step.assert_called_once()
 		log_error.assert_called_once_with(title="Periskope: install step _ensure_webhook_events failed")
 
+	def test_a_migrate_keeps_the_switches_an_admin_turned_off(self):
+		# The seed-once check never found a stored value, so every migrate switched auto reply and
+		# test mode back on.
+		frappe.db.savepoint("periskope_seed_once_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_seed_once_test")
+		frappe.db.set_single_value(
+			"Periskope Settings",
+			{"enable_auto_reply": 0, "test_mode": 0, "test_allowed_chats": "919600000001"},
+		)
+		install._ensure_assistant_defaults()
+		value = frappe.db.get_single_value
+		self.assertEqual(value("Periskope Settings", "enable_auto_reply"), 0)
+		self.assertEqual(value("Periskope Settings", "test_mode"), 0)
+		self.assertEqual(value("Periskope Settings", "test_allowed_chats"), "919600000001")
+		self.assertTrue(install._stored("test_mode"))
+		self.assertFalse(install._stored("no_such_field"))
+
 	def test_a_window_that_is_too_short_is_rejected(self):
 		settings = frappe.get_doc("Periskope Settings")
 		for start, end in (
