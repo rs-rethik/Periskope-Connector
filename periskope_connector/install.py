@@ -196,11 +196,11 @@ def _ensure_assistant_defaults():
 		("enable_reply_reminders", 1),
 		("ai_resume_after_hours", 24),
 	):
-		if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": field}):
+		if not _stored(field):
 			frappe.db.set_single_value("Periskope Settings", field, value)
 	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
 	# once: an admin who switches it off later is not overridden by the next migrate.
-	if not frappe.db.exists("Singles", {"doctype": "Periskope Settings", "field": "test_mode"}):
+	if not _stored("test_mode"):
 		frappe.db.set_single_value(
 			"Periskope Settings",
 			{
@@ -209,6 +209,18 @@ def _ensure_assistant_defaults():
 				"test_allowed_emails": "rethik@praneraservices.com\npriyadharshini@agamnext.com",
 			},
 		)
+
+
+def _stored(field: str) -> bool:
+	"""Whether Periskope Settings has a value stored for `field`, 0 included. (frappe.db.exists cannot
+	tell: Singles is a table, not a doctype, so it always answered no and every migrate re-seeded.)"""
+	singles = frappe.qb.DocType("Singles")
+	return bool(
+		frappe.qb.from_(singles)
+		.select(singles.field)
+		.where((singles.doctype == "Periskope Settings") & (singles.field == field))
+		.run()
+	)
 
 
 def _ensure_tags():
