@@ -388,12 +388,13 @@ How a reply uses it: a customer's message matches an answer by its own words, or
 
 ### Reports and dashboard
 
-The **Periskope** workspace opens on a dashboard with the things that need attention first.
+The **Periskope** workspace opens on a dashboard, most urgent first:
 
-- **Needs attention:** customers waiting for a rep reply, open escalations, high severity issues, new contacts in the queue, AI tagging failures, and the issues of the last 7 days.
-- **Overview:** messages today and the enquiries of the last 7 days, then charts of messages per day, by tag, by sentiment and by severity.
-- **Shortcuts:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, Tags, Reply Reminders, Contact Queue, Agent Actions and Webhook Logs.
-- **Reports:** every report below, and a list of all the app's pages.
+- **Today:** messages, tasks the AI created, escalations, and AI replies.
+- **Needs attention:** customers waiting for a reply, new numbers in the contact queue, suggestions waiting for approval, and messages the AI could not read.
+- **Last 7 days:** enquiries and issues, then charts of messages per day, by tag and by severity.
+- **Go to:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, **What the AI Did**, Customers Waiting, Contact Queue, Suggestions and the Knowledge Base. The badge on a shortcut counts what needs a look (today's messages and actions, waiting customers, new contacts, pending suggestions), and the list opens filtered the same way.
+- **Reports**, and **All pages** grouped as Setup, Conversations and AI Agent.
 
 The *Enquiries* and *Issues* cards follow your tags, not fixed tag names. Each tag has a **Dashboard Group** field (Enquiry, Issue, or empty): a card counts the incoming messages of the last 7 days whose tag is in its group. A new site starts with `order_or_enquiry` as Enquiry and `quality_complaint` and `payment_issue` as Issue.
 

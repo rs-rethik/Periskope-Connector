@@ -2,23 +2,19 @@
  "app": "periskope_connector",
  "charts": [
   {
-   "chart_name": "Messages per Day",
-   "label": "Messages per Day"
+   "label": "Messages per Day",
+   "chart_name": "Messages per Day"
   },
   {
-   "chart_name": "Messages by Category",
-   "label": "Messages by Category"
+   "label": "Messages by Category",
+   "chart_name": "Messages by Category"
   },
   {
-   "chart_name": "Messages by Sentiment",
-   "label": "Messages by Sentiment"
-  },
-  {
-   "chart_name": "Messages by Severity",
-   "label": "Messages by Severity"
+   "label": "Messages by Severity",
+   "chart_name": "Messages by Severity"
   }
  ],
- "content": "[{\"id\": \"wsAtt\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Needs attention</b></span>\", \"col\": 12}}, {\"id\": \"wsA0\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Waiting for Rep Reply\", \"col\": 4}}, {\"id\": \"wsA1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Escalations\", \"col\": 4}}, {\"id\": \"wsA2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"High Severity Issues\", \"col\": 4}}, {\"id\": \"wsA3\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"New Contacts\", \"col\": 4}}, {\"id\": \"wsA4\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"AI Tagging Failed\", \"col\": 4}}, {\"id\": \"wsA5\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Issues (7 days)\", \"col\": 4}}, {\"id\": \"wsAih\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>AI Assistant</b></span>\", \"col\": 12}}, {\"id\": \"wsI0\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Suggestions Waiting\", \"col\": 4}}, {\"id\": \"wsI1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Auto Replies Today\", \"col\": 4}}, {\"id\": \"wsI2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Holding Messages Today\", \"col\": 4}}, {\"id\": \"wsS1\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"wsOv\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Overview</b></span>\", \"col\": 12}}, {\"id\": \"wsO0\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Messages Today\", \"col\": 4}}, {\"id\": \"wsO1\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Enquiries (7 days)\", \"col\": 4}}, {\"id\": \"wsS2\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"wsC0\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages per Day\", \"col\": 6}}, {\"id\": \"wsC1\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages by Category\", \"col\": 6}}, {\"id\": \"wsC2\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages by Sentiment\", \"col\": 6}}, {\"id\": \"wsC3\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages by Severity\", \"col\": 6}}, {\"id\": \"wsS3\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"wsSh\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\", \"col\": 12}}, {\"id\": \"wsH0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Flow\", \"col\": 3}}, {\"id\": \"wsH1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Periskope Settings\", \"col\": 3}}, {\"id\": \"wsH2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Messages\", \"col\": 3}}, {\"id\": \"wsH3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Tags\", \"col\": 3}}, {\"id\": \"wsH4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Reply Reminders\", \"col\": 3}}, {\"id\": \"wsH5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Contact Queue\", \"col\": 3}}, {\"id\": \"wsH6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Agent Actions\", \"col\": 3}}, {\"id\": \"wsH7\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Webhook Logs\", \"col\": 3}}, {\"id\": \"wsH8\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Suggestions\", \"col\": 3}}, {\"id\": \"wsH9\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"wsH10\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Auto Replies\", \"col\": 3}}, {\"id\": \"wsH11\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Agent Runs\", \"col\": 3}}, {\"id\": \"wsS4\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"wsRp\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports</b></span>\", \"col\": 12}}, {\"id\": \"wsR0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Open Escalations\", \"col\": 3}}, {\"id\": \"wsR1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Response Time\", \"col\": 3}}, {\"id\": \"wsR2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Tagging Review\", \"col\": 3}}, {\"id\": \"wsR3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Lead Source\", \"col\": 3}}, {\"id\": \"wsR4\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"AI Usage\", \"col\": 3}}, {\"id\": \"wsR5\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Sync Health\", \"col\": 3}}, {\"id\": \"wsR6\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Unmatched Numbers\", \"col\": 3}}, {\"id\": \"wsS5\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"wsAll\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>All pages</b></span>\", \"col\": 12}}, {\"id\": \"wsK0\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"wsK1\", \"type\": \"card\", \"data\": {\"card_name\": \"WhatsApp Messages\", \"col\": 4}}, {\"id\": \"wsK2\", \"type\": \"card\", \"data\": {\"card_name\": \"Follow-ups\", \"col\": 4}}, {\"id\": \"wsK3\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"wsK4\", \"type\": \"card\", \"data\": {\"card_name\": \"AI Assistant\", \"col\": 6}}]",
+ "content": "[{\"id\": \"ws1\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Today</b></span>\", \"col\": 12}}, {\"id\": \"ws2\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Messages Today\", \"col\": 3}}, {\"id\": \"ws3\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Tasks Created Today\", \"col\": 3}}, {\"id\": \"ws4\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Escalations Today\", \"col\": 3}}, {\"id\": \"ws5\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Auto Replies Today\", \"col\": 3}}, {\"id\": \"ws6\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Needs attention</b></span>\", \"col\": 12}}, {\"id\": \"ws7\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Customers Waiting\", \"col\": 3}}, {\"id\": \"ws8\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"New Contacts\", \"col\": 3}}, {\"id\": \"ws9\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Suggestions Waiting\", \"col\": 3}}, {\"id\": \"ws10\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"AI Failed\", \"col\": 3}}, {\"id\": \"ws11\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ws12\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Last 7 days</b></span>\", \"col\": 12}}, {\"id\": \"ws13\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Enquiries (7 days)\", \"col\": 6}}, {\"id\": \"ws14\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Issues (7 days)\", \"col\": 6}}, {\"id\": \"ws15\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages per Day\", \"col\": 12}}, {\"id\": \"ws16\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages by Category\", \"col\": 6}}, {\"id\": \"ws17\", \"type\": \"chart\", \"data\": {\"chart_name\": \"Messages by Severity\", \"col\": 6}}, {\"id\": \"ws18\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ws19\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Go to</b></span>\", \"col\": 12}}, {\"id\": \"ws20\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Flow\", \"col\": 3}}, {\"id\": \"ws21\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Settings\", \"col\": 3}}, {\"id\": \"ws22\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Messages\", \"col\": 3}}, {\"id\": \"ws23\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"What the AI Did\", \"col\": 3}}, {\"id\": \"ws24\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Customers Waiting\", \"col\": 3}}, {\"id\": \"ws25\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Contact Queue\", \"col\": 3}}, {\"id\": \"ws26\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Suggestions\", \"col\": 3}}, {\"id\": \"ws27\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Knowledge Base\", \"col\": 3}}, {\"id\": \"ws28\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ws29\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Reports</b></span>\", \"col\": 12}}, {\"id\": \"ws30\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Open Escalations\", \"col\": 3}}, {\"id\": \"ws31\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Response Time\", \"col\": 3}}, {\"id\": \"ws32\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Tagging Review\", \"col\": 3}}, {\"id\": \"ws33\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Lead Source\", \"col\": 3}}, {\"id\": \"ws34\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"AI Usage\", \"col\": 3}}, {\"id\": \"ws35\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Sync Health\", \"col\": 3}}, {\"id\": \"ws36\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Unmatched Numbers\", \"col\": 3}}, {\"id\": \"ws37\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"ws38\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>All pages</b></span>\", \"col\": 12}}, {\"id\": \"ws39\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}, {\"id\": \"ws40\", \"type\": \"card\", \"data\": {\"card_name\": \"Conversations\", \"col\": 4}}, {\"id\": \"ws41\", \"type\": \"card\", \"data\": {\"card_name\": \"AI Agent\", \"col\": 4}}]",
  "creation": "2026-09-29 14:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -35,7 +31,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Setup",
-   "link_count": 2,
+   "link_count": 3,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -47,8 +43,7 @@
    "link_to": "Periskope Settings",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -58,14 +53,23 @@
    "link_to": "Periskope Tag",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "WhatsApp Messages",
-   "link_count": 4,
+   "label": "Periskope Group",
+   "link_count": 0,
+   "link_to": "Periskope Group",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Conversations",
+   "link_count": 5,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -77,49 +81,7 @@
    "link_to": "Periskope Message",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope Reply Reminder",
-   "link_count": 0,
-   "link_to": "Periskope Reply Reminder",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope Webhook Log",
-   "link_count": 0,
-   "link_to": "Periskope Webhook Log",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope AI Usage",
-   "link_count": 0,
-   "link_to": "Periskope AI Usage",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Follow-ups",
-   "link_count": 3,
-   "onboard": 0,
-   "type": "Card Break"
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -129,98 +91,42 @@
    "link_to": "Periskope Contact",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Periskope Group",
+   "label": "Periskope Reply Reminder",
    "link_count": 0,
-   "link_to": "Periskope Group",
+   "link_to": "Periskope Reply Reminder",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Unmatched Numbers",
-   "link_count": 0,
-   "link_to": "Periskope Unmatched Numbers",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Reports",
-   "link_count": 5,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Open Escalations",
+   "label": "Periskope Auto Reply",
    "link_count": 0,
-   "link_to": "Periskope Open Escalations",
-   "link_type": "Report",
+   "link_to": "Periskope Auto Reply",
+   "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Response Time",
-   "link_count": 0,
-   "link_to": "Periskope Response Time",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Tagging Review",
-   "link_count": 0,
-   "link_to": "Periskope Tagging Review",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Lead Source",
-   "link_count": 0,
-   "link_to": "Periskope Lead Source",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Periskope Sync Health",
-   "link_count": 0,
-   "link_to": "Periskope Sync Health",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "AI Assistant",
+   "label": "Periskope Webhook Log",
+   "link_count": 0,
+   "link_to": "Periskope Webhook Log",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "AI Agent",
    "link_count": 6,
    "onboard": 0,
    "type": "Card Break"
@@ -233,8 +139,7 @@
    "link_to": "periskope-knowledge",
    "link_type": "Page",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -244,8 +149,7 @@
    "link_to": "Periskope Suggestion",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -255,30 +159,7 @@
    "link_to": "Periskope Knowledge Entry",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope Auto Reply",
-   "link_count": 0,
-   "link_to": "Periskope Auto Reply",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Periskope Agent Run",
-   "link_count": 0,
-   "link_to": "Periskope Agent Run",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
   },
   {
    "hidden": 0,
@@ -288,58 +169,73 @@
    "link_to": "Periskope Agent Action",
    "link_type": "DocType",
    "onboard": 0,
-   "type": "Link",
-   "dependencies": ""
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Periskope Agent Run",
+   "link_count": 0,
+   "link_to": "Periskope Agent Run",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Periskope AI Usage",
+   "link_count": 0,
+   "link_to": "Periskope AI Usage",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-10-20 15:30:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope",
  "number_cards": [
   {
-   "label": "Waiting for Rep Reply",
-   "number_card_name": "Waiting for Rep Reply"
-  },
-  {
-   "label": "Open Escalations",
-   "number_card_name": "Open Escalations"
-  },
-  {
-   "label": "High Severity Issues",
-   "number_card_name": "High Severity Issues"
-  },
-  {
-   "label": "New Contacts",
-   "number_card_name": "New Contacts"
-  },
-  {
-   "label": "AI Tagging Failed",
-   "number_card_name": "AI Tagging Failed"
-  },
-  {
-   "label": "Issues (7 days)",
-   "number_card_name": "Issues (7 days)"
-  },
-  {
    "label": "Messages Today",
    "number_card_name": "Messages Today"
   },
   {
-   "label": "Enquiries (7 days)",
-   "number_card_name": "Enquiries (7 days)"
+   "label": "Tasks Created Today",
+   "number_card_name": "Tasks Created Today"
   },
   {
-   "label": "Suggestions Waiting",
-   "number_card_name": "Suggestions Waiting"
+   "label": "Escalations Today",
+   "number_card_name": "Escalations Today"
   },
   {
    "label": "Auto Replies Today",
    "number_card_name": "Auto Replies Today"
   },
   {
-   "label": "Holding Messages Today",
-   "number_card_name": "Holding Messages Today"
+   "label": "Customers Waiting",
+   "number_card_name": "Customers Waiting"
+  },
+  {
+   "label": "New Contacts",
+   "number_card_name": "New Contacts"
+  },
+  {
+   "label": "Suggestions Waiting",
+   "number_card_name": "Suggestions Waiting"
+  },
+  {
+   "label": "AI Failed",
+   "number_card_name": "AI Failed"
+  },
+  {
+   "label": "Enquiries (7 days)",
+   "number_card_name": "Enquiries (7 days)"
+  },
+  {
+   "label": "Issues (7 days)",
+   "number_card_name": "Issues (7 days)"
   }
  ],
  "owner": "Administrator",
@@ -369,51 +265,56 @@
   {
    "color": "Grey",
    "doc_view": "",
-   "label": "Periskope Settings",
-   "link_to": "Periskope Settings",
-   "type": "DocType"
+   "label": "Settings",
+   "type": "DocType",
+   "link_to": "Periskope Settings"
   },
   {
    "color": "Grey",
    "doc_view": "List",
    "label": "Messages",
+   "type": "DocType",
    "link_to": "Periskope Message",
-   "type": "DocType"
+   "stats_filter": "[[\"Periskope Message\", \"message_timestamp\", \"Timespan\", \"today\", false]]"
   },
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Tags",
-   "link_to": "Periskope Tag",
-   "type": "DocType"
+   "label": "What the AI Did",
+   "type": "DocType",
+   "link_to": "Periskope Agent Action",
+   "stats_filter": "[[\"Periskope Agent Action\", \"creation\", \"Timespan\", \"today\", false]]"
   },
   {
-   "color": "Grey",
+   "color": "Orange",
    "doc_view": "List",
-   "label": "Reply Reminders",
+   "label": "Customers Waiting",
+   "type": "DocType",
    "link_to": "Periskope Reply Reminder",
-   "type": "DocType"
+   "stats_filter": "[[\"Periskope Reply Reminder\", \"status\", \"in\", [\"Open\", \"Escalated\"], false]]"
   },
   {
    "color": "Grey",
    "doc_view": "List",
    "label": "Contact Queue",
+   "type": "DocType",
    "link_to": "Periskope Contact",
-   "type": "DocType"
+   "stats_filter": "[[\"Periskope Contact\", \"status\", \"=\", \"New\", false]]"
   },
   {
-   "color": "Grey",
+   "color": "Purple",
    "doc_view": "List",
-   "label": "Agent Actions",
-   "link_to": "Periskope Agent Action",
-   "type": "DocType"
+   "label": "Suggestions",
+   "type": "DocType",
+   "link_to": "Periskope Suggestion",
+   "stats_filter": "[[\"Periskope Suggestion\", \"status\", \"=\", \"Pending\", false]]"
   },
   {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Webhook Logs",
-   "link_to": "Periskope Webhook Log",
-   "type": "DocType"
+   "color": "Green",
+   "doc_view": "",
+   "label": "Knowledge Base",
+   "type": "Page",
+   "link_to": "periskope-knowledge"
   },
   {
    "color": "Grey",
@@ -470,34 +371,6 @@
    "link_to": "Periskope Unmatched Numbers",
    "type": "Report",
    "is_query_report": 1
-  },
-  {
-   "color": "Purple",
-   "doc_view": "",
-   "type": "DocType",
-   "label": "Suggestions",
-   "link_to": "Periskope Suggestion"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "type": "DocType",
-   "label": "Knowledge Base",
-   "link_to": "Periskope Knowledge Entry"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "",
-   "type": "DocType",
-   "label": "Auto Replies",
-   "link_to": "Periskope Auto Reply"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "type": "DocType",
-   "label": "Agent Runs",
-   "link_to": "Periskope Agent Run"
   }
  ],
  "title": "Periskope"

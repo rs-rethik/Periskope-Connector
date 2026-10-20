@@ -9,7 +9,7 @@
  "idx": 0,
  "is_public": 1,
  "is_standard": 1,
- "modified": "2026-09-30 16:00:00.000000",
+ "modified": "2026-10-20 15:30:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Messages by Category",
@@ -19,6 +19,6 @@
  "group_by_type": "Count",
  "group_by_based_on": "ai_category",
  "number_of_groups": 10,
- "type": "Bar",
+ "type": "Percentage",
  "color": "#5E64FF"
 }
