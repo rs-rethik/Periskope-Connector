@@ -1,26 +1,23 @@
-"""Alert management when a message is classified as high severity.
+"""Tell management at once when the AI escalates a message.
 
-Sent once per message, by email and as a system notification, to the Manager Emails in Periskope
-Settings (the same list that gets the missed-reply escalation). A manager who is also a Frappe user
-gets the notification bell as well.
+The AI decides (classifier: escalate and escalation_reason): "Managers" emails the Manager Emails,
+"MD" emails the Escalation Emails (the MD) and the managers. Sent once per message, by email and as a
+bell for those who are Frappe users. Nothing here sends WhatsApp messages.
 """
-
-import re
 
 import frappe
 from frappe import _
 from frappe.utils import escape_html, get_url_to_form
 
 from periskope_connector.reminders import get_config
-from periskope_connector.tags import default_tag
 
 # The message fields the alert email reads.
 MESSAGE_FIELDS = [
 	"name",
 	"high_alert_sent",
-	"ai_category",
+	"escalation",
+	"escalation_reason",
 	"ai_summary",
-	"severity",
 	"rep",
 	"org_phone",
 	"is_group",
@@ -28,6 +25,7 @@ MESSAGE_FIELDS = [
 	"sender_name",
 	"contact_number",
 	"body",
+	"attachment_summary",
 	"crm_lead",
 	"crm_deal",
 ]
@@ -43,45 +41,45 @@ def _who(doc) -> str:
 	return doc.sender_name or doc.contact_number or ""
 
 
-def _recipients(rows: list) -> list[str]:
-	"""The emails on the matching tag actions; a row with none means the Manager Emails."""
-	emails: list[str] = []
-	for row in rows:
-		listed = [e.strip() for e in re.split(r"[,\n;]", row.get("recipients") or "") if e.strip()]
-		emails += listed or get_config().emails
+def recipients(level: str) -> list[str]:
+	cfg = get_config()
+	emails = cfg.md_emails + cfg.emails if level == "MD" else cfg.emails
 	return list(dict.fromkeys(emails))
 
 
-def send_alert(message: str, rows: list) -> bool:
-	"""Email the recipients of the tag's Email Alert actions about a message. Returns True when an
-	alert went out. One alert per message, however many rows match.
+def escalate(message: str) -> bool:
+	"""Email and notify the people the AI's escalation names. Returns True when an alert went out.
 
-	Never raises: a problem here must not undo the message's classification."""
+	Never raises: a problem here must not undo the message's analysis."""
 	try:
 		doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
-		if not doc or doc.high_alert_sent:
+		if not doc or not doc.escalation or doc.high_alert_sent:
 			return False
-		emails = _recipients(rows)
+		emails = recipients(doc.escalation)
 		if not emails:
 			return False
 
-		category = (doc.ai_category or default_tag()).replace("_", " ")
-		summary = doc.ai_summary or ""
+		reason = doc.escalation_reason or doc.ai_summary or ""
 		rep = doc.rep or doc.org_phone or _("no rep assigned")
 		link = get_url_to_form("Periskope Message", doc.name)
-		subject = _("{0} severity WhatsApp message: {1}").format(doc.severity or "Low", category)
+		subject = _("WhatsApp escalation ({0}): {1}").format(_who(doc), reason)[:140]
 		crm = ""
 		if doc.crm_deal or doc.crm_lead:
 			doctype, name = ("CRM Deal", doc.crm_deal) if doc.crm_deal else ("CRM Lead", doc.crm_lead)
 			crm = f"<p>{_('CRM')}: <a href='{get_url_to_form(doctype, name)}'>{escape_html(name)}</a></p>"
+		attachment = (
+			f"<p>{_('Attachment')}: {escape_html(doc.attachment_summary)}</p>"
+			if doc.attachment_summary
+			else ""
+		)
 
 		frappe.sendmail(
 			recipients=emails,
 			subject=subject,
 			message=(
-				f"<p><b>{escape_html(category)}</b> &ndash; {escape_html(summary)}</p>"
+				f"<p><b>{escape_html(reason)}</b></p>"
 				f"<p>{_('Customer')}: {escape_html(_who(doc))}<br>{_('Rep')}: {escape_html(str(rep))}</p>"
-				f"<p>{_('Message')}: {escape_html((doc.body or '')[:300])}</p>{crm}"
+				f"<p>{_('Message')}: {escape_html((doc.body or '')[:500])}</p>{attachment}{crm}"
 				f"<p><a href='{link}'>{_('Open the message')}</a></p>"
 			),
 			reference_doctype="Periskope Message",
@@ -93,7 +91,7 @@ def send_alert(message: str, rows: list) -> bool:
 					"doctype": "Notification Log",
 					"type": "Alert",
 					"for_user": user,
-					"subject": f"{subject}: {summary}"[:140],
+					"subject": subject,
 					"document_type": "Periskope Message",
 					"document_name": doc.name,
 				}
@@ -101,5 +99,5 @@ def send_alert(message: str, rows: list) -> bool:
 		frappe.db.set_value("Periskope Message", message, "high_alert_sent", 1, update_modified=False)
 		return True
 	except Exception:
-		frappe.log_error(title=f"Periskope: could not send the high severity alert for {message}")
+		frappe.log_error(title=f"Periskope: could not send the escalation for {message}")
 		return False

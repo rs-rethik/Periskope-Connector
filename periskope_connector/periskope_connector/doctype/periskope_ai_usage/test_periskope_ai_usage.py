@@ -83,10 +83,8 @@ class TestCostControls(FrappeTestCase):
 		frappe.db.savepoint("periskope_cost_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_cost_test")
 
-	def test_the_max_tokens_setting_is_used(self):
-		settings = frappe._dict(ai_max_tokens=777)
-		self.assertEqual(classifier.max_tokens(settings), 777)
-		self.assertEqual(classifier.max_tokens(frappe._dict()), classifier.DEFAULT_MAX_TOKENS)
+	def test_a_group_message_gets_more_room_for_its_tasks(self):
+		self.assertGreater(classifier.GROUP_MAX_TOKENS, classifier.MAX_TOKENS)
 
 	def test_run_batch_stops_when_the_budget_is_spent(self):
 		from periskope_connector import health
@@ -99,8 +97,8 @@ class TestCostControls(FrappeTestCase):
 			classifier.run_batch()  # must return quietly without touching _pending
 
 	def test_min_length_skips_tiny_messages(self):
-		settings = frappe._dict(min_length=5, classify_group_chats=1)
-		doc = frappe._dict(direction="Incoming", message_type="text", is_group=0, body="hi")
+		settings = frappe._dict(ai_model="claude-haiku-4-5")
+		doc = frappe._dict(direction="Incoming", message_type="text", is_group=0, body="h")
 		self.assertEqual(classifier.skip_reason(doc, settings), "Too short to tag")
 		doc.body = "hello there"
 		self.assertIsNone(classifier.skip_reason(doc, settings))

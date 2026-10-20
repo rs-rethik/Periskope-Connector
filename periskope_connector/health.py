@@ -207,7 +207,7 @@ def agent_health() -> dict:
 	return {
 		"agent": (
 			_("off")
-			if not settings.enable_agent
+			if not settings.enabled
 			else _("last run {0} ({1}), {2} waiting for approval").format(
 				agent["last_run"], agent["last_status"] or "-", agent["pending"]
 			)

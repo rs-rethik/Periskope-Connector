@@ -363,6 +363,9 @@ def link_message(message: str) -> str:
 		)
 		if status in ("Linked", "Ambiguous"):
 			add_comment(message)
+			from periskope_connector.attachments import attach_to_record
+
+			attach_to_record(message)
 		_after_link(message)
 		return status
 	except Exception:

@@ -44,13 +44,13 @@ class TestAgent(FrappeTestCase):
 		insert_as_system({"doctype": "Periskope Agent Run", "status": "Done", "cursor_to": since})
 		frappe.cache().delete_value("periskope_agent_learn")
 		frappe.cache().delete_value("periskope_agent_stale")
-		settings(enable_agent=1, approver_emails="boss@example.com", suggestion_email_gap_hours=0)
+		settings(enabled=1, approver_emails="boss@example.com")
 		ready = patch.object(assistant, "is_ready", return_value=True)
 		ready.start()
 		self.addCleanup(ready.stop)
 
 	def test_off_means_nothing_runs(self):
-		settings(enable_agent=0)
+		settings(enabled=0)
 		before = frappe.db.count("Periskope Agent Run")
 		self.assertIn("skipped", agent.run())
 		self.assertEqual(frappe.db.count("Periskope Agent Run"), before)
@@ -130,7 +130,6 @@ class TestLearner(FrappeTestCase):
 	def setUp(self):
 		isolate(self, "periskope_learner_test")
 		frappe.db.delete("Periskope Suggestion")
-		settings(learning_min_evidence=2)
 
 	def _analyse(self, items, chats=None):
 		chats = chats or {1: ["M1"], 2: ["M2"], 3: ["M3"]}
@@ -145,7 +144,7 @@ class TestLearner(FrappeTestCase):
 			"summary": "Add a tag",
 			"reason": "Seen often",
 			"payload_json": json.dumps({"tag_name": "bulk_order", "description": "bulk"}),
-			"evidence_chats": [1, 2],
+			"evidence_chats": [1, 2, 3],
 		}
 		base.update(kw)
 		return base
@@ -181,23 +180,11 @@ class TestLearner(FrappeTestCase):
 		self.assertEqual(self._analyse([item], {1: ["M1"], 2: ["M2"]}), 0)  # someone else's chat
 		self.assertEqual(self._analyse([item], {1: [own.name]}), 1)
 
-	def test_a_rule_already_waiting_is_not_proposed_again(self):
-		rule = {"kind": "Keyword Rule", "evidence_chats": [1, 2]}
-		first = self._item(
-			**rule, payload_json=json.dumps({"rule_name": "Payment Method", "keywords": "cheque"})
-		)
-		again = self._item(
-			**rule, payload_json=json.dumps({"rule_name": "payment methods", "keywords": "neft"})
-		)
+	def test_a_tag_already_waiting_is_not_proposed_again(self):
+		first = self._item(payload_json=json.dumps({"tag_name": "payment_method", "description": "d"}))
+		again = self._item(payload_json=json.dumps({"tag_name": "Payment Methods", "description": "e"}))
 		self.assertEqual(self._analyse([first]), 1)
 		self.assertEqual(self._analyse([again]), 0)
-		renamed = self._item(
-			**rule,
-			payload_json=json.dumps(
-				{"rule_name": "Payment Method Issues", "keywords": "cheque, payment, neft"}
-			),
-		)
-		self.assertEqual(self._analyse([renamed]), 0)
 
 	def test_evidence_must_exist(self):
 		self.assertEqual(self._analyse([self._item(evidence_chats=[8, 9])]), 0)

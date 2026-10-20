@@ -10,9 +10,7 @@
   "is_default",
   "sort_order",
   "dashboard_group",
-  "description",
-  "section_actions",
-  "actions"
+  "description"
  ],
  "fields": [
   {
@@ -62,23 +60,11 @@
    "label": "Description for the AI",
    "reqd": 1,
    "description": "When this tag applies. This text is given to the AI, so be specific."
-  },
-  {
-   "fieldname": "section_actions",
-   "fieldtype": "Section Break",
-   "label": "Actions"
-  },
-  {
-   "fieldname": "actions",
-   "fieldtype": "Table",
-   "label": "When a Message Gets This Tag",
-   "options": "Periskope Tag Action",
-   "description": "What the app does for each message with this tag. No rows means the tag only labels the message."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-09 15:00:00.000000",
+ "modified": "2026-10-20 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Tag",

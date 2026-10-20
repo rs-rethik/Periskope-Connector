@@ -1,5 +1,6 @@
-"""The tags the AI can give a message. They are records (Periskope Tag), so the team edits them in
-Desk instead of in code. The six below are the starting set, created on install."""
+"""The tags the AI can give a message: categories for reports and the dashboard. What happens to a
+message is the AI's decision (decisions.py), not the tag's. They are records (Periskope Tag), so the
+team edits them in Desk instead of in code. The six below are the starting set, created on install."""
 
 import frappe
 
@@ -31,18 +32,6 @@ DASHBOARD_GROUPS = {
 	"quality_complaint": "Issue",
 	"payment_issue": "Issue",
 }
-
-
-def default_actions(tag_name: str) -> list[dict]:
-	"""The starting actions of a tag: the behaviour the app had before actions were configurable.
-	Every tag emails the managers about High severity messages; every tag but the default one
-	shows on the CRM timeline; an enquiry from an unknown 1-to-1 number can become a lead."""
-	rows = [{"action": "Email Alert", "min_severity": "High", "chat_type": "Any"}]
-	if tag_name != FALLBACK_DEFAULT:
-		rows.append({"action": "Timeline Comment", "min_severity": "Low", "chat_type": "Any"})
-	if tag_name == "order_or_enquiry":
-		rows.append({"action": "Create Lead", "min_severity": "Low", "chat_type": "1-to-1"})
-	return rows
 
 
 def active_tags() -> list[dict]:
