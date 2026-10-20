@@ -287,7 +287,7 @@ Open **Tags** from the workspace. A tag is a category for reports and the dashbo
 
 The **Flow** button next to **Save** on Periskope Settings opens a dialog that draws the whole pipeline: capture, linking, attachments, what the AI reads and decides, tags, the reminder ladder, who is told, and the AI agent (auto reply, CRM updates, learning agent). Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel on the right of the diagram (under it on a narrow screen).
 
-There is little to change, because the AI decides: each change in the dialog is saved as you make it.
+Drag the diagram to move it, Ctrl + scroll (or the + and − buttons) to zoom, and ⤢ to fit it to the dialog again. There is little to change, because the AI decides: each change in the dialog is saved as you make it.
 
 | Step | Edit in the panel |
 |---|---|
@@ -375,7 +375,7 @@ One email to the approvers lists the suggestions with *Approve* and *Reject* but
 
 #### Knowledge Base canvas
 
-Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the workspace, or from the *Learning agent* step of the Flow dialog. It shows the knowledge base as a node graph, like a workflow builder:
+Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the workspace, or from the *Learning agent* step of the Flow dialog. It opens as a dialog over the page you are on (*Open full page* gives it the whole screen, at `/app/periskope-knowledge`). It shows the knowledge base as a node graph, like a workflow builder:
 
 - **Customer asks** starts the tree. **Topic** nodes (Delivery, Pricing) branch into **Condition** nodes (*Customer is in Chennai*, *Otherwise*) and end in **Answer** nodes (*Delivery to Chennai takes 2 days*). An answer can also hang straight under a topic or under Customer asks.
 - Click **+** after a node to add the next one, or drag from a node's right dot onto another node to connect them; drop it on empty canvas to add a node there. Hover a wire to remove it. Drag nodes to arrange them; scroll to move, Ctrl + scroll to zoom, and **Tidy up** lays the tree out again.
