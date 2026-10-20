@@ -85,7 +85,7 @@
 			col: "C",
 			row: 4,
 			title: __("Learning agent"),
-			sub: __("Suggests, you approve"),
+			sub: __("Learns; asks before config changes"),
 		},
 	];
 	const EDGES = [
@@ -361,7 +361,7 @@
 				k: __("Step 4c"),
 				h: __("Learning agent"),
 				p: __(
-					"Every 15 minutes the agent reads the finished conversations, builds the knowledge base and suggests changes to tags, keyword rules, escalation levels, group mappings, ignored numbers and lead rules. Nothing changes until an approver says yes."
+					"Every 15 minutes the agent reads the finished conversations, updates the knowledge base on its own, and suggests changes to tags, keyword rules, escalation levels, group mappings, ignored numbers and lead rules. Those configuration changes wait until an approver says yes."
 				),
 				body:
 					kv([
@@ -370,7 +370,7 @@
 							`${f.last_run}${f.last_status ? ` (${f.last_status})` : ""}`,
 						],
 						[__("Waiting for approval"), f.pending],
-						[__("Approved knowledge entries"), f.knowledge],
+						[__("Knowledge entries in use"), f.knowledge],
 						[__("Test mode"), f.test_mode ? __("On") : __("Off")],
 					]) +
 					(f.last_error ? `<div class="pf-warn">${e(f.last_error)}</div>` : "") +

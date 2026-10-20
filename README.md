@@ -396,7 +396,7 @@ After the **Reply Delay** (plus a small random variation) since the customer's l
 
 - A newer message moves the timer; a rep's reply cancels it and pauses the AI in that chat.
 - Before answering, the agent reads the deal (or lead): status, owner, notes, open tasks, recent activity and the last quotation. The last quotation and the deal stage may be quoted to the customer; the rest is background only.
-- The answer may use only the approved knowledge entries, ERPNext items (price and stock), open sales orders and the last quotation. Every number in it must appear in that data.
+- The answer may use only the knowledge entries in use, ERPNext items (price and stock), open sales orders and the last quotation. Every number in it must appear in that data.
 - If the data does not answer the question, or there is no AI key, or the monthly budget is used up, the customer gets the **Holding Message** and the rep a task. The admins get one email a day about a missing key or budget.
 - Captions of photos and documents are read; voice notes are transcribed with Google Gemini when a key is set (Advanced, Voice Notes).
 - An edited message is tagged again; a deleted message no longer waits for a reply, and the CRM tab shows *This message was deleted*.
@@ -405,9 +405,9 @@ Each attempt is a **Periskope Auto Reply** row; each action the agent took is a 
 
 #### The learning agent and approvals
 
-Every 15 minutes the agent reads the conversations that have been quiet for an hour. It builds the knowledge base from answers the reps gave, and suggests changes to tags, keyword rules, SLA levels, a few settings, **group to customer mappings**, **numbers to ignore** and **lead creation rules**. A suggestion needs evidence from several conversations, and its target must exist.
+Every 15 minutes the agent reads the conversations that have been quiet for an hour. It updates the knowledge base from answers the reps gave, with no approval needed: a new answer, a changed answer and the retiring of an answer nobody used for 90 days apply at once, each recorded as an *Applied* **Periskope Suggestion** (*Decision Via: Automatic*). It suggests changes to tags, keyword rules, SLA levels, a few settings, **group to customer mappings**, **numbers to ignore** and **lead creation rules**. A suggestion needs evidence from several conversations, and its target must exist.
 
-One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Periskope Suggestion** in Desk. Nothing changes until someone approves; a rejected suggestion is not proposed again for 30 days.
+One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Periskope Suggestion** in Desk. These configuration changes wait until someone approves; a rejected suggestion is not proposed again for 30 days.
 
 #### Knowledge Base canvas
 
@@ -418,7 +418,7 @@ Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the works
 - Click a node to edit it in the side panel. **Delete** retires the node and everything after it, so the agent stops using them.
 - **Import document** (PDF, Excel, Word, CSV): the AI extracts answers from a price list, FAQ or catalogue. You tick the ones to keep and pick where they go; nothing is saved before that.
 - **Knowledge gaps** lists what customers asked in the last 14 days that the agent answered with the holding message, each with *Add an answer*.
-- Answers the learning agent mined from rep replies appear with a dashed border and *Waiting for approval* until an approver accepts them.
+- Answers the learning agent mined from rep replies go straight into the tree. Correct or delete one on the canvas when it is wrong.
 
 How a reply uses it: a customer's message matches an answer by its own words, or by one word of a topic's name or keywords. All answers under that topic go to the AI with their conditions (*Applies only when: Customer is in Chennai*). The AI uses an answer only when the chat or the CRM record shows its condition holds; when it cannot tell which branch applies, the customer gets the holding message.
 

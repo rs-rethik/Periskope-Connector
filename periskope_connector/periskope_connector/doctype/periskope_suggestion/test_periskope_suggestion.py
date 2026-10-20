@@ -129,22 +129,15 @@ class TestSuggestion(FrappeTestCase):
 		self.assertEqual(row.status, "Failed")
 		self.assertTrue(row.applied_error)
 
-	def test_knowledge_entry_is_used_only_after_approval(self):
+	def test_a_knowledge_entry_is_used_at_once_and_nobody_is_asked(self):
 		entry = frappe.get_doc(
 			{"doctype": "Periskope Knowledge Entry", "question": "Q?", "answer": "A", "status": "Suggested"}
 		).insert()
 		doc = _make("Knowledge Entry", "Add", target=entry.name, payload={"answer": "A"})
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", entry.name, "status"), "Suggested")
-		suggestions.approve(doc, "Desk", "Administrator")
 		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", entry.name, "status"), "Approved")
-
-	def test_rejected_new_knowledge_entry_is_retired(self):
-		entry = frappe.get_doc(
-			{"doctype": "Periskope Knowledge Entry", "question": "Q2?", "answer": "A", "status": "Suggested"}
-		).insert()
-		doc = _make("Knowledge Entry", "Add", target=entry.name, payload={"answer": "A"})
-		suggestions.reject(doc, "Desk", "Administrator")
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", entry.name, "status"), "Retired")
+		self.assertEqual((doc.status, doc.decision_via), ("Applied", "Automatic"))
+		self.assertEqual(suggestions.send_digest(force=True), 0)
+		self.sent.assert_not_called()
 
 
 class TestEmailedLinks(FrappeTestCase):
