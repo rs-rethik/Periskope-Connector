@@ -1,8 +1,9 @@
 """Suggested changes: the only way the learning agent can change how the app is set up.
 
 The agent writes a Periskope Suggestion and the managers get an email with Approve / Reject links.
-A change is applied here, and only here, after somebody approved that one suggestion. Every
-suggestion stays as a row with its outcome, so the list is also the audit log.
+A change to the configuration is applied here, and only here, after somebody approved that one
+suggestion. Knowledge base changes are applied at once (AUTOMATIC_KINDS). Every suggestion stays as a
+row with its outcome, so the list is also the audit log.
 
 The link in the email opens a small page that asks for one confirming click (the page is
 www/periskope-suggestion): mail scanners open links on their own, so a plain GET must never decide.
@@ -33,6 +34,10 @@ KINDS = (
 	"Lead Rule",
 )
 OPERATIONS = ("Add", "Modify", "Remove")
+# Applied as soon as the agent makes them: the team keeps the knowledge base by correcting it on the
+# canvas, not by approving each answer. Everything else changes the configuration and waits.
+AUTOMATIC_KINDS = ("Knowledge Entry",)
+AUTOMATIC = "Automatic"
 REJECTED_QUIET_DAYS = 30
 MAX_PER_EMAIL = 25
 
@@ -125,8 +130,9 @@ def _plain(name) -> str:
 
 
 def create(kind, operation, summary, reason="", target="", payload=None, current=None, evidence=None):
-	"""Save a pending suggestion. Returns the document, or None when the same suggestion is already
-	waiting, was applied lately, or was rejected in the last 30 days (a "no" is remembered)."""
+	"""Save a suggestion: pending, or applied at once for AUTOMATIC_KINDS. Returns the document, or None
+	when the same suggestion is already waiting, was applied lately, or was rejected in the last 30
+	days (a "no" is remembered)."""
 	if kind not in KINDS or operation not in OPERATIONS:
 		return None
 	payload = clean_payload(kind, payload)
@@ -146,7 +152,7 @@ def create(kind, operation, summary, reason="", target="", payload=None, current
 	):
 		return None
 	settings = frappe.db.get_single_value("Periskope Settings", "suggestion_expiry_days") or 7
-	return insert_as_system(
+	doc = insert_as_system(
 		{
 			"doctype": "Periskope Suggestion",
 			"kind": kind,
@@ -162,6 +168,9 @@ def create(kind, operation, summary, reason="", target="", payload=None, current
 			"expires_on": add_to_date(now_datetime(), days=int(settings)),
 		}
 	)
+	if kind in AUTOMATIC_KINDS:
+		approve(doc, AUTOMATIC, "Administrator")
+	return doc
 
 
 # --- Applying -----------------------------------------------------------------------------------
@@ -391,23 +400,6 @@ def approve(doc, via: str, user: str) -> str:
 
 def reject(doc, via: str, user: str) -> str:
 	_finish(doc, "Rejected", via, user)
-	if doc.kind == "Knowledge Entry" and doc.operation == "Add" and doc.target:
-		entry = frappe.db.get_value(
-			"Periskope Knowledge Entry", doc.target, ["status", "parent_entry"], as_dict=True
-		)
-		if entry and entry.status == "Suggested":
-			frappe.db.set_value("Periskope Knowledge Entry", doc.target, "status", "Retired")
-			# a topic or condition the agent proposed goes too once nothing is left under it
-			parent = entry.parent_entry
-			while (
-				parent
-				and frappe.db.get_value("Periskope Knowledge Entry", parent, "status") == "Suggested"
-				and not frappe.db.exists(
-					"Periskope Knowledge Entry", {"parent_entry": parent, "status": ["!=", "Retired"]}
-				)
-			):
-				frappe.db.set_value("Periskope Knowledge Entry", parent, "status", "Retired")
-				parent = frappe.db.get_value("Periskope Knowledge Entry", parent, "parent_entry")
 	return "Rejected"
 
 

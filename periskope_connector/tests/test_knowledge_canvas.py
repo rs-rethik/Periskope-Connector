@@ -150,11 +150,12 @@ class TestKnowledgeCanvas(FrappeTestCase):
 		self.assertIn(f"[{self.chennai.name}] Condition: Delivery > Customer is in Chennai", prompt)
 		self.assertEqual(counts["added"], 1)
 		entry = frappe.get_doc("Periskope Knowledge Entry", {"question": item["question"]})
-		self.assertEqual((entry.parent_entry, entry.status), (self.chennai.name, "Suggested"))
+		self.assertEqual((entry.parent_entry, entry.status), (self.chennai.name, "Approved"))
 		sug = frappe.get_doc("Periskope Suggestion", {"target": entry.name})
 		self.assertIn("Goes under: Delivery > Customer is in Chennai", sug.reason)
+		self.assertEqual(sug.status, "Applied")
 
-	def test_a_new_topic_is_approved_with_its_answer_and_retired_with_it(self):
+	def test_a_new_topic_is_used_at_once_with_its_answers(self):
 		self._mine(
 			[
 				self._learned("What are your payment terms?", answer="50% advance.", new_topic="Payment"),
@@ -162,25 +163,10 @@ class TestKnowledgeCanvas(FrappeTestCase):
 			]
 		)
 		topic = frappe.get_doc("Periskope Knowledge Entry", {"node_type": "Topic", "question": "Payment"})
-		self.assertEqual(topic.status, "Suggested")
+		self.assertEqual(topic.status, "Approved")
 		answers = frappe.get_all("Periskope Knowledge Entry", {"parent_entry": topic.name}, pluck="name")
 		self.assertEqual(len(answers), 2)  # one topic for both
-		self.assertFalse(knowledge.find("payment terms"))  # nothing used before approval
-		first, second = (frappe.get_doc("Periskope Suggestion", {"target": a}) for a in answers)
-		suggestions.reject(first, "Desk", "Administrator")
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", topic.name, "status"), "Suggested")
-		suggestions.approve(second, "Desk", "Administrator")
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", topic.name, "status"), "Approved")
 		self.assertTrue(knowledge.find("what are the payment terms, cheques ok?"))
-
-	def test_rejecting_the_last_answer_retires_the_proposed_topic(self):
-		self._mine([self._learned("Do you export?", answer="Yes, to Sri Lanka.", new_topic="Exports")])
-		topic = frappe.db.get_value(
-			"Periskope Knowledge Entry", {"node_type": "Topic", "question": "Exports"}
-		)
-		entry = frappe.db.get_value("Periskope Knowledge Entry", {"parent_entry": topic})
-		suggestions.reject(frappe.get_doc("Periskope Suggestion", {"target": entry}), "Desk", "Administrator")
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", topic, "status"), "Retired")
 
 	def test_an_answer_the_ai_says_it_replaces_becomes_a_change(self):
 		samples = _node("Topic", "Samples")
@@ -198,6 +184,10 @@ class TestKnowledgeCanvas(FrappeTestCase):
 		self.assertEqual(counts, {"added": 0, "seen": 0, "changed": 1})
 		sug = frappe.get_doc("Periskope Suggestion", {"target": old.name, "operation": "Modify"})
 		self.assertIn("1 kg", sug.payload)
+		self.assertEqual(
+			frappe.db.get_value("Periskope Knowledge Entry", old.name, "answer"),
+			"1 kg free and we pay the courier.",
+		)
 
 	def test_an_answer_copied_from_the_tree_or_without_a_conversation_is_not_learned(self):
 		copied = self._learned("How long to deliver in Chennai?", answer="Delivery takes 2 days.")
@@ -206,7 +196,7 @@ class TestKnowledgeCanvas(FrappeTestCase):
 		self.assertEqual(counts, {"added": 0, "seen": 1, "changed": 0})
 		self.assertFalse(frappe.db.exists("Periskope Knowledge Entry", {"question": "Do you export?"}))
 
-	def test_a_new_case_becomes_a_new_condition_approved_and_retired_with_its_answer(self):
+	def test_a_new_case_becomes_a_new_condition_used_at_once(self):
 		item = self._learned(
 			"Delivery time to Bengaluru?",
 			answer="4 working days.",
@@ -217,33 +207,12 @@ class TestKnowledgeCanvas(FrappeTestCase):
 		cond = frappe.get_doc(
 			"Periskope Knowledge Entry", {"node_type": "Condition", "question": "Customer is in Bengaluru"}
 		)
-		self.assertEqual((cond.parent_entry, cond.status), (self.delivery.name, "Suggested"))
+		self.assertEqual((cond.parent_entry, cond.status), (self.delivery.name, "Approved"))
 		entry = frappe.db.get_value("Periskope Knowledge Entry", {"parent_entry": cond.name})
 		sug = frappe.get_doc("Periskope Suggestion", {"target": entry})
 		self.assertIn("New in the tree: Customer is in Bengaluru", sug.reason)
-		# not used, and Otherwise does not yet exclude it, before approval
-		other = {e.name: e for e in knowledge.find("delivery to chennai")}[self.five.name]
-		self.assertNotIn("Bengaluru", other.text)
-		suggestions.approve(sug, "Desk", "Administrator")
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", cond.name, "status"), "Approved")
 		other = {e.name: e for e in knowledge.find("delivery to chennai")}[self.five.name]
 		self.assertIn("Customer is in Bengaluru", other.text)
-
-	def test_rejecting_retires_every_proposed_node_left_empty(self):
-		item = self._learned(
-			"Export lead time?", answer="15 days.", new_topic="Exports", new_condition="Shipping by sea"
-		)
-		self._mine([item])
-		cond = frappe.db.get_value(
-			"Periskope Knowledge Entry",
-			{"question": "Shipping by sea"},
-			["name", "parent_entry"],
-			as_dict=True,
-		)
-		entry = frappe.db.get_value("Periskope Knowledge Entry", {"parent_entry": cond.name})
-		suggestions.reject(frappe.get_doc("Periskope Suggestion", {"target": entry}), "Desk", "Administrator")
-		for node in (cond.name, cond.parent_entry):
-			self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", node, "status"), "Retired")
 
 	def test_a_rep_answering_one_branch_differently_changes_that_branch(self):
 		item = self._learned(

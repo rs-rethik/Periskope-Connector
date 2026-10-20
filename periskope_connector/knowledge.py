@@ -4,10 +4,11 @@ Entries are question and answer pairs, arranged as a tree on the Knowledge Base 
 (Delivery) branch into Condition nodes (Customer is in Chennai, Otherwise) and end in Answer nodes.
 An answer with no parent hangs straight under "Customer asks". The agent mines answers from
 conversations where a rep answered a customer's question and places each one in the tree: under the
-topic or condition it belongs to, or under a new topic it proposes (Suggested until the answer is
-approved). The team can also draw the tree by hand on the canvas. A mined entry starts as Suggested and
-is used for replies only after a manager approved it (see suggestions.py), because its text goes to
-customers. Repeats of the same question add to the entry instead of making a new one.
+topic or condition it belongs to, or under a new topic it proposes. The team can also draw the tree by
+hand on the canvas. A mined entry, a changed answer and the retiring of a stale one are applied at once,
+no approval needed (suggestions.AUTOMATIC_KINDS); the Periskope Suggestion row records each change, and
+the team corrects the tree on the canvas. Repeats of the same question add to the entry instead of
+making a new one.
 """
 
 import re

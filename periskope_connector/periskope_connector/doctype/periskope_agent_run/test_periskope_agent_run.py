@@ -83,7 +83,7 @@ class TestAgent(FrappeTestCase):
 			fields=["status", "cursor_to", "knowledge_added"],
 		)[0]
 		self.assertEqual((run.status, run.knowledge_added), ("Done", 1))
-		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", {}, "status"), "Suggested")
+		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", {}, "status"), "Approved")
 		# The next pass starts where this one stopped and finds nothing new.
 		with patch.object(assistant, "complete_json") as call:
 			out = agent.run()
@@ -104,7 +104,7 @@ class TestAgent(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("Periskope Agent Run", {"status": "Failed"}))
 		self.assertIn("skipped", agent.run())  # paused for a while, no new AI spend
 
-	def test_pass_emails_the_pending_suggestions(self):
+	def test_a_pass_that_only_learned_knowledge_emails_nobody(self):
 		_message("What is the minimum order quantity?")
 		reply = {
 			"entries": [
@@ -122,8 +122,8 @@ class TestAgent(FrappeTestCase):
 			patch.object(frappe, "sendmail") as mail,
 		):
 			out = agent.run()
-		self.assertEqual(out["emails"], 1)
-		mail.assert_called_once()
+		self.assertEqual((out["knowledge"], out["emails"]), (1, 0))
+		mail.assert_not_called()
 
 
 class TestLearner(FrappeTestCase):

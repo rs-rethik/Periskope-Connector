@@ -44,7 +44,7 @@ class TestKnowledge(FrappeTestCase):
 		self.assertEqual(frappe.db.count("Periskope Knowledge Entry"), 1)
 		self.assertEqual(frappe.db.get_value("Periskope Knowledge Entry", entry.name, "evidence_count"), 2)
 
-	def test_new_question_is_suggested_not_used(self):
+	def test_a_new_question_is_used_at_once(self):
 		out = knowledge.record(
 			{
 				"question": "Do you ship to Dubai?",
@@ -56,11 +56,11 @@ class TestKnowledge(FrappeTestCase):
 		)
 		self.assertEqual(out, "added")
 		entry = frappe.get_all("Periskope Knowledge Entry", fields=["status", "source"])[0]
-		self.assertEqual((entry.status, entry.source), ("Suggested", "AI Learned"))
-		self.assertEqual(knowledge.find("do you ship to dubai"), [])
+		self.assertEqual((entry.status, entry.source), ("Approved", "AI Learned"))
+		self.assertTrue(knowledge.find("do you ship to dubai"))
 		suggestion = frappe.get_all("Periskope Suggestion", fields=["kind", "operation", "status"])[0]
 		self.assertEqual(
-			(suggestion.kind, suggestion.operation, suggestion.status), ("Knowledge Entry", "Add", "Pending")
+			(suggestion.kind, suggestion.operation, suggestion.status), ("Knowledge Entry", "Add", "Applied")
 		)
 
 	def test_low_confidence_is_dropped(self):
