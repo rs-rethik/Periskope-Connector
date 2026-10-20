@@ -199,6 +199,29 @@ class TestDashboardGroups(FrappeTestCase):
 		frappe.db.set_value("Periskope Message", name, "ai_category", tag)
 		return name
 
+	def test_messages_by_tag_lists_every_active_tag_with_its_count(self):
+		before = {r["tag"]: r["count"] for r in dashboard.tag_counts()}
+		self._message("payment_issue", "tc1")
+		self._message("payment_issue", "tc2")
+		rows = dashboard.tag_counts()
+		counts = {r["tag"]: r["count"] for r in rows}
+		self.assertEqual(counts["payment_issue"], before.get("payment_issue", 0) + 2)
+		self.assertEqual(set(counts), set(tags.names()))  # an unused tag shows 0
+		self.assertEqual([r["count"] for r in rows], sorted((r["count"] for r in rows), reverse=True))
+		self.assertEqual(next(r for r in rows if r["tag"] == "payment_issue")["label"], "payment issue")
+
+	def test_the_block_is_on_the_workspace_for_the_managers(self):
+		install._ensure_dashboard_block()
+		block = frappe.get_doc("Custom HTML Block", install.DASHBOARD_BLOCK)
+		self.assertIn("dashboard.tag_counts", block.script)
+		self.assertEqual({r.role for r in block.roles}, set(install.DASHBOARD_ROLES))
+		workspace = frappe.get_doc("Workspace", "Periskope")
+		# the page finds the block by its label, so the two must be the same
+		self.assertIn(
+			(install.DASHBOARD_BLOCK, install.DASHBOARD_BLOCK),
+			[(b.custom_block_name, b.label) for b in workspace.custom_blocks],
+		)
+
 	def test_the_starting_tags_are_grouped(self):
 		groups = {
 			t.name: t.dashboard_group

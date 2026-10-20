@@ -392,7 +392,7 @@ The **Periskope** workspace opens on a dashboard, most urgent first:
 
 - **Today:** messages, tasks the AI created, escalations, and AI replies.
 - **Needs attention:** customers waiting for a reply, new numbers in the contact queue, suggestions waiting for approval, and messages the AI could not read.
-- **Last 7 days:** enquiries and issues, then charts of messages per day, by tag and by severity.
+- **Last 7 days:** enquiries and issues, then messages per day, **Messages by Tag** (every tag with its count for the last 30 days; click one to open its messages) and messages by severity.
 - **Go to:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, **What the AI Did**, Customers Waiting, Contact Queue, Suggestions and the Knowledge Base. The badge on a shortcut counts what needs a look (today's messages and actions, waiting customers, new contacts, pending suggestions), and the list opens filtered the same way.
 - **Reports**, and **All pages** grouped as Setup, Conversations and AI Agent.
 

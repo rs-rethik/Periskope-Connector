@@ -84,6 +84,7 @@ def setup():
 		_ensure_webhook_events,
 		_ensure_assistant_defaults,
 		_ensure_crm_ui,
+		_ensure_dashboard_block,
 		_ensure_phone_fields,
 	):
 		try:
@@ -212,3 +213,70 @@ def _ensure_crm_ui():
 	from periskope_connector.mirror import ensure_account
 
 	ensure_account()
+
+
+# The workspace's Messages by Tag block: every tag with its full name, a bar and the count of the last 30
+# days (dashboard.tag_counts). A chart cannot do this: Frappe's charts cut long tag names short.
+DASHBOARD_BLOCK = "Periskope Messages by Tag"
+DASHBOARD_BLOCK_HTML = """<div class="pk-tags">
+	<div class="pk-head"><span class="pk-title">Messages by Tag</span><span class="pk-sub">last 30 days</span></div>
+	<div class="pk-rows"><div class="pk-empty">Loading...</div></div>
+</div>"""
+DASHBOARD_BLOCK_CSS = """
+.pk-tags{border:1px solid var(--border-color);border-radius:var(--border-radius-lg,12px);background:var(--card-bg);padding:16px 18px;height:100%;box-sizing:border-box}
+.pk-head{display:flex;align-items:baseline;gap:8px;margin-bottom:14px}
+.pk-title{font-size:var(--text-base,14px);font-weight:600;color:var(--heading-color,var(--text-color))}
+.pk-sub{font-size:var(--text-sm,12px);color:var(--text-muted)}
+.pk-row{display:grid;grid-template-columns:170px minmax(0,1fr) 44px;align-items:center;gap:14px;padding:7px 6px;border-radius:6px;cursor:pointer}
+.pk-row:hover{background:var(--fg-hover-color,var(--control-bg))}
+.pk-name{font-size:13px;color:var(--text-color);overflow-wrap:anywhere}
+.pk-track{display:block;height:8px;border-radius:4px;background:var(--control-bg,#2a2a2a)}
+.pk-bar{display:block;height:8px;border-radius:4px;background:var(--blue-500,#5e64ff);min-width:2px}
+.pk-bar.zero{min-width:0}
+.pk-count{font-size:13px;text-align:right;color:var(--text-color);font-variant-numeric:tabular-nums}
+.pk-empty{font-size:13px;color:var(--text-muted)}
+"""
+DASHBOARD_BLOCK_JS = """
+const rows = root_element.querySelector(".pk-rows");
+frappe.call("periskope_connector.dashboard.tag_counts").then((r) => {
+	const data = r.message || [];
+	const top = Math.max(1, ...data.map((d) => d.count));
+	if (!data.length) {
+		rows.innerHTML = `<div class="pk-empty">${__("No tags yet")}</div>`;
+		return;
+	}
+	rows.innerHTML = "";
+	data.forEach((d) => {
+		const row = document.createElement("div");
+		row.className = "pk-row";
+		row.title = __("Open the messages tagged {0}", [d.label]);
+		row.innerHTML = `<span class="pk-name"></span><span class="pk-track"><span class="pk-bar${d.count ? "" : " zero"}" style="width:${(100 * d.count) / top}%"></span></span><span class="pk-count">${d.count}</span>`;
+		row.querySelector(".pk-name").textContent = d.label.charAt(0).toUpperCase() + d.label.slice(1);
+		row.addEventListener("click", () =>
+			frappe.set_route("List", "Periskope Message", { ai_category: d.tag, direction: "Incoming" })
+		);
+		rows.appendChild(row);
+	});
+});
+"""
+DASHBOARD_ROLES = ("System Manager", "Sales Manager", "WhatsApp Manager")
+
+
+def _ensure_dashboard_block():
+	values = {
+		"html": DASHBOARD_BLOCK_HTML,
+		"style": DASHBOARD_BLOCK_CSS,
+		"script": DASHBOARD_BLOCK_JS,
+		"private": 0,
+	}
+	if frappe.db.exists("Custom HTML Block", DASHBOARD_BLOCK):
+		doc = frappe.get_doc("Custom HTML Block", DASHBOARD_BLOCK)
+		doc.update(values)
+	else:
+		# named by prompt: the name goes in __newname
+		doc = frappe.get_doc({"doctype": "Custom HTML Block", "__newname": DASHBOARD_BLOCK, **values})
+	doc.set("roles", [{"role": role} for role in DASHBOARD_ROLES])
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)

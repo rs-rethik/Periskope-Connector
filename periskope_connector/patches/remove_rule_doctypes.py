@@ -19,7 +19,7 @@ NUMBER_CARDS = (
 	"AI Tagging Failed",
 	"Holding Messages Today",
 )
-CHARTS = ("Messages by Sentiment",)
+CHARTS = ("Messages by Sentiment", "Messages by Category")
 
 
 def execute():
