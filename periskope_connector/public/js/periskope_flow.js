@@ -121,8 +121,13 @@
 .pf-note{background:var(--bg-orange,#fdf3d8);color:var(--text-on-orange,#8a5b00);border-radius:6px;padding:7px 12px;font-size:12.5px;margin-bottom:10px}
 .pf-legend{display:flex;flex-wrap:wrap;gap:4px 16px;color:var(--text-muted);font-size:12px;margin-bottom:8px;align-items:center}
 .pf-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
-.pf-canvas{overflow-x:auto;border:1px solid var(--border-color);border-radius:8px;background:var(--control-bg,#f4f5f6)}
-.pf svg{display:block;min-width:760px;width:100%;height:auto}
+.pf-canvas{position:relative;height:min(66vh,760px);min-height:420px;overflow:hidden;border:1px solid var(--border-color);border-radius:8px;background:var(--control-bg,#f4f5f6);cursor:grab;user-select:none;touch-action:none}
+.pf-canvas.panning{cursor:grabbing}
+.pf-view{position:absolute;left:0;top:0;transform-origin:0 0}
+.pf-view svg{display:block;width:1000px;height:805px}
+.pf-zoom{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;z-index:2}
+.pf-zoom button{width:30px;height:30px;padding:0;border-radius:8px;border:1px solid var(--border-color);background:var(--card-bg,#fff);color:var(--text-color);font-size:15px;cursor:pointer}
+.pf-zoom button:hover{border-color:var(--gray-500,#98a1a9)}
 .pf svg text{font-family:inherit}
 .pf .band{fill:var(--card-bg,#fff);opacity:.55}
 .pf .lane{font-size:11px;letter-spacing:.09em;text-transform:uppercase;fill:var(--text-muted);font-weight:600}
@@ -201,6 +206,106 @@
 	function nodeMetric(id, d) {
 		const f = d[id] || {};
 		return f.headline || "";
+	}
+
+	// --- moving the diagram: drag to pan, Ctrl + scroll or the buttons to zoom, fit to view ---
+
+	const VIEW_W = 1000;
+	const VIEW_H = 805;
+
+	function applyView(frm, moved) {
+		if (moved) frm._pf.moved = true;
+		const { x, y, k } = frm._pf.view;
+		const view = frm._pf.$body[0].querySelector(".pf-view");
+		if (view) view.style.transform = `translate(${x}px,${y}px) scale(${k})`;
+	}
+
+	function fitView(frm, canvas) {
+		const w = canvas.clientWidth;
+		if (!w) return;
+		const h = canvas.clientHeight;
+		const k = Math.min(1.4, Math.max(0.3, Math.min((w - 20) / VIEW_W, (h - 20) / VIEW_H)));
+		frm._pf.view = { k, x: (w - VIEW_W * k) / 2, y: (h - VIEW_H * k) / 2 };
+		applyView(frm);
+	}
+
+	function zoomAt(frm, canvas, factor, cx, cy) {
+		const v = frm._pf.view;
+		if (!v) return;
+		cx = cx ?? canvas.clientWidth / 2;
+		cy = cy ?? canvas.clientHeight / 2;
+		const k = Math.min(2.5, Math.max(0.3, v.k * factor));
+		frm._pf.view = { k, x: cx - ((cx - v.x) * k) / v.k, y: cy - ((cy - v.y) * k) / v.k };
+		applyView(frm, true);
+	}
+
+	function bindView(frm, canvas) {
+		const st = frm._pf;
+		// a redraw (new figures, a wider dialog) keeps where the user moved it
+		if (st.view) applyView(frm);
+		else {
+			// fit as soon as the canvas has a size (the dialog or the page may still be opening), and
+			// again when it changes, until the user moves the diagram
+			st.moved = false;
+			if (st.fitter) st.fitter.disconnect();
+			st.fitter = new ResizeObserver(() => {
+				if (st.moved || !canvas.isConnected) return st.fitter.disconnect();
+				if (canvas.clientWidth) fitView(frm, canvas);
+			});
+			st.fitter.observe(canvas);
+		}
+		canvas.querySelectorAll(".pf-zoom button").forEach((b) =>
+			b.addEventListener("click", () => {
+				if (b.dataset.z === "fit") fitView(frm, canvas);
+				else zoomAt(frm, canvas, b.dataset.z === "in" ? 1.2 : 1 / 1.2);
+			})
+		);
+		canvas.addEventListener(
+			"wheel",
+			(ev) => {
+				ev.preventDefault();
+				if (!st.view) return;
+				if (ev.ctrlKey || ev.metaKey) {
+					const r = canvas.getBoundingClientRect();
+					zoomAt(
+						frm,
+						canvas,
+						Math.exp(-ev.deltaY * 0.01),
+						ev.clientX - r.left,
+						ev.clientY - r.top
+					);
+				} else {
+					st.view.x -= ev.deltaX;
+					st.view.y -= ev.deltaY;
+					applyView(frm, true);
+				}
+			},
+			{ passive: false }
+		);
+		canvas.addEventListener("pointerdown", (ev) => {
+			if (ev.button !== 0 || !st.view || ev.target.closest(".pf-zoom")) return;
+			const start = { x: ev.clientX, y: ev.clientY, vx: st.view.x, vy: st.view.y };
+			st.dragged = false;
+			const move = (m) => {
+				const dx = m.clientX - start.x;
+				const dy = m.clientY - start.y;
+				if (!st.dragged && Math.abs(dx) + Math.abs(dy) < 4) return; // still a click
+				st.dragged = true;
+				canvas.classList.add("panning");
+				st.view.x = start.vx + dx;
+				st.view.y = start.vy + dy;
+				applyView(frm, true);
+			};
+			const up = () => {
+				canvas.classList.remove("panning");
+				window.removeEventListener("pointermove", move);
+				window.removeEventListener("pointerup", up);
+				// the click that ends a drag must not open a step
+				setTimeout(() => (st.dragged = false), 0);
+			};
+			window.addEventListener("pointermove", move);
+			window.addEventListener("pointerup", up);
+		});
 	}
 
 	function drawSvg(data, selected) {
@@ -353,7 +458,7 @@
 						__("Suggestions"),
 						`data-list="Periskope Suggestion"`,
 						true
-					)}${btn(__("Knowledge base"), `data-page="periskope-knowledge"`)}${btn(
+					)}${btn(__("Knowledge base"), `data-knowledge="1"`)}${btn(
 						__("Agent runs"),
 						`data-list="Periskope Agent Run"`
 					)}</div>`,
@@ -697,13 +802,21 @@
 			"var(--gray-400,#aaa)",
 			__("Off")
 		)}<span>${__(
-			"Click a step to see it and change it. Changes save as you make them."
+			"Click a step to see it and change it. Drag to move, Ctrl + scroll to zoom."
 		)}</span><a href="#" data-refresh="1">${__("Refresh figures")}</a></div>
-<div class="pf-canvas">${drawSvg(data, st.selected)}</div></div>
+<div class="pf-canvas"><div class="pf-view">${drawSvg(data, st.selected)}</div>
+<div class="pf-zoom"><button type="button" data-z="in" title="${e(
+			__("Zoom in")
+		)}">+</button><button type="button" data-z="out" title="${e(
+			__("Zoom out")
+		)}">−</button><button type="button" data-z="fit" title="${e(
+			__("Fit to view")
+		)}">⤢</button></div></div></div>
 <aside class="pf-panel"></aside></div>`);
 		const root = $w[0];
+		bindView(frm, root.querySelector(".pf-canvas"));
 		root.querySelectorAll("[data-node]").forEach((n) => {
-			const pick = () => selectNode(frm, n.dataset.node);
+			const pick = () => !frm._pf.dragged && selectNode(frm, n.dataset.node);
 			n.addEventListener("click", pick);
 			n.addEventListener("keydown", (ev) => {
 				if (ev.key === "Enter" || ev.key === " ") {
@@ -810,6 +923,7 @@
 		// progress; the form is reloaded once when the dialog closes.
 		frappe.ui.form.is_saving = true;
 		st.data = null;
+		st.view = null; // fit the diagram again each time the dialog opens
 		render(frm); // "Loading..." until the figures arrive; load() then builds the dialog
 		load(frm);
 	}
@@ -903,6 +1017,7 @@
 		on(root, "[data-report]", "click", (b) =>
 			leave(frm, () => frappe.set_route("query-report", b.dataset.report))
 		);
+		on(root, "[data-knowledge]", "click", () => leave(frm, () => periskope.open_knowledge()));
 		on(root, "[data-page]", "click", (b) =>
 			leave(frm, () => frappe.set_route(b.dataset.page))
 		);
@@ -937,8 +1052,11 @@
 			frm.add_custom_button(__("Flow"), () => openFlow(frm))
 				.removeClass("btn-default")
 				.addClass("btn-primary");
-			// the workspace shortcut opens the settings with ?flow=1: show the dialog straight away
-			if (new URLSearchParams(window.location.search).get("flow") === "1") {
+			// the workspace's Flow shortcut opens the settings and asks for the dialog
+			if (window.periskope && periskope.open_flow_next) {
+				periskope.open_flow_next = false;
+				openFlow(frm);
+			} else if (new URLSearchParams(window.location.search).get("flow") === "1") {
 				window.history.replaceState(null, "", window.location.pathname);
 				openFlow(frm);
 			}
