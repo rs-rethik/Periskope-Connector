@@ -170,6 +170,22 @@ class TestAutoReply(FrappeTestCase):
 			frappe.db.exists("ToDo", {"allocated_to": "Administrator", "reference_type": "Periskope Message"})
 		)
 
+	def test_a_failing_follow_up_does_not_undo_the_sent_holding_message(self):
+		# For example a site's ToDo server script that throws while server scripts are disabled.
+		self._incoming("Can you make a special sample in neon?")
+		self._make_due()
+		result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
+		with (
+			patch.object(answer, "build", return_value=result),
+			patch.object(reminders, "_create_todo", side_effect=frappe.ValidationError("server script")),
+		):
+			self.assertEqual(autoreply.run_due(), 1)
+		row = self._row()
+		self.assertEqual(row.status, "Holding Sent")
+		self.assertEqual(row.reply_text, HOLDING)
+		self.assertFalse(row.follow_up)
+		self.send.assert_called_once()
+
 	def test_holding_message_is_not_taken_for_a_reps_reply(self):
 		self._incoming("Special sample in neon?")
 		self._make_due()
