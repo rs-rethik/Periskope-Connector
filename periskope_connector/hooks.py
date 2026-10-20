@@ -32,11 +32,6 @@ after_install = "periskope_connector.install.after_install"
 after_migrate = "periskope_connector.install.after_migrate"
 before_uninstall = "periskope_connector.install.before_uninstall"
 
-# Optional own-numbers read access for reps (off by default; see Periskope Settings).
-has_permission = {
-	"Periskope Message": "periskope_connector.api.permission.message_has_permission",
-}
-
 # Keep the normalised phone fields of leads and deals up to date when sales edits
 # a number, so message matching always runs on indexed equality.
 doc_events = {

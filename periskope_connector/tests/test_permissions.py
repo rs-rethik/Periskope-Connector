@@ -11,8 +11,6 @@ APP = Path(__file__).resolve().parents[1]
 DOCTYPES = APP / "periskope_connector" / "doctype"
 
 CONFIG = (
-	"Periskope Keyword Rule",
-	"Periskope SLA Level",
 	"Periskope Tag",
 	"Periskope Knowledge Entry",
 	"Periskope Suggestion",
@@ -26,11 +24,10 @@ LOGS = (
 	"Periskope Agent Action",
 	"Periskope AI Usage",
 	"Periskope Webhook Log",
-	"Periskope Keyword Alert",
 	"Periskope Reply Reminder",
 	"Periskope CRM Record",
 )
-CHECKS = {"require_admin", "require_manager", "require_record_access"}
+CHECKS = {"require_admin", "require_manager"}
 SELF_AUTHENTICATED = {("api/webhook.py", "receive"), ("api/suggestions.py", "decide")}
 
 

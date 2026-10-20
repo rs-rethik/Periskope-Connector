@@ -26,7 +26,7 @@ def _settings():
 
 
 def _recipients_text() -> list[str]:
-	emails = _settings().digest_recipients or _settings().alert_emails or ""
+	emails = _settings().alert_emails or ""
 	return [e.strip() for e in re.split(r"[,\n;]", emails) if e.strip()]
 
 
@@ -34,8 +34,7 @@ def _recipients_text() -> list[str]:
 
 
 def _erpnext_numbers() -> set[str]:
-	"""Supplier and Employee phone numbers, when ERPNext is installed and the lookups are on."""
-	settings = _settings()
+	"""Supplier and Employee phone numbers, when ERPNext is installed."""
 	found: set[str] = set()
 	if "erpnext" not in frappe.get_installed_apps():
 		return found
@@ -51,7 +50,7 @@ def _erpnext_numbers() -> set[str]:
 			out |= {phone_e164(v) for v in values}
 		return out
 
-	if settings.ignore_suppliers and frappe.db.exists("DocType", "Supplier"):
+	if frappe.db.exists("DocType", "Supplier"):
 		# A Supplier's phones live on its linked Frappe Contacts (Dynamic Link child table).
 		supplier_contacts = [
 			row[0]
@@ -61,21 +60,21 @@ def _erpnext_numbers() -> set[str]:
 		]
 		if supplier_contacts:
 			found |= digits_of("Contact", {"name": ["in", supplier_contacts]}, ["mobile_no", "phone"])
-	if settings.ignore_employees and frappe.db.exists("DocType", "Employee"):
+	if frappe.db.exists("DocType", "Employee"):
 		found |= digits_of("Employee", {}, ["cell_number", "phone", "mobile_no"])
 	return found
 
 
 def is_ignored(full_number: str) -> bool:
 	"""True for an ignored Periskope Contact (the ignore list: managers ignore a number from its form,
-	the agent suggests it), or (when enabled) for an ERPNext Supplier or Employee number."""
+	the agent suggests it), or for an ERPNext Supplier or Employee number."""
 	digits = phone_e164(full_number)
 	if not digits:
 		return True
 	status = frappe.db.get_value("Periskope Contact", {"phone": digits}, "status")
 	if status in IGNORED_STATUSES:
 		return True
-	if (_settings().ignore_suppliers or _settings().ignore_employees) and digits in _erpnext_numbers():
+	if digits in _erpnext_numbers():
 		return True
 	return False
 

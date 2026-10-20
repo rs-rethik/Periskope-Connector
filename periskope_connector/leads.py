@@ -1,10 +1,10 @@
 """Create a CRM Lead from a new enquiry on WhatsApp.
 
-Only when all of these hold, so a lead is never made by mistake:
-- the setting "Create Leads from New Enquiries" is on,
-- the message's tag has a Create Lead action (order_or_enquiry has one to begin with),
+The AI decides that a message is a new business enquiry (classifier: create_lead). The lead is
+then made only when all of these hold too, so it is never made by mistake:
 - it is a customer message in a 1-to-1 chat (a group has no single customer),
-- the number is not already on any CRM lead or deal.
+- the number is not already on any CRM lead or deal, nor on a Frappe Contact,
+- the number is not one the team ignored (personal, vendor, spam, a colleague).
 
 The lead gets the name the customer gave (found by the AI, else their phone number), the rep of the
 phone as its owner and WhatsApp as its source, and the earlier
@@ -13,7 +13,6 @@ messages of that chat are linked to it.
 
 import frappe
 
-from periskope_connector import actions
 from periskope_connector.contacts import is_ignored
 from periskope_connector.linking import by_mobile, link_message, number_key, phone_e164
 
@@ -29,16 +28,6 @@ MESSAGE_FIELDS = [
 	"severity",
 	"rep",
 ]
-
-
-def enabled() -> bool:
-	# Read the stored value itself: get_single_value would turn "never saved" into 0 (off).
-	# A fresh install has no row, and the default there is off (the contact queue does the work).
-	rows = frappe.db.sql(
-		"select value from `tabSingles` where doctype = 'Periskope Settings' and field = 'create_leads_from_enquiries'"
-	)
-	value = rows[0][0] if rows else None
-	return bool(int(value or 0))
 
 
 def _known_contact(digits: str) -> bool:
@@ -68,12 +57,8 @@ def ensure_lead_source() -> str | None:
 
 
 def is_new_enquiry(doc) -> bool:
-	return (
-		doc.direction == "Incoming"
-		and not doc.is_group
-		and bool(number_key(doc.contact_number))
-		and bool(actions.matching(doc, actions.CREATE_LEAD))
-	)
+	"""A customer's 1-to-1 message with a number. That it is a business enquiry is the AI's call."""
+	return doc.direction == "Incoming" and not doc.is_group and bool(number_key(doc.contact_number))
 
 
 def _owner(doc) -> str | None:
@@ -105,7 +90,7 @@ def split_name(full: str, fallback: str) -> tuple[str, str]:
 
 def create_lead(doc) -> str | None:
 	"""Make the lead for this message's number. Returns its name, or None when not allowed."""
-	if not enabled() or not is_new_enquiry(doc) or by_mobile(doc.contact_number):
+	if not is_new_enquiry(doc) or by_mobile(doc.contact_number):
 		return None
 	if is_ignored(doc.contact_number) or _known_contact(phone_e164(doc.contact_number)):
 		return None

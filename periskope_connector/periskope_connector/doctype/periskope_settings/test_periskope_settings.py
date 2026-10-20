@@ -190,16 +190,13 @@ class TestWorkingHoursSettings(FrappeTestCase):
 
 	def test_a_failing_install_step_does_not_skip_the_others(self):
 		# A site whose saved settings no longer validate made _ensure_webhook_events fail, and the old
-		# single try block then skipped test mode, the defaults and the CRM buttons.
+		# single try block then skipped test mode, the defaults and the CRM account.
 		names = [
 			"_ensure_role",
 			"_ensure_custom_fields",
 			"_ensure_lead_source",
 			"_ensure_tags",
-			"_ensure_sla_levels",
-			"_ensure_ai_instructions",
 			"_ensure_working_hours",
-			"_ensure_keyword_rules",
 			"_ensure_webhook_events",
 			"_ensure_assistant_defaults",
 			"_ensure_crm_ui",
@@ -530,10 +527,10 @@ class TestFlowTab(FrappeTestCase):
 			"capture",
 			"link",
 			"queue",
-			"keywords",
+			"files",
 			"ai",
 			"tags",
-			"actions",
+			"decisions",
 			"waiting",
 			"sla",
 			"people",
@@ -542,63 +539,21 @@ class TestFlowTab(FrappeTestCase):
 			"agent",
 		}
 		self.assertEqual(set(data), steps | {"settings"})  # the settings the panels edit
-		for name in steps - {"actions"}:
+		for name in steps:
 			self.assertIn(data[name]["status"], ("ok", "warn", "bad", "off"), name)
 			self.assertTrue(data[name]["headline"], name)
 
-	def test_a_feature_that_is_switched_off_shows_as_off(self):
-		frappe.db.set_single_value("Periskope Settings", "enable_classification", 0)
-		frappe.db.set_single_value("Periskope Settings", "enable_reply_reminders", 0)
+	def test_the_agent_is_off_only_with_the_integration(self):
+		frappe.db.set_single_value("Periskope Settings", {"enabled": 0, "enable_auto_reply": 1})
 		data = flow.get_flow()
 		self.assertEqual(
-			(data["ai"]["status"], data["waiting"]["status"], data["sla"]["status"]), ("off",) * 3
+			(data["ai"]["status"], data["waiting"]["status"], data["autoreply"]["status"]), ("off",) * 3
 		)
 
-	def test_a_keyword_rule_without_recipients_needs_a_look(self):
-		frappe.get_doc(
-			{
-				"doctype": "Periskope Keyword Rule",
-				"rule_name": "Silent",
-				"keywords": "legal",
-				"recipients": "",
-				"enabled": 1,
-			}
-		).insert()
-		self.assertEqual(flow.get_flow()["keywords"]["status"], "warn")
-
-	def test_the_tag_matrix_lists_each_tags_actions(self):
-		tags = {t["name"]: t for t in flow.get_flow()["tags"]["tags"]}
-		self.assertTrue(tags["order_or_enquiry"]["actions"]["Create Lead"])
-		self.assertFalse(tags["general"]["actions"]["Create Lead"])
-		self.assertTrue(tags["general"]["actions"]["Email Alert"])
-
-	def test_a_tick_adds_the_usual_row_and_an_untick_removes_it(self):
-		flow.set_tag_action("general", "ToDo for Rep", True)
-		rows = [r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
-		self.assertEqual([(r.min_severity, r.chat_type) for r in rows], [("Low", "Any")])
-		flow.set_tag_action("general", "ToDo for Rep", True)  # a second tick adds nothing
-		self.assertEqual(
-			len(
-				[r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
-			),
-			1,
-		)
-		flow.set_tag_action("general", "ToDo for Rep", False)
-		self.assertFalse(
-			[r for r in frappe.get_doc("Periskope Tag", "general").actions if r.action == "ToDo for Rep"]
-		)
-
-	def test_a_tick_for_an_email_alert_starts_at_high_severity(self):
-		flow.set_tag_action("sample_request", "Email Alert", False)
-		flow.set_tag_action("sample_request", "Email Alert", True)
-		row = next(
-			r for r in frappe.get_doc("Periskope Tag", "sample_request").actions if r.action == "Email Alert"
-		)
-		self.assertEqual(row.min_severity, "High")
-
-	def test_an_unknown_action_is_refused(self):
-		with self.assertRaises(frappe.ValidationError):
-			flow.set_tag_action("general", "Send Pigeon", True)
+	def test_the_reminder_ladder_is_the_fixed_one(self):
+		levels = flow.get_flow()["sla"]["levels"]
+		self.assertEqual(len(levels), len(reminders.default_levels()))
+		self.assertEqual(levels[0]["action"], "Notify Rep")
 
 	def test_a_tag_can_be_switched_off_but_not_the_default(self):
 		flow.set_tag_active("sample_request", False)
@@ -612,18 +567,11 @@ class TestFlowTab(FrappeTestCase):
 		values = flow.get_flow()["settings"]
 		for name in flow.SETTING_FIELDS:
 			self.assertIn(name, values)
-		self.assertEqual(len(values["sla_levels"]), frappe.db.count("Periskope SLA Level"))
-		waits = [r["wait_minutes"] for r in values["sla_levels"]]
-		self.assertEqual(waits, sorted(waits))
-		self.assertIn("rule_name", values["keyword_rules"][0])
 
 	def test_a_setting_is_saved_by_the_dialog_and_unknown_fields_are_refused(self):
-		before = frappe.db.get_single_value("Periskope Settings", "classify_group_chats")
-		flow.set_setting("classify_group_chats", 0 if before else 1)
-		self.assertEqual(
-			frappe.db.get_single_value("Periskope Settings", "classify_group_chats"), 0 if before else 1
-		)
-		for name in ("api_key", "base_url", "webhook_signing_secret"):
+		flow.set_setting("reply_delay_minutes", 20)
+		self.assertEqual(frappe.db.get_single_value("Periskope Settings", "reply_delay_minutes"), 20)
+		for name in ("api_key", "base_url", "webhook_signing_secret", "test_mode"):
 			with self.assertRaises(frappe.ValidationError, msg=name):
 				flow.set_setting(name, "x")
 
@@ -633,37 +581,6 @@ class TestFlowTab(FrappeTestCase):
 			flow.set_setting("working_hours_end", "09:05:00")
 		with self.assertRaises(frappe.ValidationError):
 			flow.set_setting("alert_emails", "not-an-email")
-
-	def test_sla_rows_can_be_edited_added_and_removed(self):
-		count = frappe.db.count("Periskope SLA Level")
-		first = flow.get_flow()["settings"]["sla_levels"][0]["idx"]
-		flow.set_row("sla_levels", first, "wait_minutes", 45)
-		self.assertEqual(frappe.db.get_value("Periskope SLA Level", first, "wait_minutes"), 45)
-		flow.add_sla_level()
-		newest = frappe.get_all("Periskope SLA Level", order_by="creation desc", limit=1, pluck="name")[0]
-		self.assertEqual(frappe.db.count("Periskope SLA Level"), count + 1)
-		self.assertEqual(frappe.db.get_value("Periskope SLA Level", newest, "action"), "Notify Rep")
-		flow.remove_sla_level(newest)
-		self.assertEqual(frappe.db.count("Periskope SLA Level"), count)
-
-	def test_a_keyword_rule_can_be_given_recipients_and_switched_off(self):
-		name = flow.get_flow()["settings"]["keyword_rules"][0]["idx"]
-		flow.set_row("keyword_rules", name, "recipients", "qa@example.com")
-		flow.set_row("keyword_rules", name, "enabled", 0)
-		rule = frappe.get_doc("Periskope Keyword Rule", name)
-		self.assertEqual((rule.recipients, rule.enabled), ("qa@example.com", 0))
-
-	def test_the_dialog_cannot_change_other_fields_or_tables_or_missing_rows(self):
-		rows = flow.get_flow()["settings"]
-		for args in (
-			("sla_levels", rows["sla_levels"][0]["idx"], "idx", 5),
-			("keyword_rules", rows["keyword_rules"][0]["idx"], "keywords", "x"),
-			("phones", "1", "rep", "x"),
-		):
-			with self.assertRaises(frappe.ValidationError, msg=str(args)):
-				flow.set_row(*args)
-		with self.assertRaises(frappe.ValidationError):
-			flow.set_row("sla_levels", "no-such-level", "wait_minutes", 5)
 
 	def test_only_managers_can_use_the_flow_api(self):
 		original = frappe.session.user
@@ -676,18 +593,14 @@ class TestFlowTab(FrappeTestCase):
 		for call in (
 			settings_api.get_flow,
 			lambda: settings_api.set_tag_active("general", 1),
-			lambda: settings_api.set_tag_action("general", "ToDo for Rep", 1),
-			lambda: settings_api.set_flow_setting("classify_group_chats", 1),
-			lambda: settings_api.set_flow_row("sla_levels", "x", "wait_minutes", 5),
-			settings_api.add_flow_sla_level,
-			lambda: settings_api.remove_flow_sla_level("x"),
+			lambda: settings_api.set_flow_setting("reply_delay_minutes", 1),
 		):
 			with self.assertRaises(frappe.PermissionError):
 				call()
 
 
 class TestSetupSteps(FrappeTestCase):
-	"""The four setup steps at the top of the settings, and the gate on Enable AI Agent."""
+	"""The four setup steps at the top of the settings, and the gate on auto reply."""
 
 	def setUp(self):
 		from periskope_connector.tests.utils import isolate
@@ -717,18 +630,16 @@ class TestSetupSteps(FrappeTestCase):
 		self.assertEqual(len(problems), 1)
 		self.assertIn("nobody@example.com", problems[0])
 
-	def test_the_agent_cannot_be_switched_on_before_the_setup_is_done(self):
-		doc = self._settings(enable_agent=1, ai_monthly_budget_tokens=0, enable_auto_reply=0)
+	def test_auto_reply_cannot_be_switched_on_before_the_setup_is_done(self):
+		doc = self._settings(enable_auto_reply=1, ai_monthly_budget_tokens=0)
 		with self.assertRaises(frappe.ValidationError):
 			doc.validate_assistant()
 
-	def test_a_part_of_the_agent_runs_only_with_the_agent_on(self):
-		from periskope_connector.setup_status import feature_on
+	def test_the_agent_runs_with_the_integration_and_auto_reply_needs_its_switch(self):
+		from periskope_connector.setup_status import agent_on, auto_reply_on
 
-		self.assertFalse(
-			feature_on("enable_auto_reply", SimpleNamespace(enable_agent=0, enable_auto_reply=1))
-		)
-		self.assertFalse(
-			feature_on("enable_auto_reply", SimpleNamespace(enable_agent=1, enable_auto_reply=0))
-		)
-		self.assertTrue(feature_on("enable_auto_reply", SimpleNamespace(enable_agent=1, enable_auto_reply=1)))
+		self.assertTrue(agent_on(SimpleNamespace(enabled=1)))
+		self.assertFalse(agent_on(SimpleNamespace(enabled=0)))
+		self.assertFalse(auto_reply_on(SimpleNamespace(enabled=0, enable_auto_reply=1)))
+		self.assertFalse(auto_reply_on(SimpleNamespace(enabled=1, enable_auto_reply=0)))
+		self.assertTrue(auto_reply_on(SimpleNamespace(enabled=1, enable_auto_reply=1)))

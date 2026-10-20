@@ -1,5 +1,5 @@
-"""Tests for the Periskope Chat doctype: the chat row, the AI pause, the CRM WhatsApp tab copy and a
-rep's reply from that tab."""
+"""Tests for the Periskope Chat doctype: the chat row, the CRM WhatsApp tab copy and a rep's reply
+from that tab."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
@@ -9,7 +9,6 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import get_datetime, now_datetime
 
 from periskope_connector import autoreply, chat, messages, mirror, outbound
-from periskope_connector.api import crm as crm_api
 from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, settings
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
@@ -27,7 +26,7 @@ def _utc(minutes_ago: float = 0) -> str:
 class ChatCase(FrappeTestCase):
 	def setUp(self):
 		isolate(self, "periskope_chat_test")
-		settings(test_mode=1, test_allowed_chats=NUMBER, enable_agent=0, ai_resume_after_hours=24)
+		settings(test_mode=1, test_allowed_chats=NUMBER, enable_auto_reply=0)
 		for p in (
 			patch.object(messages, "_rep_for_phone", lambda n: "Administrator"),
 			patch.object(messages, "fetch_chat_name", lambda *a, **k: ""),
@@ -60,42 +59,20 @@ class TestChatRow(ChatCase):
 	def test_a_message_keeps_the_chat_row_and_its_crm_link(self):
 		self._msg(minutes_ago=5)
 		row = frappe.get_doc("Periskope Chat", CHAT)
-		self.assertEqual((row.crm_lead, row.contact_number, row.ai_paused), (self.lead, NUMBER, 0))
+		self.assertEqual((row.crm_lead, row.contact_number), (self.lead, NUMBER))
 		first = get_datetime(row.last_message_at)
 		self._msg("older", minutes_ago=50)  # a recovered older message
 		self.assertEqual(get_datetime(frappe.db.get_value("Periskope Chat", CHAT, "last_message_at")), first)
 
-	def test_a_rep_reply_pauses_the_ai_until_the_resume_time(self):
+	def test_a_rep_reply_cancels_the_waiting_ai_reply(self):
+		settings(enabled=1, enable_auto_reply=1)
 		self._msg()
+		self.assertTrue(frappe.db.exists("Periskope Auto Reply", {"chat_id": CHAT, "status": "Waiting"}))
 		self._msg("Yes, 500 kg in stock", from_me=True)
-		self.assertTrue(chat.is_paused(CHAT))
-		frappe.db.set_value("Periskope Chat", CHAT, "paused_on", now_datetime() - timedelta(hours=25))
-		self.assertFalse(chat.is_paused(CHAT))
-		self.assertEqual(frappe.db.get_value("Periskope Chat", CHAT, "ai_paused"), 0)
-
-	def test_a_manual_pause_waits_for_a_person(self):
-		self._msg()
-		chat.pause(CHAT, "Administrator", "Manual")
-		frappe.db.set_value("Periskope Chat", CHAT, "paused_on", now_datetime() - timedelta(days=5))
-		self._msg("Noted", from_me=True)  # a rep reply does not turn it into a timed pause
-		self.assertEqual(frappe.db.get_value("Periskope Chat", CHAT, "pause_reason"), "Manual")
-		self.assertTrue(chat.is_paused(CHAT))
-
-	def test_no_auto_reply_is_scheduled_in_a_paused_chat(self):
-		settings(enable_agent=1, enable_auto_reply=1, reply_working_hours_only=0)
-		self._msg()
-		chat.pause(CHAT, "Administrator", "Manual")
-		frappe.db.delete("Periskope Auto Reply", {"chat_id": CHAT})
-		self._msg("Price please?")
 		self.assertFalse(frappe.db.exists("Periskope Auto Reply", {"chat_id": CHAT, "status": "Waiting"}))
-
-	def test_the_crm_buttons_pause_and_resume(self):
-		self._msg()
-		self.assertEqual(crm_api.get_ai_state("CRM Lead", self.lead), {"chats": 1, "paused": False})
-		self.assertTrue(crm_api.set_ai_paused("CRM Lead", self.lead, 1)["paused"])
-		self.assertFalse(crm_api.set_ai_paused("CRM Lead", self.lead, 0)["paused"])
-		with self.assertRaises(frappe.PermissionError):
-			crm_api.get_ai_state("Periskope Settings", "Periskope Settings")
+		# no pause: the next unanswered message starts a new clock
+		self._msg("And the price?")
+		self.assertTrue(frappe.db.exists("Periskope Auto Reply", {"chat_id": CHAT, "status": "Waiting"}))
 
 
 class TestWhatsAppTab(ChatCase):
@@ -127,7 +104,7 @@ class TestWhatsAppTab(ChatCase):
 		other = self._msg(chat_id=OTHER)
 		self.assertIsNone(self._copy(other))
 
-	def test_a_rep_reply_from_the_tab_goes_through_periskope_and_pauses_the_ai(self):
+	def test_a_rep_reply_from_the_tab_goes_through_periskope(self):
 		self._msg()
 		with patch.object(outbound, "send", return_value={"unique_id": "3EBREP"}) as send:
 			doc = frappe.get_doc(
@@ -143,7 +120,6 @@ class TestWhatsAppTab(ChatCase):
 			).insert(ignore_permissions=True)
 		self.assertEqual(send.call_args.args[:2], (CHAT, "Sure, sending the price list now."))
 		self.assertEqual(doc.message_id, f"true_{CHAT}_3EBREP")
-		self.assertTrue(chat.is_paused(CHAT))
 		# Periskope's own copy of that message (the webhook) does not add a second row.
 		echo = self._msg("Sure, sending the price list now.", from_me=True, message_id=doc.message_id)
 		self.assertEqual(frappe.db.get_value("Periskope Message", echo, "whatsapp_message"), doc.name)
@@ -232,17 +208,12 @@ class TestWhatsAppTab(ChatCase):
 		http.assert_not_called()
 
 
-class TestCrmFormScripts(FrappeTestCase):
-	def test_the_lead_and_deal_pages_get_the_ai_action(self):
+class TestCrmPages(FrappeTestCase):
+	def test_the_lead_and_deal_pages_have_no_pause_button(self):
 		if not frappe.db.exists("DocType", "CRM Form Script"):
 			self.skipTest("CRM is not installed")
 		for dt in ("CRM Deal", "CRM Lead"):
-			script = frappe.db.get_value(
-				"CRM Form Script", f"Periskope AI ({dt})", ["script", "enabled"], as_dict=True
-			)
-			self.assertTrue(script and script.enabled)
-			self.assertIn("periskope_connector.api.crm.set_ai_paused", script.script)
-			self.assertIn(f"class {dt.replace(' ', '')}", script.script)
+			self.assertFalse(frappe.db.exists("CRM Form Script", f"Periskope AI ({dt})"))
 
 	def test_the_auto_reply_module_still_cancels_on_a_rep_reply(self):
 		self.assertTrue(callable(autoreply.cancel))

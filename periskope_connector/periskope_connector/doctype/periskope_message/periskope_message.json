@@ -38,6 +38,8 @@
   "replied",
   "escalated",
   "high_alert_sent",
+  "escalation",
+  "escalation_reason",
   "ai_confidence",
   "section_facts",
   "follow_up_on",
@@ -56,6 +58,7 @@
   "link_status",
   "link_method",
   "timeline_comment",
+  "on_timeline",
   "section_ai_log",
   "classified_at",
   "classification_attempts",
@@ -66,7 +69,9 @@
   "media_mimetype",
   "column_media",
   "media_path",
+  "attachment_summary",
   "media_size",
+  "attachment_file",
   "section_meta",
   "chat_id",
   "chat_name",
@@ -328,10 +333,25 @@
    "read_only": 1
   },
   {
+   "fieldname": "attachment_summary",
+   "fieldtype": "Small Text",
+   "label": "What the Attachment Shows",
+   "read_only": 1,
+   "description": "The AI's reading of the image or document (an invoice, a quotation, a purchase order, a screenshot)."
+  },
+  {
    "fieldname": "media_size",
    "fieldtype": "Int",
    "label": "File Size (bytes)",
    "read_only": 1
+  },
+  {
+   "fieldname": "attachment_file",
+   "fieldtype": "Link",
+   "label": "Saved File",
+   "options": "File",
+   "read_only": 1,
+   "description": "The attachment, saved in Frappe and attached to the lead or deal."
   },
   {
    "collapsible": 1,
@@ -439,7 +459,15 @@
    "fieldtype": "Data",
    "label": "Timeline Comment",
    "read_only": 1,
-   "description": "The comment that shows this message in the CRM timeline. Only tagged, linked messages get one."
+   "description": "The comment that shows this message in the CRM timeline. The AI decides which messages get one."
+  },
+  {
+   "default": "0",
+   "fieldname": "on_timeline",
+   "fieldtype": "Check",
+   "label": "Worth Showing on the Timeline",
+   "read_only": 1,
+   "description": "The AI's decision: this message matters for the lead or deal, so it gets a timeline comment."
   },
   {
    "fieldname": "periskope_type",
@@ -505,7 +533,22 @@
   {
    "fieldname": "high_alert_sent",
    "fieldtype": "Check",
-   "label": "High Severity Alert Sent",
+   "label": "Escalation Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "escalation",
+   "fieldtype": "Select",
+   "label": "AI Escalation",
+   "options": "\nManagers\nMD",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Who the AI decided must hear about this message at once."
+  },
+  {
+   "fieldname": "escalation_reason",
+   "fieldtype": "Small Text",
+   "label": "Escalation Reason",
    "read_only": 1
   },
   {
@@ -557,7 +600,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-30 16:00:00.000000",
+ "modified": "2026-10-20 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

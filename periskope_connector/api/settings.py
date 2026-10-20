@@ -58,30 +58,6 @@ def setup_webhooks() -> dict:
 
 
 @frappe.whitelist()
-def run_reminder_check() -> dict:
-	require_admin()
-	from periskope_connector.reminders import run
-
-	return run()
-
-
-@frappe.whitelist()
-def optimize_ai_instructions(instructions: str = "", goal: str = "") -> str:
-	require_admin()
-	from periskope_connector.ai.classifier import get_settings, optimize_instructions
-
-	return optimize_instructions(get_settings(), instructions, goal)
-
-
-@frappe.whitelist()
-def get_default_ai_instructions() -> str:
-	require_admin()
-	from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS
-
-	return DEFAULT_INSTRUCTIONS
-
-
-@frappe.whitelist()
 def test_ai_connection() -> dict:
 	require_admin()
 	from periskope_connector.ai.classifier import get_settings, ping
@@ -190,45 +166,9 @@ def set_tag_active(tag: str, active: int = 1) -> None:
 
 
 @frappe.whitelist()
-def set_tag_action(tag: str, action: str, on: int = 1) -> None:
-	"""Flow tab: give a tag an action, or take it away."""
-	require_admin()
-	from periskope_connector.flow import set_tag_action as change
-
-	change(tag, action, bool(int(on)))
-
-
-@frappe.whitelist()
 def set_flow_setting(field: str, value=None) -> None:
 	"""Flow dialog: change one setting and save it."""
 	require_admin()
 	from periskope_connector.flow import set_setting
 
 	set_setting(field, value)
-
-
-@frappe.whitelist()
-def set_flow_row(table: str, idx: str, field: str, value=None) -> None:
-	"""Flow dialog: change one field of an SLA level or keyword rule row and save."""
-	require_admin()
-	from periskope_connector.flow import set_row
-
-	set_row(table, idx, field, value)
-
-
-@frappe.whitelist()
-def add_flow_sla_level() -> None:
-	"""Flow dialog: add an SLA step."""
-	require_admin()
-	from periskope_connector.flow import add_sla_level
-
-	add_sla_level()
-
-
-@frappe.whitelist()
-def remove_flow_sla_level(idx: str) -> None:
-	"""Flow dialog: remove an SLA step."""
-	require_admin()
-	from periskope_connector.flow import remove_sla_level
-
-	remove_sla_level(idx)

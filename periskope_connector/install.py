@@ -58,26 +58,6 @@ CUSTOM_FIELDS = {
 	],
 }
 
-# Starter keyword rules. Recipients are left empty on purpose: a rule with no recipients is
-# listed but never sends, so nobody is emailed until an admin fills them in.
-DEFAULT_KEYWORD_RULES = [
-	(
-		"Quality & Rejection",
-		"rejected, rejection, poor quality, quality problem, quality issue, defective, damaged, "
-		"shade variation, colour bleeding, color bleeding, reject the lot, redelivery, "
-		"kalappu, kola vechutu, saapadu, saapu poiduchu",
-	),
-	(
-		"Payment & PO",
-		"po, p.o., purchase order, payment pending, amount pending, overdue, advance pending, "
-		"cheque bounced, balance kedaikala, kudukala",
-	),
-	(
-		"Legal & Serious",
-		"legal, lawyer, legal notice, court, cheat, fraud, police, complaint, consumer court",
-	),
-]
-
 
 def after_install():
 	setup()
@@ -100,13 +80,11 @@ def setup():
 		_ensure_custom_fields,
 		_ensure_lead_source,
 		_ensure_tags,
-		_ensure_sla_levels,
-		_ensure_ai_instructions,
 		_ensure_working_hours,
-		_ensure_keyword_rules,
 		_ensure_webhook_events,
 		_ensure_assistant_defaults,
 		_ensure_crm_ui,
+		_ensure_dashboard_block,
 		_ensure_phone_fields,
 	):
 		try:
@@ -148,16 +126,6 @@ def _ensure_lead_source():
 	ensure_lead_source()
 
 
-def _ensure_keyword_rules():
-	"""Add the starter rules only on a site that has never had any."""
-	if frappe.db.count("Periskope Keyword Rule"):
-		return
-	for name, words in DEFAULT_KEYWORD_RULES:
-		frappe.get_doc(
-			{"doctype": "Periskope Keyword Rule", "rule_name": name, "keywords": words, "enabled": 1}
-		).insert(ignore_permissions=True)
-
-
 def _ensure_webhook_events():
 	"""Pre-select the usual events on a new site; the admin can change the selection afterwards."""
 	from periskope_connector.webhooks import DEFAULT_EVENTS
@@ -173,32 +141,10 @@ def _ensure_webhook_events():
 
 def _ensure_assistant_defaults():
 	"""Single doctypes do not apply field defaults until saved, so store the starting values once.
-	The parts of the agent (tagging, auto reply, reminders) start on, so switching Enable AI Agent on
-	is all it takes; the agent itself starts off and cannot be switched on before the setup is done."""
-	defaults = {
-		"learning_lookback_days": 14,
-		"learning_min_evidence": 3,
-		"suggestion_expiry_days": 7,
-		"suggestion_email_gap_hours": 6,
-		"reply_delay_minutes": 3,
-		"reply_delay_jitter_percent": 20,
-		"reply_min_confidence": 80,
-		"reply_working_hours_only": 1,
-		"reply_max_per_chat_per_day": 3,
-		"holding_message": "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly.",
-	}
-	for field, value in defaults.items():
-		if frappe.db.get_single_value("Periskope Settings", field) in (None, "", 0, "0"):
-			frappe.db.set_single_value("Periskope Settings", field, value)
-	# Seeded once only: 0 is a real choice for these, so a later migrate must not undo it.
-	for field, value in (
-		("enable_classification", 1),
-		("enable_auto_reply", 1),
-		("enable_reply_reminders", 1),
-		("ai_resume_after_hours", 24),
-	):
-		if not _stored(field):
-			frappe.db.set_single_value("Periskope Settings", field, value)
+	Auto reply starts off: the AI does everything else on its own, and answering customers is the
+	one thing the team switches on."""
+	if not _stored("reply_delay_minutes"):
+		frappe.db.set_single_value("Periskope Settings", "reply_delay_minutes", 15)
 	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
 	# once: an admin who switches it off later is not overridden by the next migrate.
 	if not _stored("test_mode"):
@@ -236,7 +182,7 @@ def _stored(field: str) -> bool:
 
 def _ensure_tags():
 	"""Create the starting tags on a site that has none. After that the team owns the list."""
-	from periskope_connector.tags import DASHBOARD_GROUPS, DEFAULT_TAGS, FALLBACK_DEFAULT, default_actions
+	from periskope_connector.tags import DASHBOARD_GROUPS, DEFAULT_TAGS, FALLBACK_DEFAULT
 
 	if frappe.db.count("Periskope Tag"):
 		return
@@ -250,36 +196,8 @@ def _ensure_tags():
 				"is_default": 1 if name == FALLBACK_DEFAULT else 0,
 				"sort_order": order * 10,
 				"dashboard_group": DASHBOARD_GROUPS.get(name, ""),
-				"actions": default_actions(name),
 			}
 		).insert(ignore_permissions=True)
-
-
-def _ensure_sla_levels():
-	"""Start a new site with the usual SLA ladder; the team edits it afterwards."""
-	from periskope_connector.reminders import default_levels
-
-	if frappe.db.count("Periskope SLA Level"):
-		return
-	for row in default_levels():
-		frappe.get_doc(
-			{
-				"doctype": "Periskope SLA Level",
-				"wait_minutes": row.wait_minutes,
-				"min_severity": row.min_severity,
-				"action": row.action,
-				"recipients": row.recipients,
-			}
-		).insert(ignore_permissions=True)
-
-
-def _ensure_ai_instructions():
-	"""Show the default AI instructions in the settings so they can be edited."""
-	from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS
-
-	if (frappe.db.get_single_value("Periskope Settings", "ai_instructions") or "").strip():
-		return
-	frappe.db.set_single_value("Periskope Settings", "ai_instructions", DEFAULT_INSTRUCTIONS)
 
 
 def _ensure_working_hours():
@@ -290,54 +208,75 @@ def _ensure_working_hours():
 			frappe.db.set_single_value("Periskope Settings", field, value)
 
 
-# The CRM lead and deal pages get one action: pause or resume the AI replies in their WhatsApp chats.
-FORM_SCRIPT = """class %(cls)s {
-	onLoad() {
-		this.periskopeAI()
-	}
-	periskopeAI() {
-		call("periskope_connector.api.crm.get_ai_state", { doctype: "%(dt)s", name: this.doc.name }).then((state) => {
-			if (!state || !state.chats) return
-			this._periskopePaused = state.paused
-			const label = state.paused ? __("Resume AI replies") : __("Pause AI replies")
-			const action = this.actions.find((a) => a.periskope)
-			if (action) {
-				action.label = label
-				return
-			}
-			this.actions.push({
-				periskope: true,
-				label,
-				onClick: () =>
-					call("periskope_connector.api.crm.set_ai_paused", {
-						doctype: "%(dt)s",
-						name: this.doc.name,
-						paused: this._periskopePaused ? 0 : 1,
-					}).then((next) => {
-						toast.success(next.paused ? __("AI replies paused") : __("AI replies resumed"))
-						this.periskopeAI()
-					}),
-			})
-		})
-	}
-}
-"""
-
-
 def _ensure_crm_ui():
-	"""The Periskope WhatsApp account (so the CRM shows its WhatsApp tab) and the lead / deal action."""
+	"""The Periskope WhatsApp account, so the CRM shows its WhatsApp tab."""
 	from periskope_connector.mirror import ensure_account
 
 	ensure_account()
-	if not frappe.db.exists("DocType", "CRM Form Script"):
-		return
-	for dt in ("CRM Deal", "CRM Lead"):
-		name = f"Periskope AI ({dt})"
-		script = FORM_SCRIPT % {"cls": dt.replace(" ", ""), "dt": dt}
-		if frappe.db.exists("CRM Form Script", name):
-			frappe.db.set_value("CRM Form Script", name, {"script": script, "enabled": 1})
-			continue
-		doc = frappe.get_doc(
-			{"doctype": "CRM Form Script", "dt": dt, "view": "Form", "enabled": 1, "script": script}
-		)
-		doc.insert(set_name=name, ignore_permissions=True)
+
+
+# The workspace's Messages by Tag block: every tag with its full name, a bar and the count of the last 30
+# days (dashboard.tag_counts). A chart cannot do this: Frappe's charts cut long tag names short.
+DASHBOARD_BLOCK = "Periskope Messages by Tag"
+DASHBOARD_BLOCK_HTML = """<div class="pk-tags">
+	<div class="pk-head"><span class="pk-title">Messages by Tag</span><span class="pk-sub">last 30 days</span></div>
+	<div class="pk-rows"><div class="pk-empty">Loading...</div></div>
+</div>"""
+DASHBOARD_BLOCK_CSS = """
+.pk-tags{border:1px solid var(--border-color);border-radius:var(--border-radius-lg,12px);background:var(--card-bg);padding:16px 18px;height:100%;box-sizing:border-box}
+.pk-head{display:flex;align-items:baseline;gap:8px;margin-bottom:14px}
+.pk-title{font-size:var(--text-base,14px);font-weight:600;color:var(--heading-color,var(--text-color))}
+.pk-sub{font-size:var(--text-sm,12px);color:var(--text-muted)}
+.pk-row{display:grid;grid-template-columns:170px minmax(0,1fr) 44px;align-items:center;gap:14px;padding:7px 6px;border-radius:6px;cursor:pointer}
+.pk-row:hover{background:var(--fg-hover-color,var(--control-bg))}
+.pk-name{font-size:13px;color:var(--text-color);overflow-wrap:anywhere}
+.pk-track{display:block;height:8px;border-radius:4px;background:var(--control-bg,#2a2a2a)}
+.pk-bar{display:block;height:8px;border-radius:4px;background:var(--blue-500,#5e64ff);min-width:2px}
+.pk-bar.zero{min-width:0}
+.pk-count{font-size:13px;text-align:right;color:var(--text-color);font-variant-numeric:tabular-nums}
+.pk-empty{font-size:13px;color:var(--text-muted)}
+"""
+DASHBOARD_BLOCK_JS = """
+const rows = root_element.querySelector(".pk-rows");
+frappe.call("periskope_connector.dashboard.tag_counts").then((r) => {
+	const data = r.message || [];
+	const top = Math.max(1, ...data.map((d) => d.count));
+	if (!data.length) {
+		rows.innerHTML = `<div class="pk-empty">${__("No tags yet")}</div>`;
+		return;
+	}
+	rows.innerHTML = "";
+	data.forEach((d) => {
+		const row = document.createElement("div");
+		row.className = "pk-row";
+		row.title = __("Open the messages tagged {0}", [d.label]);
+		row.innerHTML = `<span class="pk-name"></span><span class="pk-track"><span class="pk-bar${d.count ? "" : " zero"}" style="width:${(100 * d.count) / top}%"></span></span><span class="pk-count">${d.count}</span>`;
+		row.querySelector(".pk-name").textContent = d.label.charAt(0).toUpperCase() + d.label.slice(1);
+		row.addEventListener("click", () =>
+			frappe.set_route("List", "Periskope Message", { ai_category: d.tag, direction: "Incoming" })
+		);
+		rows.appendChild(row);
+	});
+});
+"""
+DASHBOARD_ROLES = ("System Manager", "Sales Manager", "WhatsApp Manager")
+
+
+def _ensure_dashboard_block():
+	values = {
+		"html": DASHBOARD_BLOCK_HTML,
+		"style": DASHBOARD_BLOCK_CSS,
+		"script": DASHBOARD_BLOCK_JS,
+		"private": 0,
+	}
+	if frappe.db.exists("Custom HTML Block", DASHBOARD_BLOCK):
+		doc = frappe.get_doc("Custom HTML Block", DASHBOARD_BLOCK)
+		doc.update(values)
+	else:
+		# named by prompt: the name goes in __newname
+		doc = frappe.get_doc({"doctype": "Custom HTML Block", "__newname": DASHBOARD_BLOCK, **values})
+	doc.set("roles", [{"role": role} for role in DASHBOARD_ROLES])
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)

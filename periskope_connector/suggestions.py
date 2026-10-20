@@ -23,16 +23,7 @@ from periskope_connector import query
 from periskope_connector.api.permission import require_manager
 from periskope_connector.system import insert_as_system, save_as_system
 
-KINDS = (
-	"Tag",
-	"Keyword Rule",
-	"SLA Level",
-	"Setting",
-	"Knowledge Entry",
-	"Group Mapping",
-	"Ignore Contact",
-	"Lead Rule",
-)
+KINDS = ("Tag", "Setting", "Knowledge Entry", "Group Mapping", "Ignore Contact")
 OPERATIONS = ("Add", "Modify", "Remove")
 # Applied as soon as the agent makes them: the team keeps the knowledge base by correcting it on the
 # canvas, not by approving each answer. Everything else changes the configuration and waits.
@@ -40,6 +31,8 @@ AUTOMATIC_KINDS = ("Knowledge Entry",)
 AUTOMATIC = "Automatic"
 REJECTED_QUIET_DAYS = 30
 MAX_PER_EMAIL = 25
+EXPIRY_DAYS = 7  # a suggestion nobody decided on is dropped after this
+EMAIL_GAP_HOURS = 6  # at most one suggestions email in this time
 
 # The settings the agent may suggest changing. Keys, webhook, e-mail lists and switches are left
 # out on purpose: those are the team's decision, not something to learn from chats.
@@ -47,29 +40,17 @@ LEARNABLE_SETTINGS = (
 	"working_days",
 	"working_hours_start",
 	"working_hours_end",
-	"ack_words",
-	"keyword_dedupe_hours",
-	"burst_minutes",
-	"context_messages",
 	"ai_business_context",
 	"reply_delay_minutes",
-	"reply_delay_jitter_percent",
-	"reply_min_confidence",
-	"holding_message",
 )
-# No recipients: who gets emailed is the team's decision too (a new rule mails the alert list).
 PAYLOAD_FIELDS = {
 	"Tag": ("tag_name", "description", "active"),
-	"Keyword Rule": ("rule_name", "keywords", "enabled"),
-	"SLA Level": ("wait_minutes", "min_severity", "action"),
 	"Setting": ("value",),
 	"Knowledge Entry": ("question", "answer", "keywords"),
 	# target: the group's chat id. A group about one customer is linked to its company, deal or lead.
 	"Group Mapping": ("group_type", "organization", "crm_deal", "crm_lead"),
 	# target: the contact's number (the unmatched-contact queue).
 	"Ignore Contact": ("status",),
-	# target: a tag. Whether its messages from unknown numbers create a lead.
-	"Lead Rule": ("create_lead",),
 }
 
 
@@ -87,13 +68,12 @@ def clean_payload(kind: str, payload: dict | None) -> dict:
 	return {k: v for k, v in (payload or {}).items() if k in allowed}
 
 
-NAME_FIELDS = {"Tag": "tag_name", "Keyword Rule": "rule_name"}
-SAME_RULE_WORDS = 0.6  # share of the smaller rule's words from which two keyword rules are the same
+NAME_FIELDS = {"Tag": "tag_name"}
 
 
 def _already_pending(kind, operation, target, payload) -> bool:
 	"""One open question per record: a change to something that already has a pending suggestion,
-	or a new tag or rule of a name already proposed, waits for that decision instead."""
+	or a new tag of a name already proposed, waits for that decision instead."""
 	pending = frappe.get_all(
 		"Periskope Suggestion",
 		filters={"status": "Pending", "kind": kind},
@@ -105,7 +85,6 @@ def _already_pending(kind, operation, target, payload) -> bool:
 	name = _plain(payload.get(field)) if field else ""
 	if not name:
 		return False
-	words = _words(payload.get("keywords")) if kind == "Keyword Rule" else set()
 	for p in pending:
 		try:
 			other = json.loads(p.payload or "{}")
@@ -113,19 +92,11 @@ def _already_pending(kind, operation, target, payload) -> bool:
 			continue
 		if _plain(other.get(field)) == name:
 			return True
-		# the same alert under another name: most of its words are already proposed
-		theirs = _words(other.get("keywords"))
-		if words and theirs and len(words & theirs) / min(len(words), len(theirs)) >= SAME_RULE_WORDS:
-			return True
 	return False
 
 
-def _words(text) -> set[str]:
-	return set(re.findall(r"[a-z0-9]+", str(text or "").lower()))
-
-
 def _plain(name) -> str:
-	"""A name to compare: "Payment Methods" and "payment_method" are the same rule."""
+	"""A name to compare: "Payment Methods" and "payment_method" are the same tag."""
 	return re.sub(r"[^a-z0-9]", "", str(name or "").lower()).removesuffix("s")
 
 
@@ -151,7 +122,6 @@ def create(kind, operation, summary, reason="", target="", payload=None, current
 		},
 	):
 		return None
-	settings = frappe.db.get_single_value("Periskope Settings", "suggestion_expiry_days") or 7
 	doc = insert_as_system(
 		{
 			"doctype": "Periskope Suggestion",
@@ -165,7 +135,7 @@ def create(kind, operation, summary, reason="", target="", payload=None, current
 			"evidence_messages": "\n".join(evidence or []),
 			"status": "Pending",
 			"signature": signature,
-			"expires_on": add_to_date(now_datetime(), days=int(settings)),
+			"expires_on": add_to_date(now_datetime(), days=EXPIRY_DAYS),
 		}
 	)
 	if kind in AUTOMATIC_KINDS:
@@ -190,8 +160,6 @@ def _settings_doc():
 
 
 def _apply_tag(doc, data: dict):
-	from periskope_connector.tags import default_actions
-
 	if doc.operation == "Add":
 		name = (data.get("tag_name") or "").strip()
 		if frappe.db.exists("Periskope Tag", name):
@@ -203,7 +171,6 @@ def _apply_tag(doc, data: dict):
 				"description": data.get("description") or "",
 				"active": 1,
 				"sort_order": 500,
-				"actions": default_actions(name),
 			}
 		).insert(ignore_permissions=True)
 		return
@@ -216,48 +183,6 @@ def _apply_tag(doc, data: dict):
 		if "active" in data:
 			tag.active = 1 if data["active"] else 0
 	save_as_system(tag)
-
-
-def _apply_keyword_rule(doc, data: dict):
-	if doc.operation == "Add":
-		insert_as_system(
-			{
-				"doctype": "Periskope Keyword Rule",
-				"rule_name": data.get("rule_name"),
-				"keywords": data.get("keywords"),
-				"recipients": _settings_doc().alert_emails,
-				"enabled": 1,
-			}
-		)
-		return
-	name = frappe.db.get_value("Periskope Keyword Rule", {"rule_name": doc.target})
-	if not name:
-		frappe.throw(_("{0} no longer exists").format(doc.target))
-	rule = frappe.get_doc("Periskope Keyword Rule", name)
-	if doc.operation == "Remove":
-		rule.enabled = 0
-	else:
-		for field in ("keywords", "enabled"):
-			if field in data:
-				rule.set(field, data[field])
-	save_as_system(rule)
-
-
-def _apply_sla_level(doc, data: dict):
-	if doc.operation == "Add":
-		insert_as_system(
-			{"doctype": "Periskope SLA Level", **{k: v for k, v in data.items() if v not in (None, "")}}
-		)
-		return
-	if not frappe.db.exists("Periskope SLA Level", doc.target):
-		frappe.throw(_("That SLA level no longer exists"))
-	if doc.operation == "Remove":
-		frappe.delete_doc("Periskope SLA Level", doc.target, ignore_permissions=True)
-		return
-	level = frappe.get_doc("Periskope SLA Level", doc.target)
-	for field, value in data.items():
-		level.set(field, value)
-	save_as_system(level)
 
 
 def _apply_setting(doc, data: dict):
@@ -342,33 +267,12 @@ def _apply_ignore_contact(doc, data: dict):
 		insert_as_system({"doctype": "Periskope Contact", "phone": doc.target, "status": status})
 
 
-def _apply_lead_rule(doc, data: dict):
-	from periskope_connector.actions import CREATE_LEAD
-	from periskope_connector.flow import TAG_ACTIONS
-
-	if not frappe.db.exists("Periskope Tag", doc.target):
-		frappe.throw(_("Tag {0} no longer exists").format(doc.target))
-	tag = frappe.get_doc("Periskope Tag", doc.target)
-	want = doc.operation != "Remove" and bool(data.get("create_lead", True))
-	rows = [r for r in tag.actions if r.action == CREATE_LEAD]
-	if want and not rows:
-		tag.append("actions", {"action": CREATE_LEAD, **dict(TAG_ACTIONS)[CREATE_LEAD]})
-	elif not want and rows:
-		tag.set("actions", [r for r in tag.actions if r.action != CREATE_LEAD])
-	else:
-		return
-	save_as_system(tag)
-
-
 APPLIERS = {
 	"Tag": _apply_tag,
-	"Keyword Rule": _apply_keyword_rule,
-	"SLA Level": _apply_sla_level,
 	"Setting": _apply_setting,
 	"Knowledge Entry": _apply_knowledge,
 	"Group Mapping": _apply_group_mapping,
 	"Ignore Contact": _apply_ignore_contact,
-	"Lead Rule": _apply_lead_rule,
 }
 
 
@@ -482,10 +386,8 @@ def send_digest(force: bool = False) -> int:
 	)
 	if not rows:
 		return 0
-	gap = frappe.db.get_single_value("Periskope Settings", "suggestion_email_gap_hours")
-	gap = 6 if gap is None else int(gap)
 	last = query.latest("Periskope Suggestion", "emailed_on")
-	if not force and last and get_datetime(last) > now_datetime() - timedelta(hours=gap):
+	if not force and last and get_datetime(last) > now_datetime() - timedelta(hours=EMAIL_GAP_HOURS):
 		return 0
 	recipients = _recipients()
 	if not recipients:

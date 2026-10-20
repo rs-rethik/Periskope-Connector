@@ -16,7 +16,6 @@ MACHINE_WRITTEN = [
 	"Periskope Webhook Log",
 	"Periskope Reply Reminder",
 	"Periskope AI Usage",
-	"Periskope Keyword Alert",
 ]
 LOG_ROW = {"doctype": "Periskope Webhook Log", "event_type": "message.created", "signature_valid": 1}
 SYSTEM_MANAGER = "test@example.com"
@@ -101,7 +100,7 @@ class TestSystemWrites(FrappeTestCase):
 				self.assertFalse(perm.write or perm.create, f"{perm.role} can write {doctype}")
 
 	def test_internal_writers_cannot_be_called_over_http(self):
-		from periskope_connector import contacts, keywords
+		from periskope_connector import alerts, attachments, chat_tasks, contacts, decisions
 
 		internal = [
 			messages.create_message,
@@ -116,12 +115,25 @@ class TestSystemWrites(FrappeTestCase):
 			leads.create_lead,
 			contacts.ensure_contact,
 			contacts.backfill_and_comment,
-			keywords.check_message,
+			decisions.act,
+			alerts.escalate,
+			chat_tasks.from_message,
+			attachments.save,
+			classifier.classify_now,
 		]
 		for fn in internal:
 			self.assertNotIn(fn, frappe.whitelisted, f"{fn.__name__} must not be whitelisted")
 
 	def test_every_whitelisted_method_checks_who_is_calling(self):
+		import importlib
+		import pkgutil
+
+		import periskope_connector
+
+		# whitelisting happens on import: load every module, not only those other tests touched
+		for module in pkgutil.walk_packages(periskope_connector.__path__, "periskope_connector."):
+			if ".tests" not in module.name and ".test_" not in module.name and ".patches" not in module.name:
+				importlib.import_module(module.name)
 		ours = [
 			f for f in frappe.whitelisted if getattr(f, "__module__", "").startswith("periskope_connector")
 		]
@@ -135,10 +147,7 @@ class TestSystemWrites(FrappeTestCase):
 			else:
 				# every other endpoint gates the caller (api/permission.py)
 				self.assertTrue(
-					any(
-						check in source
-						for check in ("require_admin(", "require_manager(", "require_record_access(")
-					),
+					any(check in source for check in ("require_admin(", "require_manager(")),
 					fn.__name__,
 				)
 

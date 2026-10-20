@@ -55,7 +55,7 @@ TASKS = [
 class TestChatTasks(FrappeTestCase):
 	def setUp(self):
 		isolate(self, "chat_tasks_test")
-		settings(test_mode=0, classify_group_chats=1, create_chat_tasks=1, working_hours_end="19:00:00")
+		settings(enabled=1, test_mode=0, working_hours_end="19:00:00")
 		for p in (
 			patch.object(messages, "fetch_chat_name", lambda *a, **k: "Zylo Sales Group"),
 			patch("periskope_connector.linking.fetch_chat_name", lambda *a, **k: "Zylo Sales Group"),
@@ -188,7 +188,7 @@ class TestChatTasks(FrappeTestCase):
 		self.assertEqual(due, today_end if now_datetime() < today_end else add_days(today_end, 1))
 		self.assertEqual(chat_tasks.due_on("2031-09-02"), get_datetime("2031-09-02 19:00:00"))
 
-	def test_test_mode_and_the_switch_keep_tasks_out_of_the_crm(self):
+	def test_test_mode_keeps_tasks_out_of_the_crm(self):
 		settings(test_mode=1, test_allowed_chats="916374955805")
 		name = self._message()
 		self._classify(name)
@@ -201,9 +201,6 @@ class TestChatTasks(FrappeTestCase):
 		self.assertEqual(len(action), 3)
 		self.assertEqual({a.mode for a in action}, {"Dry Run"})
 		self.assertEqual(json.loads(action[0].detail)["message"], name)
-		settings(test_mode=0, create_chat_tasks=0)
-		self._classify(self._message())
-		self.assertEqual(self._tasks(), [])
 
 	def test_the_ai_is_asked_for_the_tasks_with_room_to_list_them(self):
 		self.assertIn("tasks", classifier.build_schema()["required"])

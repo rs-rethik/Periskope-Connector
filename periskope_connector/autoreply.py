@@ -1,32 +1,36 @@
-"""Answer customers on WhatsApp, after a delay, from the system's data.
+"""Answer a customer on WhatsApp when no rep has, from the system's data.
 
-1. A customer message (1-to-1, text, needs a reply) makes or moves a Waiting row for the chat to
-   `delay + a random extra`. A newer message moves it again, so the reply reads everything the
-   customer wrote.
-2. A message from a rep cancels the row: a human got there first.
-3. A job every minute handles the rows that are due: it reads all the unanswered messages, asks
-   answer.py, and sends either the answer (confident, from data) or the holding message. In the
-   holding case it also gives the rep a ToDo and opens a reply reminder, so the SLA ladder follows.
+1. A customer message in a 1-to-1 chat that needs a reply starts the clock: a Waiting row due
+   "Reply When No Rep Answers Within" minutes after the first unanswered message. Later messages
+   join it without moving it, so a customer who keeps writing is still answered in time.
+2. A rep's reply cancels the row: a human got there first. There is no pause: the next unanswered
+   message starts a new clock.
+3. A job every minute handles the rows that are due, day or night: it reads all the unanswered
+   messages, asks answer.py, and sends either the answer (confident, from data) or the holding
+   message. In the holding case the rep also gets a task and the reminder ladder follows.
 
-Nothing is sent unless "Enable Auto Reply" is on. In test mode (safety.py) a chat that is not on
-the allow list gets a dry run: the reply is prepared and kept on the row, nothing is sent.
+Nothing is sent unless "Reply to Customers" is on, and never in a group. In test mode (safety.py) a
+chat that is not on the allow list gets a dry run: the reply is prepared and kept on the row, nothing
+is sent.
 """
 
-import random
 from datetime import timedelta
 
 import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, now_datetime, today
 
-from periskope_connector import answer, chat, crm_context, health, reminders, safety, writeback
+from periskope_connector import answer, crm_context, health, reminders, safety, writeback
 from periskope_connector.ai import analyse, assistant
 from periskope_connector.outbound import send as send_message
-from periskope_connector.setup_status import feature_on
+from periskope_connector.setup_status import auto_reply_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import readable_text
 
 FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is not answered
+DEFAULT_DELAY_MINUTES = 15
+MIN_CONFIDENCE = 80  # below this the customer gets the holding message and the rep a task
+MAX_PER_CHAT_PER_DAY = 5
 MATCH_MINUTES = 30
 MESSAGE_FIELDS = [
 	"name",
@@ -53,11 +57,10 @@ def _settings():
 	return frappe.get_single("Periskope Settings")
 
 
-def delay_for(settings, rng=random) -> timedelta:
-	"""The configured delay plus up to `jitter` percent more."""
-	minutes = float(settings.reply_delay_minutes if settings.reply_delay_minutes is not None else 3)
-	extra = minutes * (int(settings.reply_delay_jitter_percent or 0) / 100) * rng.random()
-	return timedelta(minutes=max(minutes, 0) + extra)
+def delay_for(settings) -> timedelta:
+	"""How long a rep has to answer before the AI does."""
+	minutes = settings.reply_delay_minutes
+	return timedelta(minutes=max(float(DEFAULT_DELAY_MINUTES if minutes is None else minutes), 0))
 
 
 def on_message(doc) -> str:
@@ -66,8 +69,7 @@ def on_message(doc) -> str:
 		if doc.direction == "Outgoing":
 			if doc.agent_reply:
 				return "own"
-			# A human answered: the rep takes the chat over and the AI stays out of it for a while.
-			chat.pause(doc.chat_id, doc.rep or "Administrator", "Rep replied")
+			# A human answered in time: the AI does not reply to what the rep has answered.
 			return "cancelled" if cancel(doc.chat_id, _("A rep replied")) else ""
 		return schedule(doc)
 	except Exception:
@@ -77,12 +79,8 @@ def on_message(doc) -> str:
 
 def schedule(doc) -> str:
 	settings = _settings()
-	if not feature_on("enable_auto_reply", settings):
-		return ""
-	if doc.is_group and not settings.reply_group_chats:
-		return ""
-	if chat.is_paused(doc.chat_id):
-		return ""
+	if not auto_reply_on(settings) or doc.is_group:
+		return ""  # never in a group: the team talks there
 	if not readable_text(doc) or not reminders.needs_reply(doc):
 		return ""  # nothing to answer yet (a voice note is scheduled once it is transcribed)
 	if doc.message_timestamp and get_datetime(doc.message_timestamp) < now_datetime() - timedelta(
@@ -92,18 +90,18 @@ def schedule(doc) -> str:
 	status = frappe.db.get_value("Periskope Contact", {"phone_key": doc.customer_phone}, "status")
 	if doc.customer_phone and (status or "").startswith("Ignored"):
 		return ""
-	due = now_datetime() + delay_for(settings)
 	name = frappe.db.get_value("Periskope Auto Reply", {"chat_id": doc.chat_id, "status": "Waiting"})
-	values = {"due_on": due, "last_customer_message": doc.name, "rep": doc.rep, "org_phone": doc.org_phone}
+	values = {"last_customer_message": doc.name, "rep": doc.rep, "org_phone": doc.org_phone}
 	if name:
 		frappe.db.set_value("Periskope Auto Reply", name, values)
-		return "moved"
+		return "joined"
 	insert_as_system(
 		{
 			"doctype": "Periskope Auto Reply",
 			"chat_id": doc.chat_id,
 			"contact_number": doc.contact_number,
 			"status": "Waiting",
+			"due_on": now_datetime() + delay_for(settings),
 			**values,
 		}
 	)
@@ -154,8 +152,7 @@ def due_rows() -> list[str]:
 
 def run_due() -> int:
 	"""Scheduler, every minute. Returns how many rows were handled."""
-	settings = _settings()
-	if not feature_on("enable_auto_reply", settings):
+	if not auto_reply_on():
 		return 0
 	handled = 0
 	for name in due_rows():
@@ -203,17 +200,13 @@ def process(name: str) -> str:
 		return row.status
 
 	cfg = reminders.get_config(settings)
-	if settings.reply_working_hours_only and not reminders.is_working_time(now_datetime(), cfg):
-		return "Waiting"  # picked up again in the first working minute
 
 	def end(status, reason=""):
 		frappe.db.set_value("Periskope Auto Reply", name, {"status": status, "cancel_reason": reason})
 		return status
 
-	if not feature_on("enable_auto_reply", settings):
+	if not auto_reply_on(settings):
 		return end("Cancelled", _("Auto reply was switched off"))
-	if chat.is_paused(row.chat_id):
-		return end("Cancelled", _("A rep took this chat over"))
 
 	messages = frappe.get_all(
 		"Periskope Message",
@@ -227,14 +220,12 @@ def process(name: str) -> str:
 	if not pending:
 		return end("Cancelled", _("Already answered, or nothing to answer"))
 
-	cap = int(settings.reply_max_per_chat_per_day or 0)
 	if (
-		cap
-		and frappe.db.count(
+		frappe.db.count(
 			"Periskope Auto Reply",
 			{"chat_id": row.chat_id, "status": ["in", ["Sent", "Holding Sent"]], "sent_on": [">=", today()]},
 		)
-		>= cap
+		>= MAX_PER_CHAT_PER_DAY
 	):
 		pending_rep = next((m.rep for m in reversed(messages) if m.rep), None)
 		frappe.db.set_value(
@@ -260,15 +251,14 @@ def process(name: str) -> str:
 		except Exception:
 			health.log_once("Periskope: could not prepare an auto reply")
 
-	min_conf = float(settings.reply_min_confidence or 80)
-	confident = result["can_answer"] and result["confidence"] >= min_conf
+	confident = result["can_answer"] and result["confidence"] >= MIN_CONFIDENCE
 	if not confident and frappe.db.exists(
 		"Periskope Auto Reply",
 		{"chat_id": row.chat_id, "status": "Holding Sent", "sent_on": [">=", pending[0].message_timestamp]},
 	):
 		# The customer was already told a rep will come back; do not repeat it.
 		return end("Skipped", _("The holding message was already sent"))
-	text = result["answer"] if confident else ((settings.holding_message or "").strip() or DEFAULT_HOLDING)
+	text = result["answer"] if confident else DEFAULT_HOLDING
 	status = "Sent" if confident else "Holding Sent"
 
 	# A rep may have written while the answer was prepared.

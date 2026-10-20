@@ -14,12 +14,7 @@ IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 
 def _settings(**kw):
-	base = {
-		"ignore_suppliers": 0,
-		"ignore_employees": 0,
-		"digest_recipients": "",
-		"alert_emails": "",
-	}
+	base = {"alert_emails": ""}
 	base.update(kw)
 	return SimpleNamespace(**base)
 
@@ -177,7 +172,7 @@ class TestQueue(FrappeTestCase):
 		contacts.ignore_contact(
 			frappe.get_doc("Periskope Contact", {"phone": "919600000001"}).name, "Ignored (Vendor)"
 		)
-		with patch.object(leads, "enabled", lambda: True), patch.object(linking, "by_mobile", lambda n: []):
+		with patch.object(linking, "by_mobile", lambda n: []):
 			doc = frappe.get_doc("Periskope Message", {"message_id": "q10"})
 			doc.ai_category = "order_or_enquiry"
 			self.assertIsNone(leads.create_lead(doc))
@@ -195,7 +190,7 @@ class TestQueue(FrappeTestCase):
 		self._message("q13", body="three", chat_id="919600000002@c.us")
 		self._mark_recent()
 		with patch.object(frappe, "sendmail") as sendmail:
-			with patch.object(contacts, "_settings", lambda: _settings(digest_recipients="head@example.com")):
+			with patch.object(contacts, "_settings", lambda: _settings(alert_emails="head@example.com")):
 				self.assertEqual(contacts.send_digest(), 2)
 			kwargs = sendmail.call_args.kwargs
 			self.assertEqual(kwargs["recipients"], ["head@example.com"])

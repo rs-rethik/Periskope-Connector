@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import now_datetime
+from frappe.utils import add_days, now_datetime
 
 from periskope_connector import alerts, backfill, leads, linking, messages, retention, tags, unmatched
 from periskope_connector import timeline_comments as timeline
@@ -37,8 +37,6 @@ def _event(**data):
 	base.update(data)
 	return {"event_type": "message.created", "data": base, "org_id": "org-1"}
 
-
-ROWS = [{"recipients": ""}]  # an Email Alert action with no recipients: the Manager Emails
 
 PHONE = "919786387999"
 
@@ -260,8 +258,9 @@ class TestPeriskopeMessage(FrappeTestCase):
 		self.assertIn("delivery_delay", tags.names())
 
 
-class TestHighSeverityAlert(FrappeTestCase):
-	"""Runs on the real site DB: never commit, always roll back, never send real email."""
+class TestEscalationAlert(FrappeTestCase):
+	"""The AI's escalation reaches the people it named, once. Runs on the real site DB: never commit,
+	always roll back, never send real email."""
 
 	def setUp(self):
 		for target in (
@@ -276,66 +275,54 @@ class TestHighSeverityAlert(FrappeTestCase):
 		self.email = frappe.db.get_value("User", "Administrator", "email")
 		cfg = patch("periskope_connector.alerts.get_config")
 		self.config = cfg.start()
-		self.config.return_value.emails = [self.email, "md@example.com"]
+		self.config.return_value.emails = [self.email]
+		self.config.return_value.md_emails = ["md@example.com"]
 		self.addCleanup(cfg.stop)
 		mail = patch.object(frappe, "sendmail")
 		self.sendmail = mail.start()
 		self.addCleanup(mail.stop)
 
-	def _message(self, severity="High", body="This is unacceptable <b>now</b>"):
-		name = messages.create_message(
-			event(message_id=f"al_{severity}_{frappe.generate_hash(length=4)}", body=body)
-		)
+	def _message(self, level="Managers", body="This is unacceptable <b>now</b>"):
+		name = messages.create_message(event(message_id=f"al_{frappe.generate_hash(length=6)}", body=body))
 		frappe.db.set_value(
 			"Periskope Message",
 			name,
 			{
-				"severity": severity,
-				"ai_category": "quality_complaint",
-				"ai_summary": "Angry about torn fabric",
+				"escalation": level,
+				"escalation_reason": "Angry about torn fabric",
+				"ai_summary": "Torn fabric",
 			},
 		)
 		return name
 
-	def test_a_high_severity_message_alerts_the_managers_once(self):
+	def test_an_escalation_alerts_the_managers_once(self):
 		name = self._message()
-		self.assertTrue(alerts.send_alert(name, ROWS))
+		self.assertTrue(alerts.escalate(name))
 		kwargs = self.sendmail.call_args.kwargs
-		self.assertEqual(kwargs["recipients"], [self.email, "md@example.com"])
-		self.assertIn("quality complaint", kwargs["subject"])
-		self.assertIn("Angry about torn fabric", kwargs["message"])
+		self.assertEqual(kwargs["recipients"], [self.email])
+		self.assertIn("Angry about torn fabric", kwargs["subject"])
 		self.assertIn("&lt;b&gt;now&lt;/b&gt;", kwargs["message"])  # customer text is escaped
 		self.assertTrue(
 			frappe.db.exists("Notification Log", {"for_user": "Administrator", "document_name": name})
 		)
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "high_alert_sent"), 1)
-
-		self.assertFalse(alerts.send_alert(name, ROWS))  # not a second time
+		self.assertFalse(alerts.escalate(name))  # not a second time
 		self.assertEqual(self.sendmail.call_count, 1)
 
-	def test_missing_recipients_send_nothing(self):
+	def test_the_md_hears_it_with_the_managers(self):
+		self.assertTrue(alerts.escalate(self._message("MD")))
+		self.assertEqual(self.sendmail.call_args.kwargs["recipients"], ["md@example.com", self.email])
+
+	def test_no_escalation_or_no_recipients_send_nothing(self):
+		self.assertFalse(alerts.escalate(self._message("")))
 		self.config.return_value.emails = []
-		self.assertFalse(alerts.send_alert(self._message("High"), ROWS))
+		self.assertFalse(alerts.escalate(self._message()))
 		self.sendmail.assert_not_called()
-
-	def test_recipients_on_the_action_replace_the_manager_emails(self):
-		name = self._message()
-		self.assertTrue(alerts.send_alert(name, [{"recipients": "qa@example.com; head@example.com"}]))
-		self.assertEqual(self.sendmail.call_args.kwargs["recipients"], ["qa@example.com", "head@example.com"])
-
-	def test_several_actions_send_one_alert_to_everyone(self):
-		name = self._message()
-		rows = [{"recipients": "qa@example.com"}, {"recipients": ""}]
-		self.assertTrue(alerts.send_alert(name, rows))
-		self.assertEqual(self.sendmail.call_count, 1)
-		self.assertEqual(
-			self.sendmail.call_args.kwargs["recipients"], ["qa@example.com", self.email, "md@example.com"]
-		)
 
 	def test_a_failure_is_logged_and_never_raised(self):
 		self.sendmail.side_effect = RuntimeError("mail down")
 		with patch.object(frappe, "log_error") as log_error:
-			self.assertFalse(alerts.send_alert(self._message(), ROWS))
+			self.assertFalse(alerts.escalate(self._message()))
 		log_error.assert_called_once()
 
 
@@ -576,10 +563,6 @@ class TestNewEnquiryLead(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_enquiry_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_enquiry_test")
-		# Never write the real setting from a test: the site's own value must stay as it is.
-		self.setting = patch.object(leads, "enabled", lambda: True)
-		self.setting.start()
-		self.addCleanup(self.setting.stop)
 
 	def _tagged(self, message_id="enq1", category="order_or_enquiry", **data):
 		name = messages.create_message(event(message_id=message_id, **data))
@@ -610,13 +593,10 @@ class TestNewEnquiryLead(FrappeTestCase):
 		self.assertTrue(first)
 		self.assertIsNone(second)
 
-	def test_other_tags_groups_outgoing_and_the_setting_do_not_create_leads(self):
+	def test_groups_and_outgoing_messages_never_create_leads(self):
 		before = frappe.db.count("CRM Lead")
-		leads.create_lead_for_message(self._tagged("o1", category="general"))
 		leads.create_lead_for_message(self._tagged("o2", chat_id=GROUP_CHAT))
 		leads.create_lead_for_message(self._tagged("o3", from_me=True))
-		with patch.object(leads, "enabled", lambda: False):
-			leads.create_lead_for_message(self._tagged("o4"))
 		self.assertEqual(frappe.db.count("CRM Lead"), before)
 
 	def test_the_lead_takes_the_name_the_customer_gave(self):
@@ -634,13 +614,6 @@ class TestNewEnquiryLead(FrappeTestCase):
 	def test_without_a_name_the_phone_number_is_the_first_name(self):
 		lead = frappe.get_doc("CRM Lead", leads.create_lead_for_message(self._tagged("nm3")))
 		self.assertEqual((lead.first_name, lead.last_name), ("919600000001", ""))
-
-	def test_the_setting_is_off_until_it_is_saved_on(self):
-		self.setting.stop()  # the real leads.enabled, reading a faked stored value
-		self.addCleanup(self.setting.start)
-		for stored, expected in (((), False), ((("0",),), False), ((("1",),), True)):
-			with patch.object(frappe.db, "sql", lambda *a, _s=stored, **k: _s):
-				self.assertEqual(leads.enabled(), expected, stored)
 
 
 class TestTimelineComment(FrappeTestCase):
@@ -660,11 +633,13 @@ class TestTimelineComment(FrappeTestCase):
 		lead.flags.ignore_mandatory = True
 		self.lead = lead.insert(ignore_permissions=True)
 
-	def _message(self, message_id, category=None, body="Need <b>10</b> pieces\nurgent"):
+	def _message(self, message_id, category=None, body="Need <b>10</b> pieces\nurgent", worth=True):
 		name = messages.create_message(event(message_id=message_id, body=body))
 		if category:
 			frappe.db.set_value(
-				"Periskope Message", name, {"ai_category": category, "ai_summary": "Wants ten pieces"}
+				"Periskope Message",
+				name,
+				{"ai_category": category, "ai_summary": "Wants ten pieces", "on_timeline": 1 if worth else 0},
 			)
 		return name
 
@@ -679,7 +654,7 @@ class TestTimelineComment(FrappeTestCase):
 			fields=["name", "content", "owner"],
 		)
 
-	def test_a_tagged_linked_message_gets_one_escaped_comment_on_the_lead(self):
+	def test_a_message_the_ai_marks_gets_one_escaped_comment_on_the_lead(self):
 		name = self._message("c1", "order_or_enquiry")
 		linking.link_message(name)
 		linking.link_message(name)  # linking again must not add a second comment
@@ -691,15 +666,15 @@ class TestTimelineComment(FrappeTestCase):
 		self.assertIn("order or enquiry: Wants ten pieces", content)
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "timeline_comment"), comments[0].name)
 
-	def test_unclassified_and_general_messages_get_no_comment(self):
+	def test_unclassified_messages_and_chatter_get_no_comment(self):
 		linking.link_message(self._message("c2"))
-		linking.link_message(self._message("c2b", "general"))
+		linking.link_message(self._message("c2b", "general", worth=False))
 		self.assertEqual(self._comments(), [])
 
 	def test_a_message_classified_after_it_was_linked_gets_its_comment_when_linked_again(self):
 		name = self._message("c3")
 		self.assertEqual(self._comments(), [])
-		frappe.db.set_value("Periskope Message", name, "ai_category", "delivery_delay")
+		frappe.db.set_value("Periskope Message", name, {"ai_category": "delivery_delay", "on_timeline": 1})
 		linking.link_message(name)
 		self.assertEqual(len(self._comments()), 1)
 
@@ -708,81 +683,6 @@ class TestTimelineComment(FrappeTestCase):
 		frappe.db.set_value("Periskope Message", name, "ai_category", "delivery_delay")
 		linking.link_message(name)
 		self.assertFalse(frappe.db.get_value("Periskope Message", name, "timeline_comment"))
-
-
-class TestBurstComments(FrappeTestCase):
-	"""Runs on the real site DB: never commit, always roll back."""
-
-	def setUp(self):
-		for target in (
-			patch.object(frappe.db, "commit"),
-			patch("periskope_connector.linking.fetch_chat_name", lambda *a, **k: "Team"),
-			patch.object(messages, "_rep_for_phone", lambda n: "Administrator"),
-		):
-			target.start()
-			self.addCleanup(target.stop)
-		frappe.db.savepoint("periskope_burst_test")
-		self.addCleanup(frappe.db.rollback, save_point="periskope_burst_test")
-		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Known", "mobile_no": "9600000001"})
-		lead.flags.ignore_mandatory = True
-		self.lead = lead.insert(ignore_permissions=True)
-
-	def _commented(self, message_id):
-		name = frappe.db.get_value("Periskope Message", {"message_id": message_id})
-		return timeline.add_comment(name)
-
-	def _tagged_message(self, message_id, minutes_later=0):
-		name = messages.create_message(event(message_id=message_id, body=f"message {message_id}"))
-		if minutes_later:
-			base = frappe.db.get_value("Periskope Message", {"message_id": message_id}, "message_timestamp")
-			frappe.db.set_value(
-				"Periskope Message", name, "message_timestamp", add_minutes(base, minutes_later)
-			)
-		frappe.db.set_value("Periskope Message", name, "ai_category", "order_or_enquiry")
-		return name
-
-	def test_burst_mode_merges_messages_inside_the_window(self):
-		with patch.object(timeline, "_settings", lambda: (timeline.MODE_BURST, 30)):
-			self._tagged_message("b1")
-			second = self._tagged_message("b2", minutes_later=10)
-			first_comment = self._commented("b1")
-			self._commented("b2")
-			comments = frappe.get_all(
-				"Comment",
-				filters={"reference_doctype": "CRM Lead", "reference_name": self.lead.name},
-				pluck="name",
-			)
-			self.assertEqual(len(comments), 1)  # both messages share one comment
-			self.assertEqual(
-				frappe.db.get_value("Periskope Message", second, "timeline_comment"), first_comment
-			)
-			content = frappe.db.get_value("Comment", first_comment, "content")
-			self.assertIn("message b1", content)
-			self.assertIn("message b2", content)
-
-	def test_burst_mode_starts_a_new_comment_outside_the_window(self):
-		with patch.object(timeline, "_settings", lambda: (timeline.MODE_BURST, 30)):
-			self._tagged_message("b3")
-			self._tagged_message("b4", minutes_later=120)
-			self._commented("b3")
-			self._commented("b4")
-			self.assertEqual(
-				frappe.db.count(
-					"Comment", {"reference_doctype": "CRM Lead", "reference_name": self.lead.name}
-				),
-				2,
-			)
-
-	def test_off_mode_adds_nothing(self):
-		with patch.object(timeline, "_settings", lambda: (timeline.MODE_OFF, 30)):
-			self._tagged_message("b5")
-			self.assertIsNone(self._commented("b5"))
-			self.assertEqual(
-				frappe.db.count(
-					"Comment", {"reference_doctype": "CRM Lead", "reference_name": self.lead.name}
-				),
-				0,
-			)
 
 
 class TestNormalisation(FrappeTestCase):
@@ -947,18 +847,11 @@ class TestRetention(FrappeTestCase):
 		self.assertEqual(retention.clear("Periskope Message", "raw_payload", 0), 0)
 		self.assertTrue(frappe.db.get_value("Periskope Message", old, "raw_payload"))
 
-	def test_bodies_are_only_cleared_when_configured(self):
-		old = _message("ret4", days_old=100)
-		with patch.object(frappe, "get_cached_doc") as cached:
-			cached.return_value = frappe._dict(raw_payload_retention_days=90, body_retention_days=0)
-			retention.run()
+	def test_the_monthly_run_clears_old_payloads_and_keeps_the_text(self):
+		old = _message("ret4", days_old=retention.RAW_PAYLOAD_DAYS + 10)
+		retention.run()
 		self.assertEqual(frappe.db.get_value("Periskope Message", old, "raw_payload"), "")
 		self.assertEqual(frappe.db.get_value("Periskope Message", old, "body"), "hello")
-
-		with patch.object(frappe, "get_cached_doc") as cached:
-			cached.return_value = frappe._dict(raw_payload_retention_days=90, body_retention_days=90)
-			retention.run()
-		self.assertEqual(frappe.db.get_value("Periskope Message", old, "body"), "")
 
 
 class TestUnmatched(FrappeTestCase):
@@ -1076,9 +969,7 @@ class TestClassify(FrappeTestCase):
 		rep.start()
 		self.addCleanup(rep.stop)
 
-		self.settings = SimpleNamespace(
-			classify_group_chats=0, context_messages=5, ai_model="claude-haiku-4-5"
-		)
+		self.settings = SimpleNamespace(enabled=1, ai_model="claude-haiku-4-5")
 		patch.object(classifier, "get_settings", lambda: self.settings).start()
 		self.addCleanup(patch.stopall)
 
@@ -1159,18 +1050,14 @@ class TestClassify(FrappeTestCase):
 		doc.reload()
 		self.assertEqual(str(doc.follow_up_on), "2026-09-30 16:00:00")
 
-	def test_trivial_and_group_messages_are_skipped(self):
+	def test_trivial_messages_are_skipped_and_group_messages_are_read(self):
 		doc = self._message("ok", message_id="t1")
 		classifier.classify(doc.name)
 		self.assertEqual(
 			frappe.db.get_value("Periskope Message", doc.name, "classification_status"), "Skipped"
 		)
-
 		group = self._message("Any update on the order?", message_id="g1", chat_id="1203630@g.us")
-		classifier.classify(group.name)
-		self.assertEqual(
-			frappe.db.get_value("Periskope Message", group.name, "classification_status"), "Skipped"
-		)
+		self.assertIsNone(classifier.skip_reason(group, classifier.get_settings()))
 
 	def test_one_word_messages_are_never_sent_to_the_ai(self):
 		for i, body in enumerate(["done", "Received", "Quotation", "👍"]):
@@ -1194,7 +1081,11 @@ class TestClassify(FrappeTestCase):
 		)
 		self.assertEqual((done.ai_category, done.severity), ("general", "Low"))
 		self.assertEqual(real.classification_status, "Pending")
-		enqueue.assert_not_called()  # nothing is queued: the 5-minute job picks the message up
+		# only the real one is analysed, at once (the 5-minute job catches up on a lost job)
+		self.assertEqual(
+			[c.kwargs["message"] for c in enqueue.call_args_list if c.args[0].endswith("classify_now")],
+			[real.name],
+		)
 
 	def test_a_rep_message_is_never_classified_and_has_no_category(self):
 		with patch.object(frappe.db, "get_single_value", return_value=1):
@@ -1209,9 +1100,11 @@ class TestClassify(FrappeTestCase):
 		self.assertEqual(classifier.BATCH_SIZE, 20)
 		with patch.object(frappe.db, "get_single_value", return_value=1):
 			names = [self._message(f"Send price {i}", message_id=f"b_{i}").name for i in range(3)]
-		pending = classifier._pending(2)
-		self.assertEqual(len(pending), 2)
-		self.assertTrue(set(pending) <= set(names) or pending)  # oldest first, capped by the limit
+		for name in names:  # past the time their own jobs have them
+			frappe.db.set_value(
+				"Periskope Message", name, "modified", add_days(now_datetime(), -1), update_modified=False
+			)
+		self.assertEqual(len(classifier._pending(2)), 2)  # capped by the limit
 
 	def test_skipped_messages_are_saved_as_general_low_except_rep_and_group_skips(self):
 		from periskope_connector.text_rules import skip_fields
@@ -1298,6 +1191,10 @@ class TestClassify(FrappeTestCase):
 
 	def test_a_message_that_keeps_failing_stops_being_retried(self):
 		bad = self._message("Send the price list", message_id="keeps_failing")
+		self.assertNotIn(bad.name, classifier._pending(100000))  # its own job has it first
+		frappe.db.set_value(
+			"Periskope Message", bad.name, "modified", add_days(now_datetime(), -1), update_modified=False
+		)
 		self.assertIn(bad.name, classifier._pending(100000))
 		for _i in range(classifier.MAX_ATTEMPTS):
 			self._run_batch([bad.name], classify=lambda n: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -1386,25 +1283,23 @@ class TestClassify(FrappeTestCase):
 		self.assertIn("Message to classify:", text)
 		self.assertNotIn("919600000001", text)
 
-	def test_prompt_uses_instructions_and_business_note_from_settings(self):
-		custom = SimpleNamespace(
-			ai_instructions="Be strict. {curly} braces stay.",
-			ai_business_context="We sell industrial cables in Chennai.",
+	def test_the_prompt_has_the_business_note_and_the_decisions(self):
+		prompt = classifier.build_system_prompt(
+			SimpleNamespace(ai_business_context="We sell industrial cables in Chennai.")
 		)
-		prompt = classifier.build_system_prompt(custom)
 		self.assertTrue(
 			prompt.startswith("About the business you are working for:\nWe sell industrial cables")
 		)
-		self.assertIn("Be strict. {curly} braces stay.", prompt)
-		self.assertIn("customer_name is the name", prompt)  # always added
-
-	def test_empty_instructions_fall_back_to_the_default(self):
-		for text in ("  ", None):
-			prompt = classifier.build_system_prompt(
-				SimpleNamespace(ai_instructions=text, ai_business_context=None)
-			)
-			self.assertIn("You review WhatsApp messages", prompt)
-			self.assertIn("order_or_enquiry", prompt)
+		for part in ("You review WhatsApp messages", "order_or_enquiry", "customer_name is the name"):
+			self.assertIn(part, prompt)
+		for decision in (
+			"escalate is",
+			"create_lead is",
+			"on_timeline is",
+			"attachment_summary",
+			"tasks lists",
+		):
+			self.assertIn(decision, prompt)
 
 	def test_parse_json_reply_tolerates_fences_and_extra_words(self):
 		self.assertEqual(classifier.parse_json_reply('```json\n{"a": 1}\n```'), {"a": 1})
@@ -1466,15 +1361,12 @@ class TestClassify(FrappeTestCase):
 		self.assertIn("JSON string literal", sent["prompt"])
 		self.assertIn("Message to classify:", sent["input"])
 
-	def test_jarvis_provider_needs_no_api_key_and_hides_the_optimizer(self):
+	def test_jarvis_provider_needs_no_api_key(self):
 		self.settings.ai_provider = "Jarvis"
-		self.settings.enable_agent = 1
-		self.settings.enable_classification = 1
+		self.settings.enabled = 1
 		self.settings.get_password = lambda field, **kw: None
 		with patch.object(classifier, "get_settings", lambda: self.settings):
 			self.assertTrue(classifier._ready_to_run())
-		with self.assertRaises(frappe.ValidationError):
-			classifier.optimize_instructions(self.settings, "x")
 
 	def test_jarvis_is_offered_only_when_the_app_is_installed(self):
 		with patch("frappe.get_installed_apps", lambda: ["frappe", "crm"]):
@@ -1485,6 +1377,7 @@ class TestClassify(FrappeTestCase):
 	def test_saving_falls_back_to_the_direct_api_when_jarvis_is_gone(self):
 		settings = frappe.get_single("Periskope Settings")
 		settings.ai_provider = "Jarvis"
+		settings.enable_auto_reply = 0  # only the provider is under test
 		with patch("frappe.get_installed_apps", lambda: ["frappe"]):
 			settings.validate()
 		self.assertEqual(settings.ai_provider, "Direct API")
@@ -1559,42 +1452,6 @@ class TestClassify(FrappeTestCase):
 			stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)]
 		)
 		return client
-
-	def test_optimizer_returns_improved_text_that_keeps_the_categories(self):
-		categories = ", ".join(tags.names())
-		improved = "You classify WhatsApp sales messages. " * 6 + f"\n\nCategories: {categories}"
-		client = self._optimizer_client(f"```\n{improved}\n```")
-		with patch.object(classifier, "_client", lambda s: client):
-			text = classifier.optimize_instructions(
-				self.settings, "Old instructions", "be stricter on pricing"
-			)
-		self.assertEqual(text, improved)
-		request = client.messages.create.call_args.kwargs
-		self.assertIn("be stricter on pricing", request["messages"][0]["content"])
-		self.assertIn("Old instructions", request["messages"][0]["content"])
-		self.assertNotIn("output_config", request)  # plain text answer, works for any provider
-
-	def test_optimizer_text_needs_no_category_list_because_tags_are_added_separately(self):
-		client = self._optimizer_client("You classify WhatsApp sales messages carefully. " * 5)
-		with patch.object(classifier, "_client", lambda s: client):
-			text = classifier.optimize_instructions(self.settings, "", "")
-		self.assertNotIn("Categories", text)
-		self.assertIn("Categories", classifier.build_system_prompt())
-
-	def test_optimizer_rejects_empty_or_cut_off_answers(self):
-		for client in (self._optimizer_client("Sorry"), self._optimizer_client("x" * 500, "max_tokens")):
-			with patch.object(classifier, "_client", lambda s, c=client: c):
-				self.assertRaises(
-					frappe.ValidationError, classifier.optimize_instructions, self.settings, "abc", ""
-				)
-
-	def test_optimizer_turns_provider_errors_into_a_clear_message(self):
-		client = MagicMock()
-		client.messages.create.side_effect = ConnectionError("down")
-		with patch.object(classifier, "_client", lambda s: client):
-			self.assertRaises(
-				frappe.ValidationError, classifier.optimize_instructions, self.settings, "abc", ""
-			)
 
 	def test_schema_enums_match_the_categories(self):
 		schema = classifier.build_schema()

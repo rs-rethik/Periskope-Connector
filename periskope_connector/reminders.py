@@ -5,17 +5,16 @@ Runs every 10 minutes. Per chat (not per message), with a tiered clock in workin
 2. Only working hours count (site time, e.g. 09:00-19:00, Monday-Saturday, minus a Holiday
    List), so a message sent at night starts counting the next morning and nothing fires
    outside working hours.
-3. The SLA levels (the Periskope SLA Level list) say what happens and when: each row has
-   the working minutes to wait, the lowest severity it applies to, and an action: notify the rep
-   (bell), a ToDo for the rep, an email to the managers, to the escalation list (the MD), or to
-   the recipients on the row. The starting rows are: notify at 1 working hour, ToDo plus managers
-   at 3, escalation list at 8, and for High severity all four after 30 minutes.
+3. A fixed ladder says what happens and when (default_levels; nobody configures it): the rep's
+   bell at 1 working hour, a task for the rep and an email to the managers at 3, the MD at 8, and
+   for a High severity message all four after 30 minutes. With auto reply on, the AI has usually
+   answered long before; this catches what it could not answer.
 4. An action runs once per waiting period (the same action to the same recipients is not repeated
    by a later row).
 5. When the rep replies, the reminder and its ToDo are closed and the response time recorded.
    A new incoming message after the reply starts a fresh cycle.
 
-Group chats: any rep's message in the group counts as the reply (when group chats are included).
+Group chats are left out: their work is followed up as CRM Tasks (chat_tasks.py).
 """
 
 import re
@@ -24,9 +23,9 @@ from types import SimpleNamespace
 
 import frappe
 from frappe import _
-from frappe.utils import escape_html, flt, get_datetime, get_time, get_url_to_form, now_datetime, today
+from frappe.utils import escape_html, get_datetime, get_time, get_url_to_form, now_datetime, today
 
-from periskope_connector.setup_status import feature_on
+from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import is_acknowledgement
 
@@ -83,32 +82,17 @@ def get_config(settings=None) -> SimpleNamespace:
 		return [e.strip() for e in re.split(r"[,\n;]", value or "") if e.strip()]
 
 	emails = emails_of(settings.alert_emails)
-	levels = [
-		SimpleNamespace(
-			wait_minutes=flt(row.wait_minutes),
-			min_severity=row.min_severity or "Low",
-			action=row.action,
-			recipients=row.recipients or "",
-		)
-		for row in frappe.get_all(
-			"Periskope SLA Level",
-			fields=["wait_minutes", "min_severity", "action", "recipients"],
-			order_by="wait_minutes asc, creation asc",
-		)
-		if row.action
-	]
-	extra_words = [w.strip().lower() for w in re.split(r"[,\n;]", settings.ack_words or "") if w.strip()]
 	return SimpleNamespace(
-		enabled=feature_on("enable_reply_reminders", settings),
+		enabled=agent_on(settings),
 		start=get_time(settings.working_hours_start or "09:00:00"),
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),
 		holidays=_holiday_dates(settings.holiday_list),
-		levels=levels,
+		levels=default_levels(),
 		emails=emails,
 		md_emails=emails_of(settings.escalation_emails) or emails,
-		groups=bool(settings.remind_group_chats),
-		ack_words=extra_words,
+		groups=False,
+		ack_words=[],
 	)
 
 
