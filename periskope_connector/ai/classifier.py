@@ -1,7 +1,8 @@
 """Classify Periskope Messages with Claude: one of six categories, plus severity, sentiment and a summary.
 
 The category then drives what the app does: a new enquiry from an unknown number creates a CRM Lead, and
-linked messages are shown in the CRM timeline. Nothing else in the CRM is changed here.
+linked messages are shown in the CRM timeline. In a group chat the same answer lists the tasks the
+message hands out, and chat_tasks turns them into CRM Tasks.
 """
 
 import json
@@ -12,7 +13,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime
 
-from periskope_connector import actions, tags
+from periskope_connector import actions, chat_tasks, tags
 from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
 from periskope_connector.setup_status import feature_on
@@ -26,6 +27,7 @@ BATCH_SIZE = 20  # messages per run of the 5-minute job
 GROUP_MIN_CONTEXT = 15
 DEFAULT_CONTEXT = 5
 DEFAULT_MAX_TOKENS = 400  # room for the JSON answer; raise for reasoning models
+GROUP_MAX_TOKENS = 1200  # a group message can hand out several tasks
 MAX_EXAMPLES = 30  # corrected messages fed back into the prompt
 MAX_EXAMPLES_CHARS = 2400  # ... and their total length cap, so the prompt stays cacheable
 
@@ -99,12 +101,28 @@ CUSTOMER_NAME_NOTE = (
 	"sign-off). Never the rep's name, never a company, and an empty string when they have not said it."
 )
 
+# Added to every prompt too, so edited instructions still list the tasks (see chat_tasks.py).
+TASKS_NOTE = (
+	"tasks lists the work this message hands to people in a group chat, one item per job: a "
+	"colleague telling others what to do (numbered points, @mentions, 'need to', 'follow up', "
+	"'send'), or a customer in a customer group asking the team for something specific. An empty list "
+	"for a 1-to-1 chat, for a message that only reports, asks a question or chats, and for work "
+	"that is already done.\n"
+	"For each item: task is a short instruction in English (at most 120 characters) with the "
+	"quantities and items from the message; customer is the customer company the job is for, as "
+	"written but without brand, product, place or person names ('Right Way - Tiger shade' gives "
+	"'Right Way'), or an empty string; assignee_phone is the phone number @mentioned for that job "
+	"(an @mention applies to every point after it until the next @mention), or an empty string when "
+	"nobody is mentioned; due_date is YYYY-MM-DD when the message gives a day ('today', 'by "
+	"Friday'), worked out from the current time, else an empty string."
+)
+
 
 def build_system_prompt(settings=None) -> str:
 	instructions = (getattr(settings, "ai_instructions", None) or "").strip()
 	if not instructions:
 		instructions = DEFAULT_INSTRUCTIONS.strip()
-	prompt = f"{instructions}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}"
+	prompt = f"{instructions}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}\n\n{TASKS_NOTE}"
 
 	business = (getattr(settings, "ai_business_context", None) or "").strip()
 	if business:
@@ -161,6 +179,20 @@ def build_schema() -> dict:
 			"customer_name": text,
 			"contact_name": text,
 			"language": text,
+			"tasks": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"customer": text,
+						"task": text,
+						"assignee_phone": text,
+						"due_date": text,
+					},
+					"required": ["customer", "task", "assignee_phone", "due_date"],
+					"additionalProperties": False,
+				},
+			},
 		},
 		"required": [
 			"category",
@@ -176,6 +208,7 @@ def build_schema() -> dict:
 			"customer_name",
 			"contact_name",
 			"language",
+			"tasks",
 		],
 		"additionalProperties": False,
 	}
@@ -325,7 +358,7 @@ def is_claude(model: str) -> bool:
 JSON_REPLY_INSTRUCTIONS = """
 
 Reply with ONLY one JSON object and nothing else (no explanation, no code fences), with exactly these keys:
-category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string)."""
+category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string), tasks (list of objects with customer, task, assignee_phone and due_date, all strings)."""
 
 
 def json_reply_instructions() -> str:
@@ -378,7 +411,7 @@ def ping(settings) -> str:
 OPTIMIZER_SYSTEM_PROMPT = """You are an expert prompt engineer. You improve the instructions given to an AI that classifies WhatsApp messages between a company's sales reps and customers, for a sales CRM.
 
 Rewrite the instructions you are given so the AI follows them more reliably. Rules:
-- Keep the same purpose, and keep every field the AI must fill in: category, sentiment, severity, summary, confidence, needs_reply, follow_up_on, mentioned_products, mentioned_amount, competitor_name, customer_name, contact_name, language.
+- Keep the same purpose, and keep every field the AI must fill in: category, sentiment, severity, summary, confidence, needs_reply, follow_up_on, mentioned_products, mentioned_amount, competitor_name, customer_name, contact_name, language, tasks.
 - Keep the category names exactly as they are written under Categories, and their meanings. Never invent other categories. If the instructions do not list the categories, leave that out: the list is added separately.
 - Be specific and unambiguous. Remove repetition and contradictions. Add short rules for edge cases that are missing, such as mixed-language messages, group chats, messages from the rep, and very short messages.
 - Do not make it much longer than it needs to be.
@@ -462,7 +495,7 @@ def call_claude(settings, doc) -> dict:
 		"model": model,
 		# The reply budget. JSON answers fit well below this; reasoning models (Sonnet/Opus 5.5)
 		# need more room and get it by raising the setting.
-		"max_tokens": max_tokens(settings),
+		"max_tokens": max(max_tokens(settings), GROUP_MAX_TOKENS) if doc.is_group else max_tokens(settings),
 		"messages": [{"role": "user", "content": build_user_message(doc, history, get_quoted_body(doc))}],
 	}
 	if is_claude(model):
@@ -523,6 +556,7 @@ def apply_result(doc, result: dict):
 	save_as_system(doc)
 	link_message(doc.name)
 	actions.run(doc.name)
+	chat_tasks.from_message(doc.name, result.get("tasks"))
 	# Keep the CRM record's summary, notes and follow-ups current (throttled per chat).
 	from periskope_connector.ai import analyse
 

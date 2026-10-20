@@ -6,7 +6,7 @@ that are still active (the last hour), and:
 2. asks the learner for changes to tags, keyword rules, SLA levels and settings (learner.py),
 3. emails the pending suggestions to the managers in one message (suggestions.send_digest).
 
-It reads and writes only suggestions and suggested knowledge entries. Applying anything needs a
+It writes knowledge entries (applied at once) and suggestions. A change to the configuration needs a
 manager's approval. Each pass is a Periskope Agent Run row, which the Health tab and Flow read.
 """
 
