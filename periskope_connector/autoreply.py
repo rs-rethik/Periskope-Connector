@@ -170,10 +170,29 @@ def run_due() -> int:
 	return handled
 
 
+def _guarded(title: str, fn):
+	"""Run fn; on an error undo only its own writes and log it. Used for the work that follows a
+	send: the customer already has the message, so the row must still record it."""
+	frappe.db.savepoint("periskope_auto_reply_step")
+	try:
+		return fn()
+	except Exception:
+		frappe.db.rollback(save_point="periskope_auto_reply_step")
+		health.log_once(title)
+		return None
+
+
 def _follow_up(row, pending: list, rep: str | None):
 	"""The rep must pick this up: a reminder (so the SLA ladder follows), a task and a bell. On a
 	chat with a lead or deal these are a CRM Task and a CRM notification, so the rep sees them in
-	the CRM; otherwise a desk ToDo and notification."""
+	the CRM; otherwise a desk ToDo and notification. Never raises (for example a site's ToDo server
+	script failing): returns None then."""
+	return _guarded(
+		"Periskope: could not create the auto reply follow-up", lambda: _open_follow_up(row, pending, rep)
+	)
+
+
+def _open_follow_up(row, pending: list, rep: str | None):
 	cfg = reminders.get_config()
 	now = now_datetime()
 	reminder = reminders._open_reminder(row.chat_id) or reminders.create_reminder(
@@ -300,9 +319,18 @@ def process(name: str) -> str:
 		"sources": ", ".join(result["used_sources"]),
 		"sent_on": now_datetime(),
 	}
-	if not confident:
-		values["follow_up"] = _follow_up(row, pending, rep)
+	# The message is out: record it first, so nothing after this can turn the row into Failed.
 	frappe.db.set_value("Periskope Auto Reply", name, values)
+	if not confident:
+		frappe.db.set_value("Periskope Auto Reply", name, "follow_up", _follow_up(row, pending, rep))
+	_guarded(
+		"Periskope: could not update the CRM after an auto reply",
+		lambda: _after_send(row, text, confident, customer_text, result["used_sources"]),
+	)
+	return status
+
+
+def _after_send(row, text: str, confident: bool, customer_text: str, used_sources: list):
 	# What the rep sees on the lead or deal: the reply (or that a rep must answer) on the timeline,
 	# and soon after an updated summary, notes and follow-up (ai/analyse.py).
 	if confident:
@@ -315,9 +343,8 @@ def process(name: str) -> str:
 			).format(customer_text[:500]),
 		)
 	analyse.queue(row.chat_id)
-	for source in result["used_sources"]:
+	for source in used_sources:
 		if source.startswith("KB:"):
 			frappe.db.set_value(
 				"Periskope Knowledge Entry", source[3:], "last_used", now_datetime(), update_modified=False
 			)
-	return status
