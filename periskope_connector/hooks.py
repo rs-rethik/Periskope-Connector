@@ -49,6 +49,10 @@ doc_events = {
 	},
 }
 
+# The Knowledge Base canvas, on every desk page: the workspace opens it as a dialog
+# (periskope.open_knowledge), and the desk page periskope-knowledge uses it too.
+app_include_js = ["/assets/periskope_connector/js/periskope_knowledge.js"]
+
 # The Flow tab of the settings page draws the pipeline and edits its steps.
 doctype_js = {"Periskope Settings": "public/js/periskope_flow.js"}
 
