@@ -63,6 +63,7 @@
   "column_ai_options",
   "context_messages",
   "classify_group_chats",
+  "create_chat_tasks",
   "ai_max_tokens",
   "min_length",
   "section_voice",
@@ -396,6 +397,14 @@
    "fieldname": "classify_group_chats",
    "fieldtype": "Check",
    "label": "Also Tag Group Chats"
+  },
+  {
+   "default": "1",
+   "depends_on": "classify_group_chats",
+   "description": "When a group message hands out work (\"@Vijay send 1300 kg to GST Sourcing today\"), create a CRM Task for each job, on the customer's deal or lead and assigned to the person mentioned.",
+   "fieldname": "create_chat_tasks",
+   "fieldtype": "Check",
+   "label": "Create Tasks from Group Messages"
   },
   {
    "default": "400",

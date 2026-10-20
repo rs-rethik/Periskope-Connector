@@ -390,6 +390,17 @@ Reps work only in **/crm**. On each lead or deal:
 
 No ids, confidence figures or raw data appear on these records.
 
+#### Tasks handed out in group chats
+
+When a group message gives people work ("@Gowtham finish the GSM roll return for Arrow Export today, @Vijay send 1300 kg Mirror DL 160 to GST Sourcing"), the AI lists each job while it tags the message, and each one becomes a **CRM Task**:
+
+- **On the customer's record**: the organization named for that job, matched loosely, so "GST Sourcing" finds *GST SORUCING* and "Arrow Export" finds *ARROW EXPORTS*. An exact name beats a longer one that contains it (*BALU EXPORTS* before *BALU EXPORTS - PALLADAM*). The open deal comes first, then the lead; of several deals, the one the assignee owns.
+- **Assigned to** the person @mentioned for that job, found by the mobile number on their User; else the record's owner; else the sender. An @mention applies to every point after it until the next one. The assignee gets it in their CRM assignments.
+- **Due** on the day the message gives, at the end of the working day; with no day, today (tomorrow after working hours).
+- **Description**: who gave the job, in which group, and the original message.
+
+A job whose customer is not in the CRM, or has more than one open deal, is still created and says what to check. A message makes its tasks once; re-tagging it does not repeat them. It needs **Also Tag Group Chats**, and it can be switched off with **Create Tasks from Group Messages** (Settings, AI options). In test mode group chats are a dry run: the Agent Action log shows the tasks that would have been created.
+
 #### Auto reply
 
 After the **Reply Delay** (plus a small random variation) since the customer's last message:

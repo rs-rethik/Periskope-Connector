@@ -587,7 +587,12 @@
 					box(
 						__("Controls"),
 						switchRow(frm, __("Tag new messages with AI"), "enable_classification") +
-							switchRow(frm, __("Also tag group chats"), "classify_group_chats")
+							switchRow(frm, __("Also tag group chats"), "classify_group_chats") +
+							switchRow(
+								frm,
+								__("Create tasks from group messages"),
+								"create_chat_tasks"
+							)
 					) +
 					`<div class="pf-btns">${btn(
 						__("Test AI Connection"),
