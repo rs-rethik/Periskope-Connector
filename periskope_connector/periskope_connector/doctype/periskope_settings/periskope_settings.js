@@ -23,28 +23,6 @@ frappe.ui.form.on("Periskope Settings", {
 		);
 		frm.add_custom_button(__("Test AI Connection"), () => test_ai(frm), __("Actions"));
 		frm.add_custom_button(
-			__("Check Reply Reminders Now"),
-			() => check_reminders(frm),
-			__("Actions")
-		);
-		frm.add_custom_button(
-			__("Reset AI Instructions"),
-			() =>
-				frappe.confirm(__("Replace the AI instructions with the original text?"), () =>
-					frappe.call({
-						method: "periskope_connector.api.settings.get_default_ai_instructions",
-						callback(r) {
-							frm.set_value("ai_instructions", r.message);
-							frappe.show_alert({
-								message: __("Reset. Save to keep it."),
-								indicator: "green",
-							});
-						},
-					})
-				),
-			__("Actions")
-		);
-		frm.add_custom_button(
 			__("Copy Webhook URL"),
 			() => frappe.utils.copy_to_clipboard(frm.doc.webhook_url),
 			__("Actions")
@@ -62,104 +40,6 @@ frappe.ui.form.on("Periskope Settings", {
 		test_ai(frm);
 	},
 });
-
-frappe.ui.form.on("Periskope Settings", {
-	// Button on the AI Assistant tab: one pass of the learning agent now, instead of waiting 15 minutes.
-	run_agent_now(frm) {
-		with_saved(frm, () => {
-			frappe.call({
-				method: "periskope_connector.agent.run_now",
-				freeze: true,
-				freeze_message: __("The agent is reading new conversations..."),
-				callback(r) {
-					const out = r.message || {};
-					frappe.msgprint(
-						out.skipped
-							? __("Skipped: {0}", [out.skipped])
-							: __(
-									"Read {0} message(s), learned {1} thing(s), {2} suggestion(s) now waiting for approval.",
-									[out.messages || 0, out.knowledge || 0, out.suggestions || 0]
-							  )
-					);
-				},
-			});
-		});
-	},
-
-	// Button under "Instructions for the AI". Nothing changes until the user accepts the result.
-	optimize_instructions(frm) {
-		const ask = new frappe.ui.Dialog({
-			title: __("Improve Instructions with AI"),
-			fields: [
-				{
-					fieldtype: "HTML",
-					options: `<p class="text-muted">${__(
-						"Your configured AI rewrites the instructions to be clearer and more reliable. You review the result before anything is saved."
-					)}</p>`,
-				},
-				{
-					fieldname: "goal",
-					fieldtype: "Small Text",
-					label: __("What should be better? (optional)"),
-				},
-			],
-			primary_action_label: __("Improve"),
-			primary_action(values) {
-				ask.hide();
-				with_saved(frm, () => {
-					frappe.call({
-						method: "periskope_connector.api.settings.optimize_ai_instructions",
-						args: {
-							instructions: frm.doc.ai_instructions || "",
-							goal: values.goal || "",
-						},
-						freeze: true,
-						freeze_message: __("Improving the instructions..."),
-						callback(r) {
-							if (r.message) review_instructions(frm, r.message);
-						},
-					});
-				});
-			},
-		});
-		ask.show();
-	},
-});
-
-function review_instructions(frm, improved) {
-	const review = new frappe.ui.Dialog({
-		title: __("Review the Improved Instructions"),
-		size: "large",
-		fields: [
-			{
-				fieldtype: "HTML",
-				options: `<p class="text-muted">${__(
-					"You can edit this text. Your current instructions stay as they are unless you click Use This Version, and you still need to Save."
-				)}</p>`,
-			},
-			{
-				fieldname: "improved",
-				fieldtype: "Long Text",
-				label: __("Improved Instructions"),
-				default: improved,
-			},
-		],
-		primary_action_label: __("Use This Version"),
-		primary_action(values) {
-			review.hide();
-			frm.set_value("ai_instructions", values.improved);
-			frappe.show_alert({
-				message: __("Applied. Click Save to keep it."),
-				indicator: "green",
-			});
-		},
-		secondary_action_label: __("Keep My Current Text"),
-		secondary_action() {
-			review.hide();
-		},
-	});
-	review.show();
-}
 
 // Save first so the key/URL typed in the form is what gets tested.
 function with_saved(frm, fn) {
@@ -233,40 +113,6 @@ function show_webhooks(result) {
 		title: __("Periskope webhook"),
 		message: lines.map((l) => `<p>${frappe.utils.escape_html(l)}</p>`).join(""),
 		indicator: "green",
-	});
-}
-
-function check_reminders(frm) {
-	with_saved(frm, () => {
-		frappe.call({
-			method: "periskope_connector.api.settings.run_reminder_check",
-			freeze: true,
-			freeze_message: __("Checking chats..."),
-			callback(r) {
-				const s = r.message || {};
-				if (s.skipped) {
-					frappe.msgprint({
-						title: __("Nothing checked"),
-						message: __("Skipped: {0}", [s.skipped]),
-						indicator: "orange",
-					});
-					return;
-				}
-				let message = __(
-					"Reps notified: {0}<br>ToDos + managers emailed: {1}<br>MD emailed: {2}<br>Closed (rep replied): {3}",
-					[s.notified, s.escalated, s.md_emailed, s.closed]
-				);
-				if (s.errors) {
-					message +=
-						"<br>" + __("Chats that failed: {0}. See the Error Log.", [s.errors]);
-				}
-				frappe.msgprint({
-					title: __("Reply reminders checked"),
-					message: message,
-					indicator: s.errors ? "orange" : "green",
-				});
-			},
-		});
 	});
 }
 
@@ -362,13 +208,11 @@ function render_setup(frm) {
 						</div>`
 				)
 				.join("");
-			const headline = status.done
-				? __("Setup is complete. The AI agent is running.")
-				: status.ready
-				? __("Setup is done. Switch on Enable AI Agent in step 4 to start.")
-				: __(
-						"Finish the steps below; the AI agent can be switched on once steps 1 to 3 are done."
-				  );
+			const headline = status.ready
+				? __(
+						"The AI agent is running: it reads every message, image and document, creates tasks, escalates and keeps the CRM up to date."
+				  )
+				: __("Finish steps 1 to 3; the AI agent starts on its own when they are done.");
 			field.$wrapper.html(`<p>${e(headline)}</p>${rows}`);
 			frm.dashboard.clear_headline();
 			if (status.test_mode) {

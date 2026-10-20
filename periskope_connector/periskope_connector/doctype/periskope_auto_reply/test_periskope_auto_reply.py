@@ -15,7 +15,7 @@ from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
 CHAT = "919600000777@c.us"
-HOLDING = "Holding text for the test."
+HOLDING = autoreply.DEFAULT_HOLDING
 
 
 def _utc(minutes: float = 0) -> str:
@@ -36,17 +36,7 @@ class TestAutoReply(FrappeTestCase):
 		ready = patch.object(autoreply.assistant, "readiness", return_value=(True, ""))
 		ready.start()
 		self.addCleanup(ready.stop)
-		settings(
-			enable_agent=1,
-			enable_auto_reply=1,
-			reply_delay_minutes=3,
-			reply_delay_jitter_percent=0,
-			reply_min_confidence=80,
-			reply_working_hours_only=0,
-			reply_max_per_chat_per_day=3,
-			holding_message=HOLDING,
-			enable_classification=0,
-		)
+		settings(enabled=1, enable_auto_reply=1, reply_delay_minutes=3)
 		# Only this test's replies may fall due: the site's own waiting ones are put aside (rolled back).
 		frappe.db.delete("Periskope Auto Reply", {"status": "Waiting"})
 		frappe.db.delete("Periskope Auto Reply", {"chat_id": CHAT})
@@ -92,20 +82,23 @@ class TestAutoReply(FrappeTestCase):
 		self.assertEqual(autoreply.run_due(), 0)
 		self.send.assert_not_called()
 
-	def test_a_new_message_moves_the_timer_and_keeps_one_row(self):
+	def test_a_new_message_joins_the_waiting_reply_without_moving_it(self):
+		# a customer who keeps writing is still answered in time
 		self._incoming("Price of dyed cotton?")
-		frappe.db.set_value(
-			"Periskope Auto Reply", self._row().name, "due_on", now_datetime() + timedelta(seconds=10)
-		)
-		self._incoming("and the minimum quantity?")
+		soon = now_datetime() + timedelta(seconds=10)
+		frappe.db.set_value("Periskope Auto Reply", self._row().name, "due_on", soon)
+		second = self._incoming("and the minimum quantity?")
 		self.assertEqual(frappe.db.count("Periskope Auto Reply", {"chat_id": CHAT}), 1)
-		self.assertGreater((self._row().due_on - now_datetime()).total_seconds(), 150)
+		row = frappe.get_doc("Periskope Auto Reply", self._row().name)
+		self.assertLess((row.due_on - now_datetime()).total_seconds(), 15)
+		self.assertEqual(row.last_customer_message, second)
 
-	def test_random_variation_stays_within_the_setting(self):
-		cfg = SimpleNamespace(reply_delay_minutes=3, reply_delay_jitter_percent=20)
-		values = [autoreply.delay_for(cfg).total_seconds() for _i in range(200)]
-		self.assertTrue(all(180 <= v <= 216 for v in values))
-		self.assertGreater(max(values) - min(values), 5)
+	def test_the_wait_is_the_setting_with_a_default(self):
+		self.assertEqual(autoreply.delay_for(SimpleNamespace(reply_delay_minutes=7)), timedelta(minutes=7))
+		self.assertEqual(
+			autoreply.delay_for(SimpleNamespace(reply_delay_minutes=None)),
+			timedelta(minutes=autoreply.DEFAULT_DELAY_MINUTES),
+		)
 
 	def test_a_rep_reply_cancels(self):
 		self._incoming()
@@ -129,7 +122,7 @@ class TestAutoReply(FrappeTestCase):
 		self._incoming(minutes_ago=300)
 		self.assertIsNone(self._row())
 
-	def test_group_chats_are_skipped_by_default(self):
+	def test_group_chats_are_never_answered(self):
 		self._incoming()
 		frappe.db.delete("Periskope Auto Reply", {"chat_id": CHAT})
 		self.n += 1
@@ -308,10 +301,15 @@ class TestAutoReply(FrappeTestCase):
 		self.assertFalse(row.follow_up)
 
 	def test_daily_limit_per_chat(self):
-		settings(reply_max_per_chat_per_day=1)
-		frappe.get_doc(
-			{"doctype": "Periskope Auto Reply", "chat_id": CHAT, "status": "Sent", "sent_on": now_datetime()}
-		).insert()
+		for _i in range(autoreply.MAX_PER_CHAT_PER_DAY):
+			frappe.get_doc(
+				{
+					"doctype": "Periskope Auto Reply",
+					"chat_id": CHAT,
+					"status": "Sent",
+					"sent_on": now_datetime(),
+				}
+			).insert()
 		self._incoming()
 		frappe.db.set_value(
 			"Periskope Auto Reply",
@@ -395,17 +393,7 @@ class TestNoBudgetNoAI(FrappeTestCase):
 		self.addCleanup(patcher.stop)
 		self.send = patch.object(autoreply, "send_message").start()
 		self.addCleanup(patch.stopall)
-		settings(
-			enable_agent=1,
-			enable_auto_reply=1,
-			reply_delay_minutes=0,
-			reply_delay_jitter_percent=0,
-			reply_working_hours_only=0,
-			reply_max_per_chat_per_day=5,
-			holding_message=HOLDING,
-			enable_classification=0,
-			approver_emails="boss@example.com",
-		)
+		settings(enabled=1, enable_auto_reply=1, reply_delay_minutes=0, approver_emails="boss@example.com")
 		frappe.cache().delete_value("periskope_alert:not_ready:budget")
 		self.addCleanup(frappe.cache().delete_value, "periskope_alert:not_ready:budget")
 

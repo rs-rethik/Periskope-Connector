@@ -111,7 +111,7 @@ def run(message: str) -> str:
 	from periskope_connector import health, mirror
 	from periskope_connector.ai import assistant
 	from periskope_connector.autoreply import on_message
-	from periskope_connector.setup_status import feature_on
+	from periskope_connector.setup_status import agent_on
 
 	doc = frappe.get_doc("Periskope Message", message)
 	if doc.transcript or doc.message_type != "audio" or not doc.media_path or not configured():
@@ -129,11 +129,15 @@ def run(message: str) -> str:
 	if not text:
 		return ""
 	values = {"transcript": text}
-	if doc.direction == "Incoming" and feature_on("enable_classification"):
+	if doc.direction == "Incoming" and agent_on():
 		values.update(classification_status="Pending", classification_error="", classification_attempts=0)
 	frappe.db.set_value("Periskope Message", message, values, update_modified=False)
 	doc.transcript = text
 	mirror.upsert(message)
+	if values.get("classification_status") == "Pending":
+		from periskope_connector.ai import classifier
+
+		classifier.queue(message)
 	on_message(doc)  # a voice note that asks something can now be answered
 	frappe.db.commit()
 	return text

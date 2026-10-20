@@ -18,15 +18,13 @@ class PeriskopeSettings(Document):
 		self.set_onload("ai_providers", available_providers())
 
 	def validate(self):
-		from periskope_connector.ai.classifier import DEFAULT_INSTRUCTIONS, PROVIDER_API, available_providers
+		from periskope_connector.ai.classifier import PROVIDER_API, available_providers
 
 		if (self.ai_provider or PROVIDER_API) not in available_providers():
 			# Jarvis was chosen and has since been uninstalled.
 			self.ai_provider = PROVIDER_API
 
 		self.base_url = (self.base_url or "").strip().rstrip("/")
-		if not (self.ai_instructions or "").strip():
-			self.ai_instructions = DEFAULT_INSTRUCTIONS
 		self.validate_reminders()
 		self.validate_assistant()
 
@@ -34,25 +32,19 @@ class PeriskopeSettings(Document):
 		from frappe.utils import validate_email_address
 
 		if flt(self.reply_delay_minutes) < 0 or flt(self.reply_delay_minutes) > 120:
-			frappe.throw(_("Reply Delay must be between 0 and 120 minutes"))
-		if not 0 <= (self.reply_delay_jitter_percent or 0) <= 100:
-			frappe.throw(_("Random Variation must be between 0 and 100 percent"))
-		if not 0 <= flt(self.reply_min_confidence) <= 100:
-			frappe.throw(_("Minimum Confidence must be between 0 and 100"))
+			frappe.throw(_("The reply time must be between 0 and 120 minutes"))
 		emails = [e.strip() for e in re.split(r"[,\n;]", self.approver_emails or "") if e.strip()]
 		for email in emails:
 			if not validate_email_address(email):
 				frappe.throw(_("{0} is not a valid email address").format(email))
 		self.approver_emails = "\n".join(emails)
-		if self.enable_auto_reply and not (self.holding_message or "").strip():
-			frappe.throw(_("Set a Holding Message before switching Auto Reply on"))
-		if self.enable_agent and self.has_value_changed("enable_agent"):
+		if self.enable_auto_reply and self.has_value_changed("enable_auto_reply"):
 			from periskope_connector.setup_status import missing_before_agent
 
 			missing = missing_before_agent(self)
 			if missing:
 				frappe.throw(
-					_("Finish the setup before switching the AI Agent on:")
+					_("Finish the setup before the AI replies to customers:")
 					+ "<br>"
 					+ "<br>".join(frappe.utils.escape_html(m) for m in missing),
 					title=_("Setup not finished"),
@@ -75,11 +67,9 @@ class PeriskopeSettings(Document):
 				frappe.throw(_("{0} is not a valid email address").format(email))
 		self.alert_emails = ", ".join(emails)
 
-		if self.enable_reply_reminders and not emails:
+		if self.enabled and not emails:
 			frappe.msgprint(
-				_(
-					"No Manager Emails are set, so reminders will create ToDos but managers will not be emailed."
-				),
+				_("No Manager Emails are set, so nobody is emailed when the AI escalates."),
 				indicator="orange",
 			)
 		self.webhook_url = webhook_url()

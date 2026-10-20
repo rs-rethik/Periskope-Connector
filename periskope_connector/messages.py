@@ -6,13 +6,13 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
+from periskope_connector import attachments
 from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
-from periskope_connector.keywords import check_message
 from periskope_connector.linking import ensure_group, link_message, number_key
 from periskope_connector.outbound import match_sent
-from periskope_connector.setup_status import feature_on
+from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason, skip_fields
 
@@ -90,16 +90,26 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# A group is saved once, with its name and type, so its messages can be linked to the CRM.
 	chat_name = (ensure_group(chat_id, org_phone).group_name or "") if is_group else ""
 
-	classify = feature_on("enable_classification")
-	# A text, or an attachment with a caption, is tagged; a voice note waits for its transcript.
+	classify = agent_on()
+	# A text, an image or PDF the AI can read, or an attachment with a caption is analysed; a voice
+	# note waits for its transcript.
 	kind = normalise_type(data.get("message_type"))
-	has_words = kind == "text" or (
-		kind in ("image", "document", "video") and bool((data.get("body") or "").strip())
+	body = (data.get("body") or "").strip()
+	readable_file = attachments.readable(
+		frappe._dict(
+			message_type=kind,
+			media_path=media.get("path"),
+			media_mimetype=media.get("mimetype"),
+			media_size=media.get("size"),
+		)
 	)
+	has_words = kind == "text" or (kind in ("image", "document", "video") and bool(body))
 	if from_me:
 		skip = "Sent by the rep"  # only the customer's messages are classified
+	elif readable_file and not body:
+		skip = None
 	else:
-		skip = "Not a text message" if not has_words else analysis_skip_reason(data.get("body"))
+		skip = "Not a text message" if not (has_words or readable_file) else analysis_skip_reason(body)
 
 	# Our own assistant's message arrives through the webhook like any other from our number.
 	agent_reply = match_sent(chat_id, data) if from_me else ""
@@ -109,9 +119,9 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			"doctype": "Periskope Message",
 			"message_id": message_id,
 			"agent_reply": agent_reply,
-			# Only the customer's text chats are analysed, and tiny ones ('ok', 'done', emoji) are not
+			# Only the customer's messages are analysed, and tiny ones ('ok', 'done', emoji) are not
 			# worth the tokens: they are marked skipped right away and never sent to the AI. The rest
-			# wait for the scheduled job (ai/classifier.py, every 5 minutes).
+			# are analysed at once (ai/classifier.queue; the 5-minute job catches up on any missed).
 			**(
 				skip_fields(skip)
 				if (classify and skip)
@@ -165,12 +175,15 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# found the customer name in the text.
 	status = link_message(doc.name)
 
-	# An unknown 1-to-1 number joins the contact queue, and the keyword rules run over the text.
-	# Both are guarded: neither may ever break the saving of a message.
+	# An unknown 1-to-1 number joins the contact queue (guarded: it may never break the saving).
 	if status == "No Match":
 		ensure_contact(doc)
-	if not from_me and (doc.body or "").strip():
-		check_message(doc.name)
+	if attachments.has_file(doc):
+		attachments.queue(doc.name)
+	if doc.classification_status == "Pending":
+		from periskope_connector.ai import classifier
+
+		classifier.queue(doc.name)
 	autoreply_on_message(doc)
 	if not from_me and doc.message_type == "audio":
 		from periskope_connector.ai import transcribe
@@ -231,7 +244,7 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		values.update(is_deleted=1, deleted_on=frappe.utils.now_datetime())
 	elif not deleted and data.get("body") is not None and (data.get("body") or "") != (old.body or ""):
 		values.update(previous_body=old.body, body=data.get("body"), edited_on=frappe.utils.now_datetime())
-		if old.direction == "Incoming" and feature_on("enable_classification"):
+		if old.direction == "Incoming" and agent_on():
 			values.update(classification_status="Pending", classification_attempts=0)
 	if not values:
 		return name
@@ -239,6 +252,10 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	from periskope_connector import mirror
 
 	mirror.upsert(name)
+	if values.get("classification_status") == "Pending":
+		from periskope_connector.ai import classifier
+
+		classifier.queue(name)
 	return name
 
 

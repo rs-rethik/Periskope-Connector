@@ -39,6 +39,10 @@ class TestSuggestion(FrappeTestCase):
 		self.assertIsNone(_make(payload={"tag_name": "bulk_order", "description": "bulk"}))
 		self.assertTrue(_make(payload={"tag_name": "other_tag", "description": "x"}))
 
+	def test_the_rule_kinds_are_gone(self):
+		for kind in ("Keyword Rule", "SLA Level", "Lead Rule"):
+			self.assertIsNone(_make(kind, "Add", payload={}), kind)
+
 	def test_payload_is_limited_to_known_fields_and_settings_to_the_allow_list(self):
 		doc = _make(payload={"tag_name": "t_one", "description": "d", "api_key": "x"})
 		self.assertNotIn("api_key", json.loads(doc.payload))
@@ -46,12 +50,11 @@ class TestSuggestion(FrappeTestCase):
 		self.assertIsNone(_make("Setting", "Modify", target="alert_emails", payload={"value": "a@b.c"}))
 		self.assertTrue(_make("Setting", "Modify", target="reply_delay_minutes", payload={"value": 5}))
 
-	def test_approve_adds_a_tag_with_the_usual_actions(self):
+	def test_approve_adds_a_tag(self):
 		doc = _make(payload={"tag_name": "bulk_order", "description": "bulk orders"})
 		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
 		tag = frappe.get_doc("Periskope Tag", "bulk_order")
 		self.assertTrue(tag.active)
-		self.assertIn("Email Alert", [a.action for a in tag.actions])
 		self.assertEqual(frappe.db.get_value("Periskope Suggestion", doc.name, "status"), "Applied")
 
 	def test_modify_and_remove_a_tag(self):
@@ -62,65 +65,6 @@ class TestSuggestion(FrappeTestCase):
 		doc = _make("Tag", "Remove", target=tag, summary="Retire the tag")
 		suggestions.approve(doc, "Desk", "Administrator")
 		self.assertEqual(frappe.db.get_value("Periskope Tag", tag, "active"), 0)
-
-	def test_keyword_rule_add_modify_remove(self):
-		doc = _make("Keyword Rule", "Add", payload={"rule_name": "Legal", "keywords": "lawyer, notice"})
-		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {
-			r.rule_name: r
-			for r in frappe.get_all(
-				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
-			)
-		}
-		self.assertTrue(rows["Legal"].enabled)
-		doc = _make("Keyword Rule", "Modify", target="Legal", payload={"keywords": "lawyer, notice, court"})
-		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {
-			r.rule_name: r
-			for r in frappe.get_all(
-				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
-			)
-		}
-		self.assertIn("court", rows["Legal"].keywords)
-		doc = _make("Keyword Rule", "Remove", target="Legal", summary="Switch off Legal")
-		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {
-			r.rule_name: r
-			for r in frappe.get_all(
-				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
-			)
-		}
-		self.assertFalse(rows["Legal"].enabled)
-
-	def test_the_agent_cannot_choose_who_is_emailed(self):
-		# Seen with the real AI: it proposed recipients "managers", which broke the alert email.
-		settings(alert_emails="alerts@example.com")
-		doc = _make(
-			"Keyword Rule", "Add", payload={"rule_name": "Moq", "keywords": "moq", "recipients": "managers"}
-		)
-		self.assertNotIn("recipients", json.loads(doc.payload))
-		suggestions.approve(doc, "Desk", "Administrator")
-		rows = {
-			r.rule_name: r
-			for r in frappe.get_all(
-				"Periskope Keyword Rule", fields=["rule_name", "keywords", "enabled", "recipients"]
-			)
-		}
-		self.assertEqual(rows["Moq"].recipients, "alerts@example.com")
-
-	def test_sla_level_add_and_remove(self):
-		before = frappe.db.count("Periskope SLA Level")
-		doc = _make(
-			"SLA Level",
-			"Add",
-			payload={"wait_minutes": 45, "min_severity": "Medium", "action": "Notify Rep"},
-		)
-		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
-		self.assertEqual(frappe.db.count("Periskope SLA Level"), before + 1)
-		new = frappe.get_all("Periskope SLA Level", filters={"wait_minutes": 45}, fields=["name"])[0]
-		doc = _make("SLA Level", "Remove", target=new.name, summary="Drop 45 minute step")
-		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Applied")
-		self.assertEqual(frappe.db.count("Periskope SLA Level"), before)
 
 	def test_a_change_that_cannot_be_applied_is_kept_as_failed(self):
 		doc = _make("Tag", "Modify", target="no_such_tag", payload={"description": "x"})
@@ -254,23 +198,6 @@ class TestNewKinds(FrappeTestCase):
 		self.assertEqual(
 			frappe.db.get_value("Periskope Contact", {"phone": "919600000777"}, "status"), "Ignored (Vendor)"
 		)
-
-	def test_a_lead_rule_is_switched_on_and_off(self):
-		def has_rule():
-			return any(a.action == "Create Lead" for a in frappe.get_doc("Periskope Tag", "general").actions)
-
-		suggestions.approve(
-			_make("Lead Rule", "Add", target="general", payload={"create_lead": True}),
-			"Desk",
-			"Administrator",
-		)
-		self.assertTrue(has_rule())
-		suggestions.approve(
-			_make("Lead Rule", "Remove", target="general", summary="Stop leads", payload={}),
-			"Desk",
-			"Administrator",
-		)
-		self.assertFalse(has_rule())
 
 	def test_the_learner_only_points_at_what_exists(self):
 		from periskope_connector import learner

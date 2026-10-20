@@ -1,8 +1,8 @@
-"""Classify Periskope Messages with Claude: one of six categories, plus severity, sentiment and a summary.
+"""Analyse Periskope Messages with Claude: a tag, severity, sentiment and a summary, and what to do next.
 
-The category then drives what the app does: a new enquiry from an unknown number creates a CRM Lead, and
-linked messages are shown in the CRM timeline. In a group chat the same answer lists the tasks the
-message hands out, and chat_tasks turns them into CRM Tasks.
+One answer per message also carries the AI's decisions (escalate, create a lead, show it on the
+timeline, the tasks it hands out, what an attached image or document shows), and decisions.py carries
+them out. No rule on a tag decides anything.
 """
 
 import json
@@ -11,22 +11,24 @@ import time
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_datetime, now_datetime
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
-from periskope_connector import actions, chat_tasks, tags
+from periskope_connector import attachments, decisions, tags
 from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
-from periskope_connector.setup_status import feature_on
+from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system, save_as_system
 from periskope_connector.text_rules import analysis_skip_reason, readable_text, skip_fields
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
 MAX_ATTEMPTS = 3
-BATCH_SIZE = 20  # messages per run of the 5-minute job
+BATCH_SIZE = 20  # messages per run of the 5-minute catch-up job
+QUEUED_GRACE_MINUTES = 3  # the catch-up leaves a message this long to its own job
 GROUP_MIN_CONTEXT = 15
-DEFAULT_CONTEXT = 5
-DEFAULT_MAX_TOKENS = 400  # room for the JSON answer; raise for reasoning models
+CONTEXT = 5  # earlier messages given with a 1-to-1 message
+MIN_LENGTH = 2  # shorter texts are never sent to the AI
+MAX_TOKENS = 800  # room for the JSON answer and its decisions
 GROUP_MAX_TOKENS = 1200  # a group message can hand out several tasks
 MAX_EXAMPLES = 30  # corrected messages fed back into the prompt
 MAX_EXAMPLES_CHARS = 2400  # ... and their total length cap, so the prompt stays cacheable
@@ -36,10 +38,9 @@ PROVIDER_JARVIS = "Jarvis"
 
 SENTIMENTS = ["Positive", "Neutral", "Negative"]
 SEVERITIES = ["Low", "Medium", "High"]
+ESCALATIONS = ["none", "managers", "md"]
 
-# The default instructions. Management can edit the live copy in Periskope Settings; this text
-# is used when that field is empty and by "Reset to default".
-DEFAULT_INSTRUCTIONS = """You review WhatsApp messages between a company's sales reps and its customers, for a sales CRM. Messages may be in English, Tamil or Tanglish (Tamil written in English letters), and may come from 1-to-1 chats or from buyer groups. Classify the LAST message only, using the earlier messages as context. For each message you return structured data.
+INSTRUCTIONS = """You review WhatsApp messages between a company's sales reps and its customers, for a sales CRM. Messages may be in English, Tamil or Tanglish (Tamil written in English letters), and may come from 1-to-1 chats or from buyer groups. Classify the LAST message only, using the earlier messages as context. For each message you return structured data.
 
 Rules:
 - category is exactly one of the categories listed under Categories below. Pick the one whose description fits the message best.
@@ -71,19 +72,28 @@ def _severity(value: str | None) -> str:
 TEXT_MESSAGE_TYPE = "text"
 
 
+def can_read_attachment(doc, settings) -> bool:
+	"""An image or PDF the configured AI can read itself (a Claude model on the Direct API)."""
+	return (
+		not uses_jarvis(settings)
+		and is_claude(getattr(settings, "ai_model", None) or DEFAULT_MODEL)
+		and attachments.readable(doc)
+	)
+
+
 def skip_reason(doc, settings) -> str | None:
-	# Text chats, and attachments that carry words: a caption, or a voice note's transcript.
+	# Text chats, images and PDFs the AI can read, and attachments that carry words (a caption, or a
+	# voice note's transcript).
 	if doc.direction == "Outgoing":
 		return "Sent by the rep"
+	if can_read_attachment(doc, settings):
+		return None
 	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE and not readable_text(doc):
 		return "Not a text message"
-	if doc.is_group and not settings.classify_group_chats:
-		return "Group chat"
 	words = " ".join(
 		p for p in ((doc.body or "").strip(), (getattr(doc, "transcript", "") or "").strip()) if p
 	)
-	min_length = flt(getattr(settings, "min_length", None)) or 2
-	if len(words) < min_length:
+	if len(words) < MIN_LENGTH:
 		return "Too short to tag"
 	return analysis_skip_reason(words)
 
@@ -99,6 +109,28 @@ CUSTOMER_NAME_NOTE = (
 	"contact_name is the personal name of the customer who wrote a Customer message, only when that "
 	"person states it themselves in this or an earlier message (for example 'Hi, I am Ravi Kumar' or a "
 	"sign-off). Never the rep's name, never a company, and an empty string when they have not said it."
+)
+
+# Added to every prompt too: what the agent does with the message is the AI's decision (decisions.py),
+# not a rule on the tag.
+DECISIONS_NOTE = (
+	"You also decide what happens next; nothing is done by fixed rules.\n"
+	"escalate is 'md' when the owner must hear of it now (a legal threat, abuse, a customer asked to pay "
+	"into an account that is not the company's or saying they paid someone else, a big order about to "
+	"be lost), 'managers' when a sales manager must step in (an angry customer, a complaint about "
+	"quality or delivery, a rejection, a rep who promised and did not deliver, an urgent problem nobody "
+	"is handling), else 'none'. Normal work is never escalated: the team sharing its own invoices, "
+	"proforma invoices, quotations, bank details or reports, and colleagues handing out tasks. "
+	"escalation_reason says in one English sentence what happened and what is at risk, or is empty.\n"
+	"create_lead is true only for a Customer message in a 1-to-1 chat from someone who wants to buy, "
+	"asks for prices, samples or a quotation, or places an order: a new business enquiry. False for "
+	"colleagues, suppliers, job seekers, spam, greetings and wrong numbers.\n"
+	"on_timeline is true when the message matters for the customer's lead or deal (a requirement, "
+	"an order, a price, a date, a complaint, a decision, a document); false for greetings, thanks and "
+	"chatter.\n"
+	"attachment_summary: when an image or document is attached, one or two English sentences on what "
+	"it is and its key facts (for an invoice, quotation or purchase order: the party, number, items, "
+	"quantities, amounts and dates; for a screenshot: what it shows). Empty when nothing is attached."
 )
 
 # Added to every prompt too, so edited instructions still list the tasks (see chat_tasks.py).
@@ -119,10 +151,7 @@ TASKS_NOTE = (
 
 
 def build_system_prompt(settings=None) -> str:
-	instructions = (getattr(settings, "ai_instructions", None) or "").strip()
-	if not instructions:
-		instructions = DEFAULT_INSTRUCTIONS.strip()
-	prompt = f"{instructions}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}\n\n{TASKS_NOTE}"
+	prompt = f"{INSTRUCTIONS.strip()}\n\n{tags.prompt_block()}\n\n{CUSTOMER_NAME_NOTE}\n\n{DECISIONS_NOTE}\n\n{TASKS_NOTE}"
 
 	business = (getattr(settings, "ai_business_context", None) or "").strip()
 	if business:
@@ -179,6 +208,11 @@ def build_schema() -> dict:
 			"customer_name": text,
 			"contact_name": text,
 			"language": text,
+			"escalate": {"type": "string", "enum": ESCALATIONS},
+			"escalation_reason": text,
+			"create_lead": {"type": "boolean"},
+			"on_timeline": {"type": "boolean"},
+			"attachment_summary": text,
 			"tasks": {
 				"type": "array",
 				"items": {
@@ -208,6 +242,11 @@ def build_schema() -> dict:
 			"customer_name",
 			"contact_name",
 			"language",
+			"escalate",
+			"escalation_reason",
+			"create_lead",
+			"on_timeline",
+			"attachment_summary",
 			"tasks",
 		],
 		"additionalProperties": False,
@@ -253,6 +292,9 @@ def build_user_message(doc, history: list[dict], quoted: str | None = None) -> s
 		lines.append(f"The message below replies to this earlier message: {quoted.strip()[:500]}")
 	lines.append("Message to classify:")
 	lines.append(f"[{_speaker(doc)} {when}] {readable_text(doc)[:2000]}")
+	if attachments.has_file(doc):
+		name = getattr(doc, "media_filename", None) or ""
+		lines.append(f"Attached to this message: {doc.message_type} {name}".strip())
 	return "\n".join(lines)
 
 
@@ -358,7 +400,7 @@ def is_claude(model: str) -> bool:
 JSON_REPLY_INSTRUCTIONS = """
 
 Reply with ONLY one JSON object and nothing else (no explanation, no code fences), with exactly these keys:
-category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string), tasks (list of objects with customer, task, assignee_phone and due_date, all strings)."""
+category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string), escalate ("none", "managers" or "md"), escalation_reason (string), create_lead (true or false), on_timeline (true or false), attachment_summary (string), tasks (list of objects with customer, task, assignee_phone and due_date, all strings)."""
 
 
 def json_reply_instructions() -> str:
@@ -408,47 +450,6 @@ def ping(settings) -> str:
 	return model
 
 
-OPTIMIZER_SYSTEM_PROMPT = """You are an expert prompt engineer. You improve the instructions given to an AI that classifies WhatsApp messages between a company's sales reps and customers, for a sales CRM.
-
-Rewrite the instructions you are given so the AI follows them more reliably. Rules:
-- Keep the same purpose, and keep every field the AI must fill in: category, sentiment, severity, summary, confidence, needs_reply, follow_up_on, mentioned_products, mentioned_amount, competitor_name, customer_name, contact_name, language, tasks.
-- Keep the category names exactly as they are written under Categories, and their meanings. Never invent other categories. If the instructions do not list the categories, leave that out: the list is added separately.
-- Be specific and unambiguous. Remove repetition and contradictions. Add short rules for edge cases that are missing, such as mixed-language messages, group chats, messages from the rep, and very short messages.
-- Do not make it much longer than it needs to be.
-- Reply with ONLY the improved instructions, as plain text. No explanation, no heading, no code fences."""
-
-
-def optimize_instructions(settings, instructions: str, goal: str = "") -> str:
-	"""Ask the configured AI to improve the tagging instructions. Returns the new text; nothing is saved."""
-	if uses_jarvis(settings):
-		# Jarvis caps replies at about 1000 tokens, too small for a full rewrite of the instructions.
-		frappe.throw(
-			_("Improve Instructions with AI needs the Direct API. Switch the AI Provider to use it.")
-		)
-	instructions = (instructions or "").strip() or DEFAULT_INSTRUCTIONS.strip()
-	user = f"Current instructions:\n<instructions>\n{instructions}\n</instructions>"
-	if (goal or "").strip():
-		user += f"\n\nWhat the user wants improved:\n{goal.strip()[:1000]}"
-
-	try:
-		response = _client(settings).messages.create(
-			model=settings.ai_model or DEFAULT_MODEL,
-			max_tokens=4096,
-			system=OPTIMIZER_SYSTEM_PROMPT,
-			messages=[{"role": "user", "content": user}],
-		)
-	except frappe.ValidationError:
-		raise
-	except Exception as e:
-		frappe.throw(_("Could not improve the instructions: {0}").format(describe_error(e)))
-
-	text = next((b.text for b in response.content if b.type == "text"), "") or ""
-	text = re.sub(r"^```[a-z]*\n?|\n?```$", "", text.strip()).strip()
-	if response.stop_reason == "max_tokens" or len(text) < 100:
-		frappe.throw(_("The AI did not return usable instructions. Please try again."))
-	return text
-
-
 def _record_usage(message: str | None, settings, model: str, response, duration_ms: int):
 	"""Save the token usage of one AI call for the spend report. Never raises."""
 	try:
@@ -471,16 +472,9 @@ def _record_usage(message: str | None, settings, model: str, response, duration_
 		frappe.log_error(title="Periskope: could not save the AI usage row")
 
 
-def max_tokens(settings) -> int:
-	return int(flt(getattr(settings, "ai_max_tokens", None)) or DEFAULT_MAX_TOKENS)
-
-
 def call_claude(settings, doc) -> dict:
-	limit = settings.context_messages or DEFAULT_CONTEXT
-	if doc.is_group:
-		# A short group message means little without what was said before it.
-		limit = max(limit, GROUP_MIN_CONTEXT)
-	history = get_history(doc, limit)
+	# A short group message means little without what was said before it.
+	history = get_history(doc, GROUP_MIN_CONTEXT if doc.is_group else CONTEXT)
 	model = settings.ai_model or DEFAULT_MODEL
 	prompt = build_system_prompt(settings)
 
@@ -495,9 +489,16 @@ def call_claude(settings, doc) -> dict:
 		"model": model,
 		# The reply budget. JSON answers fit well below this; reasoning models (Sonnet/Opus 5.5)
 		# need more room and get it by raising the setting.
-		"max_tokens": max(max_tokens(settings), GROUP_MAX_TOKENS) if doc.is_group else max_tokens(settings),
+		"max_tokens": GROUP_MAX_TOKENS if doc.is_group else MAX_TOKENS,
 		"messages": [{"role": "user", "content": build_user_message(doc, history, get_quoted_body(doc))}],
 	}
+	attachment = attachments.content_block(doc) if is_claude(model) else None
+	if attachment:
+		# The image or PDF itself, so the AI reads what it shows.
+		request["messages"][0]["content"] = [
+			attachment,
+			{"type": "text", "text": request["messages"][0]["content"]},
+		]
 	if is_claude(model):
 		# The instructions rarely change, so let Anthropic cache them, and have the API
 		# enforce the answer format.
@@ -550,13 +551,18 @@ def apply_result(doc, result: dict):
 	doc.mentioned_customer = (result.get("customer_name") or "")[:140]
 	doc.contact_name = (result.get("contact_name") or "")[:140]
 	doc.language = (result.get("language") or "")[:140]
+	escalation = {"managers": "Managers", "md": "MD"}.get(result.get("escalate") or "", "")
+	doc.escalation = escalation
+	doc.escalation_reason = (result.get("escalation_reason") or "")[:500] if escalation else ""
+	doc.on_timeline = 1 if result.get("on_timeline") else 0
+	if result.get("attachment_summary"):
+		doc.attachment_summary = result["attachment_summary"][:1000]
 	doc.classification_status = "Done"
 	doc.classified_at = now_datetime()
 	doc.classification_error = ""
 	save_as_system(doc)
 	link_message(doc.name)
-	actions.run(doc.name)
-	chat_tasks.from_message(doc.name, result.get("tasks"))
+	decisions.act(doc.name, result)
 	# Keep the CRM record's summary, notes and follow-ups current (throttled per chat).
 	from periskope_connector.ai import analyse
 
@@ -567,8 +573,29 @@ def _mark(name: str, **values):
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
 
 
+def queue(message: str):
+	"""Analyse a message as soon as it is saved (run_batch catches up on any job that never ran)."""
+	frappe.enqueue(
+		"periskope_connector.ai.classifier.classify_now",
+		message=message,
+		queue="short",
+		job_id=f"periskope_classify::{message}",
+		deduplicate=True,
+		enqueue_after_commit=True,
+	)
+
+
+def classify_now(message: str):
+	"""Background job: analyse one message, unless the AI is not ready (the batch retries later)."""
+	from periskope_connector.health import budget_exceeded
+
+	if not _ready_to_run() or budget_exceeded():
+		return
+	_classify_and_commit(message)
+
+
 def classify(message: str):
-	"""Background job: classify one Periskope Message."""
+	"""Classify one Periskope Message."""
 	settings = get_settings()
 	doc = frappe.get_doc("Periskope Message", message)
 	if doc.classification_status in ("Done", "Skipped"):
@@ -608,7 +635,7 @@ def _is_expected_error(e: Exception) -> bool:
 
 def _ready_to_run() -> bool:
 	settings = get_settings()
-	if not feature_on("enable_classification", settings):
+	if not agent_on(settings):
 		return False
 	if uses_jarvis(settings):
 		return True
@@ -618,7 +645,12 @@ def _ready_to_run() -> bool:
 def _pending(limit: int) -> list[str]:
 	return frappe.get_all(
 		"Periskope Message",
-		filters={"classification_attempts": ["<", MAX_ATTEMPTS], "direction": "Incoming"},
+		filters={
+			"classification_attempts": ["<", MAX_ATTEMPTS],
+			"direction": "Incoming",
+			# a newer one is still with its own job (queue)
+			"modified": ["<", add_to_date(now_datetime(), minutes=-QUEUED_GRACE_MINUTES)],
+		},
 		or_filters=[
 			["classification_status", "is", "not set"],
 			["classification_status", "in", ["Pending", "Failed"]],
@@ -698,9 +730,4 @@ def classify_pending(limit: int = 500):
 def reclassify(message: str) -> None:
 	require_admin()
 	_mark(message, classification_status="Pending", classification_attempts=0, classification_error="")
-	frappe.enqueue(
-		"periskope_connector.ai.classifier.classify",
-		message=message,
-		queue="short",
-		enqueue_after_commit=True,
-	)
+	queue(message)

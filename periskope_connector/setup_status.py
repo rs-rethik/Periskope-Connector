@@ -3,9 +3,10 @@
 1. Connect Periskope: the API key works and at least one WhatsApp number is linked.
 2. AI: a key (or Jarvis), a monthly token budget, and a passed AI connection test.
 3. Team: approvers who can approve the agent's suggestions, and a sales rep for the follow-ups.
-4. AI Agent: switched on.
+4. Auto reply: whether the AI answers customers itself.
 
-The agent cannot be switched on until steps 1 to 3 are done (Periskope Settings.validate).
+The AI agent runs whenever the integration is enabled (agent_on); it needs no switch of its own.
+Auto reply cannot be switched on until steps 1 to 3 are done (Periskope Settings.validate).
 """
 
 import re
@@ -82,9 +83,11 @@ def _team(s) -> dict:
 def _agent(s) -> dict:
 	return _step(
 		"agent",
-		_("AI Agent"),
-		s.enable_agent,
-		_("Running") if s.enable_agent else _("Switch on Enable AI Agent."),
+		_("Auto Reply"),
+		s.enable_auto_reply,
+		_("The AI answers customers a rep has not answered")
+		if s.enable_auto_reply
+		else _("Off: the AI does everything else, but only reps answer customers."),
 	)
 
 
@@ -108,11 +111,14 @@ def missing_before_agent(settings) -> list[str]:
 	]
 
 
-def feature_on(field: str, settings=None) -> bool:
-	"""A part of the agent runs only when Enable AI Agent and its own switch (Advanced) are both on."""
+def agent_on(settings=None) -> bool:
+	"""The AI agent works whenever the integration is enabled; there is no other switch."""
 	if settings is None:
-		values = frappe.db.get_single_value
-		return bool(values("Periskope Settings", "enable_agent")) and bool(
-			values("Periskope Settings", field)
-		)
-	return bool(getattr(settings, "enable_agent", None)) and bool(getattr(settings, field, None))
+		return bool(frappe.db.get_single_value("Periskope Settings", "enabled"))
+	return bool(getattr(settings, "enabled", None))
+
+
+def auto_reply_on(settings=None) -> bool:
+	if settings is None:
+		return agent_on() and bool(frappe.db.get_single_value("Periskope Settings", "enable_auto_reply"))
+	return agent_on(settings) and bool(getattr(settings, "enable_auto_reply", None))

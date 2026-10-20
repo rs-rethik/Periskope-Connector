@@ -17,8 +17,8 @@ from frappe.utils import add_days, get_datetime, now_datetime
 
 from periskope_connector import knowledge, learner, query, suggestions
 from periskope_connector.ai import assistant
-from periskope_connector.api.permission import require_admin
 from periskope_connector.health import month_tokens
+from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 
 QUIET_MINUTES = 60  # a chat counts as finished when nothing was said for this long
@@ -29,6 +29,7 @@ LEARN_EVERY_HOURS = 6
 LEARN_MIN_MESSAGES = 10
 STALE_CHECK_HOURS = 24
 FAILURE_PAUSE_MINUTES = 45
+FIRST_LOOKBACK_DAYS = 14  # how far back the first pass reads
 LOCK = "periskope_agent"
 FIELDS = [
 	"name",
@@ -79,18 +80,18 @@ def _record(**values):
 	return insert_as_system({"doctype": "Periskope Agent Run", "started_on": now_datetime(), **values})
 
 
-def run(force: bool = False) -> dict:
-	"""One pass. Scheduler entry point; `force` ignores the on/off setting (the Run Now button)."""
+def run() -> dict:
+	"""One pass. Scheduler entry point, every 15 minutes."""
 	settings = frappe.get_single("Periskope Settings")
-	if not (settings.enable_agent or force):
-		return {"skipped": "the agent is off"}
+	if not agent_on(settings):
+		return {"skipped": "the integration is off"}
 	if not assistant.is_ready(settings):
 		return {"skipped": "no AI key set, or the monthly token budget is used up"}
 	failed = frappe.db.get_value(
 		"Periskope Agent Run",
 		{"status": "Failed", "started_on": [">=", now_datetime() - timedelta(minutes=FAILURE_PAUSE_MINUTES)]},
 	)
-	if failed and not force:
+	if failed:
 		return {"skipped": "the last pass failed; trying again later"}
 	lock = frappe.cache().lock(LOCK, timeout=1800)
 	if not lock.acquire(blocking=False):
@@ -107,7 +108,7 @@ def run(force: bool = False) -> dict:
 def _pass(settings) -> dict:
 	now = now_datetime()
 	cutoff = now - timedelta(minutes=QUIET_MINUTES)
-	since = _last_cursor() or add_days(now, -(settings.learning_lookback_days or 14))
+	since = _last_cursor() or add_days(now, -FIRST_LOOKBACK_DAYS)
 	run_doc = _record(status="Running", cursor_from=since)
 	frappe.db.commit()  # so a failed pass can still be recorded after the rollback
 	frappe.db.savepoint("periskope_agent_pass")
@@ -159,9 +160,3 @@ def _pass(settings) -> dict:
 		run_doc.db_set({"status": "Failed", "finished_on": now_datetime(), "error": str(e)[:500]})
 		frappe.log_error(title="Periskope: learning agent pass failed")
 		raise
-
-
-@frappe.whitelist()
-def run_now() -> dict:
-	require_admin()
-	return run(force=True)

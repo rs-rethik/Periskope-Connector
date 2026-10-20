@@ -2,8 +2,8 @@
 
 frappe_whatsapp sends every new Outgoing "WhatsApp Message" to Meta in before_insert. For rows of
 the Periskope account (mirror.ACCOUNT) this class sends the rep's text through Periskope instead
-(outbound.send, with the test-mode guard), pauses the AI for that chat because the rep has taken it
-over, and keeps every Meta call (send, template, read receipt) away. Rows of any other account
+(outbound.send, with the test-mode guard), cancels a waiting AI reply because the rep has answered,
+and keeps every Meta call (send, template, read receipt) away. Rows of any other account
 behave exactly as in frappe_whatsapp.
 """
 
@@ -78,7 +78,6 @@ class PeriskopeWhatsAppMessage(WhatsAppMessage):
 		self.message_id = f"true_{chat_id}_{unique_id}" if unique_id else None
 		self.status = "sent"
 		self.label = "Rep reply"
-		chat.pause(chat_id, frappe.session.user, "Rep replied")
 		from periskope_connector.autoreply import cancel
 
 		cancel(chat_id, _("A rep replied"))

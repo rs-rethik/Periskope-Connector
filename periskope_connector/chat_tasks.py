@@ -174,7 +174,7 @@ def _key_for(message: str, number: int) -> str:
 def from_message(message: str, items: list | None) -> list[str]:
 	"""Create the CRM Tasks the AI found in a group message. Returns the task names. Never raises."""
 	try:
-		if not items or not frappe.db.get_single_value("Periskope Settings", "create_chat_tasks"):
+		if not items:
 			return []
 		doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
 		if not doc or not doc.is_group:

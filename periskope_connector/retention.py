@@ -1,16 +1,15 @@
-"""Retention: clear stored message content after the configured periods.
+"""Retention: clear the raw webhook body of messages older than RAW_PAYLOAD_DAYS.
 
-`raw_payload` (the webhook body) goes first — it is pure operational debug data. Message text can
-be kept forever by default, because the conversation history is the point of the system; an
-operator who needs a stricter policy sets `body_retention_days`. Links, AI tags and summaries
-survive either way. Runs monthly as a scheduler job, in batches, so the table is never locked
-in one huge transaction.
+`raw_payload` is pure operational debug data. Message text is kept, because the conversation history
+is the point of the system. Runs monthly as a scheduler job, in batches, so the table is never
+locked in one huge transaction.
 """
 
 import frappe
 from frappe.utils import add_days, now_datetime
 
 BATCH = 500
+RAW_PAYLOAD_DAYS = 90
 
 
 def clear(doctype: str, field: str, days: int) -> int:
@@ -35,18 +34,5 @@ def clear(doctype: str, field: str, days: int) -> int:
 
 
 def run() -> dict:
-	"""Scheduler, monthly: apply the retention settings."""
-	settings = frappe.get_cached_doc("Periskope Settings")
-	return {
-		"raw_payload_rows": clear(
-			"Periskope Message", "raw_payload", cint(settings.raw_payload_retention_days)
-		),
-		"body_rows": clear("Periskope Message", "body", cint(settings.body_retention_days)),
-	}
-
-
-def cint(value) -> int:
-	try:
-		return int(value or 0)
-	except (TypeError, ValueError):
-		return 0
+	"""Scheduler, monthly: clear the raw payloads older than RAW_PAYLOAD_DAYS."""
+	return {"raw_payload_rows": clear("Periskope Message", "raw_payload", RAW_PAYLOAD_DAYS)}

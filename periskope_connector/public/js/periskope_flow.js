@@ -1,6 +1,6 @@
-// The Flow dialog of Periskope Settings: the pipeline as a diagram, with an edit panel for each step.
-// Every change made in the dialog is saved as it is made: switches, SLA rows, emails and so on save the
-// settings form, and tags and their actions (separate records) save through their own calls.
+// The Flow dialog of Periskope Settings: the pipeline as a diagram, with a panel for each step.
+// The AI decides what happens to a message, so there are few controls: auto reply, working hours, the
+// email lists and the tags' on/off. Each change is saved as it is made.
 
 (() => {
 	const WIDE_AT = 1120; // px of dialog width from which the panel sits to the right
@@ -30,26 +30,32 @@
 		},
 		{ id: "queue", col: "D", row: 1, title: __("Contact queue"), sub: __("Unknown numbers") },
 		{
-			id: "keywords",
+			id: "files",
 			col: "A",
 			row: 2,
-			title: __("Keyword rules"),
-			sub: __("Words that always alert"),
+			title: __("Attachments"),
+			sub: __("Saved on the lead or deal"),
 		},
-		{ id: "ai", col: "B", row: 2, title: __("AI tagging"), sub: __("Customer text only") },
+		{
+			id: "ai",
+			col: "B",
+			row: 2,
+			title: __("AI reads"),
+			sub: __("Text, images, PDFs, voice"),
+		},
 		{
 			id: "tags",
 			col: "C",
 			row: 2,
 			title: __("Tags"),
-			sub: __("What the AI can call a message"),
+			sub: __("Categories for reports"),
 		},
 		{
-			id: "actions",
+			id: "decisions",
 			col: "D",
 			row: 2,
-			title: __("Tag actions"),
-			sub: __("What each tag triggers"),
+			title: __("AI decides"),
+			sub: __("Tasks, escalation, leads"),
 		},
 		{
 			id: "waiting",
@@ -62,8 +68,8 @@
 			id: "sla",
 			col: "C",
 			row: 3,
-			title: __("SLA ladder"),
-			sub: __("bell, ToDo, email, owner"),
+			title: __("Reminder ladder"),
+			sub: __("bell, task, managers, MD"),
 		},
 		{ id: "people", col: "D", row: 3, title: __("People told"), sub: __("Email and bell") },
 		{
@@ -71,7 +77,7 @@
 			col: "A",
 			row: 4,
 			title: __("Auto reply"),
-			sub: __("From data, after a delay"),
+			sub: __("When no rep answers in time"),
 		},
 		{
 			id: "crm",
@@ -92,31 +98,19 @@
 		["M224 105H272"],
 		["M472 105H520"],
 		["M720 105H768", "dash", __("no match"), 744, 97, "middle"],
-		["M372 150V253"],
-		["M372 150V190H124V253", "", __("every message"), 132, 184],
+		["M372 150V253", "", __("every message"), 380, 205],
+		["M372 150V190H124V253", "dash", __("files"), 132, 184],
+		["M224 300H272"],
 		["M472 300H520"],
 		["M720 300H768"],
 		["M372 345V448", "", __("needs a reply"), 380, 400],
 		["M472 495H520"],
 		["M720 495H768"],
-		["M868 345V448", "", __("alert, ToDo"), 876, 400],
+		["M868 345V448", "", __("escalate"), 876, 400],
 		["M868 255V190H620V152", "dash", __("lead, timeline comment"), 636, 184],
-		["M124 345V582H868V552", "dash", __("keyword match"), 140, 576],
 		["M372 540V598H124V643", "", __("auto reply"), 250, 592],
 		["M224 690H272"],
-	];
-	const ACTION_LABELS = {
-		"Create Lead": __("Lead"),
-		"Email Alert": __("Mail"),
-		"Timeline Comment": __("Note"),
-		"ToDo for Rep": __("ToDo"),
-	};
-	const SLA_ACTIONS = [
-		"Notify Rep",
-		"ToDo for Rep",
-		"Email Managers",
-		"Email Escalation List",
-		"Email Recipients",
+		["M472 690H520"],
 	];
 	const e = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
 
@@ -197,7 +191,6 @@
 			primary ? "btn-primary" : "btn-default"
 		}" ${attrs}>${e(label)}</button>`;
 	const field = (frm, name) => frm._pf.data.settings[name];
-	const rowsOf = (frm, table) => frm._pf.data.settings[table] || [];
 	const switchRow = (frm, label, name) =>
 		`<div class="pf-row"><span>${e(label)}</span>${sw(
 			!!field(frm, name),
@@ -242,25 +235,9 @@
 			s += `<text class="t" x="18" y="26">${e(
 				n.title
 			)}</text><text class="s" x="18" y="44">${e(n.sub)}</text>`;
-			if (n.id === "actions") {
-				s += [
-					["Lead", 18, 44],
-					["Mail", 67, 44],
-					["Note", 116, 44],
-				]
-					.map(
-						([t, x, w]) =>
-							`<rect class="chip" x="${x}" y="56" width="${w}" height="20" rx="10"/><text class="chip-t" x="${
-								x + 8
-							}" y="70">${e(__(t))}</text>`
-					)
-					.join("");
-				s += `<rect class="chip" x="165" y="56" width="26" height="20" rx="10"/><text class="chip-t" x="171" y="70">+1</text>`;
-			} else {
-				s += `<text class="m" data-metric="${n.id}" x="18" y="72">${e(
-					nodeMetric(n.id, data)
-				)}</text>`;
-			}
+			s += `<text class="m" data-metric="${n.id}" x="18" y="72">${e(
+				nodeMetric(n.id, data)
+			)}</text>`;
 			s += `</g>`;
 		});
 		return s + `</svg>`;
@@ -270,9 +247,13 @@
 
 	const goTab = (tab, label) => btn(label, `data-tab="${tab}"`);
 
-	// The dots and labels of the SLA ladder timeline, from the rows now in the form.
-	function slaMarks(frm) {
-		const rows = rowsOf(frm, "sla_levels");
+	// The dots and labels of the reminder ladder timeline (fixed in the app).
+	function slaMarks(levels) {
+		const rows = levels.map((r) => ({
+			wait_minutes: r.wait,
+			min_severity: r.severity,
+			action: r.action,
+		}));
 		const waits = [...new Set(rows.map((r) => +r.wait_minutes))].sort((a, b) => a - b);
 		return waits
 			.map((w, i) => {
@@ -300,7 +281,7 @@
 				k: __("Step 4"),
 				h: __("Auto reply"),
 				p: __(
-					"After the delay the agent answers from the knowledge base, ERPNext and the deal's last quotation. When the data does not answer it, the customer gets the holding message and the rep a task in the CRM. A rep's reply pauses the AI in that chat."
+					"When no rep has answered a customer within the set time, the AI answers from the knowledge base, ERPNext and the deal's last quotation, day or night. When the data does not answer it, the customer is told a rep will reply and the rep gets a task. Never in groups."
 				),
 				body:
 					kv([
@@ -309,21 +290,15 @@
 						[__("Dry runs today (test mode)"), (t["Dry Run"] || 0) + (t.Blocked || 0)],
 						[__("Failed today"), t.Failed || 0],
 						[__("Waiting now"), f.waiting],
-						[__("Chats a rep took over"), f.paused],
 					]) +
 					box(
 						__("Settings"),
-						switchRow(frm, __("AI Agent"), "enable_agent") +
-							switchRow(frm, __("Auto reply"), "enable_auto_reply") +
+						switchRow(frm, __("Reply to customers"), "enable_auto_reply") +
 							`<div class="pf-row"><span>${__(
-								"Delay (minutes)"
+								"When no rep answers within (minutes)"
 							)}</span><input type="number" min="0" max="120" data-text="reply_delay_minutes" value="${e(
 								field(frm, "reply_delay_minutes")
-							)}" style="width:80px"></div><div class="pf-row" style="display:block"><span>${__(
-								"Holding message"
-							)}</span><textarea data-text="holding_message" rows="3" style="width:100%">${e(
-								field(frm, "holding_message")
-							)}</textarea></div>`
+							)}" style="width:80px"></div>`
 					) +
 					`<div class="pf-btns">${btn(
 						__("All auto replies"),
@@ -361,7 +336,7 @@
 				k: __("Step 4c"),
 				h: __("Learning agent"),
 				p: __(
-					"Every 15 minutes the agent reads the finished conversations, updates the knowledge base on its own, and suggests changes to tags, keyword rules, escalation levels, group mappings, ignored numbers and lead rules. Those configuration changes wait until an approver says yes."
+					"Every 15 minutes the agent reads the finished conversations and updates the knowledge base on its own. It suggests changes to tags, group mappings, ignored numbers and a few settings; those wait until an approver says yes."
 				),
 				body:
 					kv([
@@ -453,19 +428,11 @@
 		},
 		link(frm, d) {
 			const c = d.link.counts;
-			const mode = field(frm, "comment_mode") || "One per message";
-			const select = `<select data-select="comment_mode">${[
-				"One per message",
-				"Burst",
-				"Off",
-			]
-				.map((o) => `<option${o === mode ? " selected" : ""}>${o}</option>`)
-				.join("")}</select>`;
 			return {
 				k: __("Step 3"),
 				h: __("Link to CRM"),
 				p: __(
-					"Each message is matched to a lead or deal by the customer's mobile number. Groups are matched by name, sender or the customer the AI finds in the text."
+					"Each message is matched to a lead or deal by the customer's mobile number. Groups are matched by name, sender or the customer the AI finds in the text. Messages the AI marks as mattering show on the record's timeline."
 				),
 				body:
 					kv([
@@ -474,21 +441,10 @@
 						[__("Ambiguous"), c.Ambiguous],
 						[__("No match"), c["No Match"]],
 					]) +
-					box(
-						__("Settings"),
-						`<div class="pf-row"><span>${__(
-							"Timeline comments"
-						)}</span><span style="width:55%">${select}</span></div>` +
-							switchRow(
-								frm,
-								__("Reps see their own numbers"),
-								"reps_see_own_numbers"
-							)
-					) +
 					`<div class="pf-btns">${btn(
 						__("Unmatched Numbers report"),
 						`data-report="Periskope Unmatched Numbers"`
-					)}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
+					)}</div>`,
 			};
 		},
 		queue(frm, d) {
@@ -497,7 +453,7 @@
 				k: __("Step 3b"),
 				h: __("Contact queue"),
 				p: __(
-					"A number that is not on any lead, deal or contact waits here. You make a lead, link it to an existing record, or ignore it."
+					"A number that is not on any lead, deal or contact waits here. The AI makes a lead itself when the message is a new business enquiry; suppliers and employees are ignored on their own. The rest can be linked or ignored here."
 				),
 				body:
 					kv([
@@ -505,75 +461,35 @@
 						[__("Lead created"), f.lead_created],
 						[__("Ignored"), f.ignored],
 					]) +
-					box(
-						__("Rules"),
-						switchRow(
-							frm,
-							__("Create leads from new enquiries"),
-							"create_leads_from_enquiries"
-						) +
-							switchRow(frm, __("Ignore supplier numbers"), "ignore_suppliers") +
-							switchRow(frm, __("Ignore employee numbers"), "ignore_employees")
-					) +
 					`<div class="pf-btns">${btn(
 						__("Open the queue"),
 						`data-list="Periskope Contact"`,
 						true
-					)}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
+					)}</div>`,
 			};
 		},
-		keywords(frm, d) {
-			const f = d.keywords;
-			const rows = rowsOf(frm, "keyword_rules")
-				.map(
-					(r) =>
-						`<tr><td>${e(r.rule_name)}</td><td><input data-row="keyword_rules|${
-							r.idx
-						}|recipients" value="${e(r.recipients || "")}" placeholder="${e(
-							__("emails, comma separated")
-						)}"></td><td class="c">${sw(
-							!!r.enabled,
-							`data-rowsw="keyword_rules|${r.idx}|enabled"`
-						)}</td></tr>`
-				)
-				.join("");
-			const silent = f.rules.some((r) => r.enabled && !r.recipients.trim());
+		files(frm, d) {
+			const f = d.files;
 			return {
 				k: __("Step 2b"),
-				h: __("Keyword rules"),
+				h: __("Attachments"),
 				p: __(
-					"Words that alert people on their own, whatever the AI decides. A rule with no recipients sends nothing."
+					"Every image, document, video and voice note is saved in Frappe and attached to the lead or deal, so it shows in the CRM's Attachments. Images and PDFs are read by the AI: what it is, and its key figures."
 				),
-				body:
-					kv([
-						[__("Rules"), f.rules.length],
-						[__("Alerts today"), f.alerts_today],
-					]) +
-					box(
-						__("Rules"),
-						`<table class="pf-t"><tr><th>${__("Rule")}</th><th>${__(
-							"Alert to"
-						)}</th><th class="c">${__("On")}</th></tr>${rows}</table>${
-							silent
-								? `<div class="pf-warn">${__(
-										"A rule without recipients never sends."
-								  )}</div>`
-								: ""
-						}`
-					) +
-					`<div class="pf-btns">${btn(
-						__("Edit words and add rules"),
-						`data-list="Periskope Keyword Rule"`
-					)}</div>`,
+				body: kv([
+					[__("Saved today"), f.saved],
+					[__("Read by the AI today"), f.read],
+					[__("Still to save (24 h)"), f.waiting],
+				]),
 			};
 		},
 		ai(frm, d) {
 			const f = d.ai;
 			return {
 				k: __("Step 4"),
-				h: __("AI tagging"),
+				h: __("AI reads"),
 				p: __(
-					"Only customer text messages go to the AI. It returns a tag, a severity, the mood and a one-line summary. Managers can correct it."
+					"Every customer message goes to the AI as it arrives, with images, PDFs and voice notes, in 1-to-1 chats and groups. It returns a tag, a severity, the mood, a summary and what to do next."
 				),
 				body:
 					kv([
@@ -584,21 +500,11 @@
 						[__("Corrected by managers"), f.corrected],
 						[__("Tokens this month"), f.tokens],
 					]) +
-					box(
-						__("Controls"),
-						switchRow(frm, __("Tag new messages with AI"), "enable_classification") +
-							switchRow(frm, __("Also tag group chats"), "classify_group_chats") +
-							switchRow(
-								frm,
-								__("Create tasks from group messages"),
-								"create_chat_tasks"
-							)
-					) +
 					`<div class="pf-btns">${btn(
 						__("Test AI Connection"),
 						`data-call="test_ai_connection"`,
 						true
-					)}${goTab("tab_advanced", __("Edit AI instructions"))}${btn(
+					)}${btn(
 						__("Tagging Review"),
 						`data-report="Periskope Tagging Review"`
 					)}</div>`,
@@ -641,43 +547,26 @@
 					)}${btn(__("All tags"), `data-list="Periskope Tag"`)}</div>`,
 			};
 		},
-		actions(frm, d) {
-			const f = d.tags;
-			const head = f.action_names
-				.map((a) => `<th class="c">${e(ACTION_LABELS[a] || a)}</th>`)
-				.join("");
-			const rows = f.tags
-				.filter((t) => t.active)
-				.map(
-					(t) =>
-						`<tr><td><a href="#" data-open="Periskope Tag|${e(t.name)}">${e(
-							t.name
-						)}</a></td>${f.action_names
-							.map(
-								(a) =>
-									`<td class="c"><button type="button" class="pf-tick${
-										t.actions[a] ? " on" : ""
-									}" aria-label="${e(a)}" aria-pressed="${
-										t.actions[a]
-									}" data-tag-action="${e(t.name)}|${e(a)}"></button></td>`
-							)
-							.join("")}</tr>`
-				)
-				.join("");
+		decisions(frm, d) {
+			const f = d.decisions;
 			return {
 				k: __("Step 6"),
-				h: __("Tag actions"),
+				h: __("AI decides"),
 				p: __(
-					"What the app does when a message gets a tag. A tick adds the usual row (alerts start at High severity); open a tag to change severity, chat type or recipients. Ticks save at once."
+					"No rules: the AI decides for each message. Work handed out in a group becomes a CRM Task on the customer's deal for the person mentioned; a problem goes to the managers or the MD at once; a new business enquiry becomes a lead; what matters shows on the record's timeline."
 				),
 				body:
-					box(
-						__("Tag by action"),
-						`<table class="pf-t"><tr><th>${__("Tag")}</th>${head}</tr>${rows}</table>`
-					) +
+					kv([
+						[__("Tasks created today"), f.tasks],
+						[__("Escalated to managers today"), f.managers],
+						[__("Escalated to the MD today"), f.md],
+						[__("Leads created today"), f.leads],
+						[__("Shown on timelines today"), f.timeline],
+					]) +
 					`<div class="pf-btns">${btn(
-						__("All tags"),
-						`data-list="Periskope Tag"`
+						__("What the agent did"),
+						`data-list="Periskope Agent Action"`,
+						true
 					)}</div>`,
 			};
 		},
@@ -700,11 +589,6 @@
 				body:
 					kv([[__("Waiting now"), d.waiting.waiting]]) +
 					box(
-						__("Reply reminders"),
-						switchRow(frm, __("Enable Reply Reminders"), "enable_reply_reminders") +
-							switchRow(frm, __("Include group chats"), "remind_group_chats")
-					) +
-					box(
 						__("Working hours"),
 						`<div class="pf-row"><span>${__(
 							"From"
@@ -717,45 +601,23 @@
 						)}" style="width:110px"></div><div class="pf-row"><span>${__(
 							"Days"
 						)}</span><span style="width:60%">${select}</span></div>`
-					) +
-					`<div class="pf-btns">${btn(
-						__("All SLA levels"),
-						`data-list="Periskope SLA Level"`
-					)}</div>`,
+					),
 			};
 		},
 		sla(frm, d) {
-			const rows = rowsOf(frm, "sla_levels");
-			const marks = slaMarks(frm);
-			const sel = (name, value, options) =>
-				`<select data-row="sla_levels|${name}|${value.field}">${options
-					.map((o) => `<option${o === value.v ? " selected" : ""}>${o}</option>`)
-					.join("")}</select>`;
-			const body = rows
+			const rows = d.sla.levels
 				.map(
 					(r) =>
-						`<tr><td style="width:70px"><input type="number" min="0" data-row="sla_levels|${
-							r.idx
-						}|wait_minutes" value="${e(r.wait_minutes)}"></td><td>${sel(
-							r.idx,
-							{ field: "min_severity", v: r.min_severity },
-							["Low", "Medium", "High"]
-						)}</td><td>${sel(r.idx, { field: "action", v: r.action }, SLA_ACTIONS)}${
-							r.action === "Email Recipients"
-								? `<input data-row="sla_levels|${r.idx}|recipients" value="${e(
-										r.recipients || ""
-								  )}" placeholder="${e(__("emails"))}" style="margin-top:3px">`
-								: ""
-						}</td><td class="c"><button type="button" class="btn btn-xs btn-default" data-sla-del="${
-							r.idx
-						}" aria-label="${e(__("Remove"))}">&times;</button></td></tr>`
+						`<tr><td>${e(minutes(r.wait))}</td><td>${e(r.severity)}</td><td>${e(
+							r.action
+						)}</td></tr>`
 				)
 				.join("");
 			return {
 				k: __("Step 8"),
-				h: __("SLA ladder"),
+				h: __("Reminder ladder"),
 				p: __(
-					"What happens as a customer keeps waiting, in working time. High severity can jump ahead. Changes save as you make them."
+					"What happens as a customer keeps waiting, in working time. It is fixed in the app; with auto reply on, the AI has usually answered long before."
 				),
 				body:
 					kv([
@@ -764,17 +626,12 @@
 					]) +
 					box(
 						__("Ladder"),
-						`<div class="pf-tl">${marks}</div><table class="pf-t"><tr><th>${__(
-							"Wait (min)"
-						)}</th><th>${__("From")}</th><th>${__(
-							"Action"
-						)}</th><th></th></tr>${body}</table>`
-					) +
-					`<div class="pf-btns">${btn(
-						__("Add a step"),
-						`data-sla-add="1"`,
-						true
-					)}</div>`,
+						`<div class="pf-tl">${slaMarks(
+							d.sla.levels
+						)}</div><table class="pf-t"><tr><th>${__("Wait")}</th><th>${__(
+							"From"
+						)}</th><th>${__("Action")}</th></tr>${rows}</table>`
+					),
 			};
 		},
 		people(frm, d) {
@@ -789,7 +646,7 @@
 				k: __("Step 9"),
 				h: __("People told"),
 				p: __(
-					"Everyone the app contacts: the rep gets a bell and a ToDo, managers and the owner get emails."
+					"Everyone the app contacts: the rep gets a bell and a task, managers and the MD get the AI's escalations by email."
 				),
 				body:
 					kv([
@@ -803,14 +660,14 @@
 						  )}</div>`) +
 					box(
 						__("Lists"),
-						area("alert_emails", __("Managers (also the default for email alerts)")) +
-							area("escalation_emails", __("Escalation list (the owner)"))
+						area("alert_emails", __("Managers")) +
+							area("escalation_emails", __("MD (with the managers)"))
 					) +
 					`<div class="pf-btns">${
 						f.mail_ready
 							? ""
 							: btn(__("Email Accounts"), `data-list="Email Account"`, true)
-					}${goTab("tab_advanced", __("Open Advanced"))}</div>`,
+					}${goTab("tab_setup", __("Open Setup"))}</div>`,
 			};
 		},
 	};
@@ -990,23 +847,6 @@
 		return save(frm, "set_flow_setting", { field: name, value });
 	}
 
-	function setRow(frm, table, idx, fieldname, value) {
-		const row = rowsOf(frm, table).find((r) => String(r.idx) === String(idx));
-		if (!row) return;
-		row[fieldname] = value;
-		if (table === "sla_levels") {
-			const tl = frm._pf.$body[0].querySelector(".pf-tl");
-			if (tl) tl.innerHTML = slaMarks(frm);
-		}
-		// choosing "Email Recipients" needs an address box
-		save(
-			frm,
-			"set_flow_row",
-			{ table, idx, field: fieldname, value },
-			fieldname === "action" ? "panel" : null
-		);
-	}
-
 	// Show a switch in its new state straight away; the save follows.
 	function flip(el, isOn) {
 		el.classList.toggle("on", !!isOn);
@@ -1040,39 +880,12 @@
 			(s) => s.value && setValue(frm, s.dataset.time, s.value + ":00")
 		);
 		on(root, "[data-text]", "change", (s) => setValue(frm, s.dataset.text, s.value));
-		on(root, "[data-row]", "change", (i) => {
-			const [table, name, fieldname] = i.dataset.row.split("|");
-			setRow(frm, table, name, fieldname, i.type === "number" ? +i.value : i.value);
-		});
-		on(root, "[data-rowsw]", "click", (b) => {
-			const [table, idx, fieldname] = b.dataset.rowsw.split("|");
-			const row = rowsOf(frm, table).find((r) => String(r.idx) === idx);
-			if (!row) return;
-			const next = row[fieldname] ? 0 : 1;
-			flip(b, next);
-			setRow(frm, table, idx, fieldname, next);
-		});
-		on(root, "[data-sla-del]", "click", (b) =>
-			save(frm, "remove_flow_sla_level", { idx: b.dataset.slaDel }, "panel")
-		);
-		on(root, "[data-sla-add]", "click", () => save(frm, "add_flow_sla_level", {}, "panel"));
 		on(root, "[data-tag-active]", "click", (b) => {
 			const turnOn = !b.classList.contains("on");
 			flip(b, turnOn);
 			frappe.call({
 				method: "periskope_connector.api.settings.set_tag_active",
 				args: { tag: b.dataset.tagActive, active: turnOn ? 1 : 0 },
-				callback: () => load(frm),
-				error: () => flip(b, !turnOn),
-			});
-		});
-		on(root, "[data-tag-action]", "click", (b) => {
-			const [tag, action] = b.dataset.tagAction.split("|");
-			const turnOn = !b.classList.contains("on");
-			flip(b, turnOn);
-			frappe.call({
-				method: "periskope_connector.api.settings.set_tag_action",
-				args: { tag, action, on: turnOn ? 1 : 0 },
 				callback: () => load(frm),
 				error: () => flip(b, !turnOn),
 			});
