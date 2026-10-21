@@ -402,8 +402,9 @@ class TestAutoReply(FrappeTestCase):
 		self.assertEqual((row.status, row.reply_text), ("Dry Run", "It is 120 per kg."))
 		self.assertFalse(row.follow_up)
 
-	def test_daily_limit_per_chat(self):
-		for _i in range(autoreply.MAX_PER_CHAT_PER_DAY):
+	def test_a_busy_chat_is_still_answered(self):
+		# No daily cap: the AI answers every question that comes in.
+		for _i in range(10):
 			frappe.get_doc(
 				{
 					"doctype": "Periskope Auto Reply",
@@ -419,13 +420,16 @@ class TestAutoReply(FrappeTestCase):
 			"due_on",
 			now_datetime() - timedelta(minutes=1),
 		)
-		autoreply.run_due()
-		self.send.assert_not_called()
-		self.assertEqual(
-			frappe.db.get_value("Periskope Auto Reply", {"chat_id": CHAT, "status": "Skipped"}, "name")
-			is not None,
-			True,
-		)
+		result = {
+			"can_answer": True,
+			"answer": "Yes, it is in stock.",
+			"confidence": 90,
+			"used_sources": ["KB:x"],
+			"sources": [],
+		}
+		with patch.object(answer, "build", return_value=result):
+			autoreply.run_due()
+		self.send.assert_called_once()
 
 
 class TestAnswerGuards(FrappeTestCase):
