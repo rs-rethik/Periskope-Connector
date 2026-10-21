@@ -21,7 +21,7 @@ from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import add_to_date, get_datetime, now_datetime, today
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from periskope_connector import answer, crm_context, health, reminders, safety, writeback
 from periskope_connector.ai import analyse, assistant
@@ -33,7 +33,6 @@ from periskope_connector.text_rules import readable_text
 FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is not answered
 DEFAULT_DELAY_MINUTES = 15
 MIN_CONFIDENCE = 80  # below this the customer gets the holding message and the rep a task
-MAX_PER_CHAT_PER_DAY = 5
 MATCH_MINUTES = 30
 MESSAGE_FIELDS = [
 	"name",
@@ -262,19 +261,6 @@ def process(name: str) -> str:
 		pending = [m for m in pending if m.message_timestamp > held]
 	if not pending:
 		return end("Cancelled", _("Already answered, or nothing to answer"))
-
-	if (
-		frappe.db.count(
-			"Periskope Auto Reply",
-			{"chat_id": row.chat_id, "status": ["in", ["Sent", "Holding Sent"]], "sent_on": [">=", today()]},
-		)
-		>= MAX_PER_CHAT_PER_DAY
-	):
-		pending_rep = next((m.rep for m in reversed(messages) if m.rep), None)
-		frappe.db.set_value(
-			"Periskope Auto Reply", name, {"follow_up": _follow_up(row, pending, pending_rep)}
-		)
-		return end("Skipped", _("Daily limit for this chat reached"))
 
 	customer_text = "\n".join(readable_text(m) for m in pending if readable_text(m))
 	rep = next((m.rep for m in reversed(messages) if m.rep), None) or row.rep
