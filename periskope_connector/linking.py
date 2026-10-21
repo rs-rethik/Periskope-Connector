@@ -355,12 +355,10 @@ def link_message(message: str) -> str:
 	try:
 		doc = frappe.db.get_value("Periskope Message", message, LINK_FIELDS, as_dict=True)
 		lead, deal, status, method = find_link(doc)
-		frappe.db.set_value(
-			"Periskope Message",
-			message,
-			{"crm_lead": lead, "crm_deal": deal, "link_status": status, "link_method": method},
-			update_modified=False,
-		)
+		values = {"crm_lead": lead, "crm_deal": deal, "link_status": status, "link_method": method}
+		if status in ("Linked", "Ambiguous"):
+			values["attachment_not_on_crm"] = ""  # the file goes on the record now
+		frappe.db.set_value("Periskope Message", message, values, update_modified=False)
 		if status in ("Linked", "Ambiguous"):
 			add_comment(message)
 			from periskope_connector.attachments import attach_to_record
