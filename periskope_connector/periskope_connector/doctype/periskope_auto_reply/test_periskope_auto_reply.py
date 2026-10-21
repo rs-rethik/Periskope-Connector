@@ -186,6 +186,57 @@ class TestAutoReply(FrappeTestCase):
 		self.assertFalse(row.follow_up)
 		self.send.assert_called_once()
 
+	def test_the_holding_reply_is_the_ais_words_for_the_situation(self):
+		self._incoming("The fabric is rejected, I will send a legal notice")
+		self._make_due()
+		sorry = "Sorry for the inconvenience. We are checking it from our side and our sales representative will contact you shortly. Please bear with us."
+		result = {
+			"can_answer": False,
+			"answer": "",
+			"confidence": 0,
+			"used_sources": [],
+			"sources": [],
+			"holding": sorry,
+		}
+		with patch.object(answer, "build", return_value=result):
+			autoreply.run_due()
+		row = self._row()
+		self.assertEqual((row.status, row.reply_text), ("Holding Sent", sorry))
+		self.assertEqual(self.send.call_args.args[1], sorry)
+
+	def test_after_a_holding_reply_a_new_question_is_answered_on_its_own(self):
+		self._incoming("The fabric is rejected, I will send a legal notice")
+		self._make_due()
+		held = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
+		with patch.object(answer, "build", return_value=held):
+			autoreply.run_due()
+		first = self._row().name
+		self._incoming("Is MARS 200 WOC available?", minutes_ago=-0.1)
+		frappe.db.set_value(
+			"Periskope Auto Reply",
+			{"chat_id": CHAT, "status": "Waiting"},
+			"due_on",
+			now_datetime() - timedelta(minutes=1),
+		)
+		asked = []
+		result = {
+			"can_answer": True,
+			"answer": "Yes, MARS 200 WOC is in stock.",
+			"confidence": 90,
+			"used_sources": ["ITEM:x"],
+			"sources": [],
+		}
+		with patch.object(answer, "build", side_effect=lambda text, *a, **k: asked.append(text) or result):
+			autoreply.run_due()
+		self.assertEqual(asked, ["Is MARS 200 WOC available?"])  # not held back by the complaint
+		row = frappe.db.get_value(
+			"Periskope Auto Reply",
+			{"chat_id": CHAT, "name": ["!=", first]},
+			["status", "reply_text"],
+			as_dict=True,
+		)
+		self.assertEqual((row.status, row.reply_text), ("Sent", "Yes, MARS 200 WOC is in stock."))
+
 	def test_holding_message_is_not_taken_for_a_reps_reply(self):
 		self._incoming("Special sample in neon?")
 		self._make_due()
@@ -230,7 +281,7 @@ class TestAutoReply(FrappeTestCase):
 		)
 		self.assertTrue(reminders.unanswered(rows))
 		# A second customer message does not trigger a second holding message.
-		self._incoming("Hello? any update")
+		self._incoming("Hello? any update", minutes_ago=-0.1)
 		self._make_due()
 		self.send.reset_mock()
 		with patch.object(
@@ -359,14 +410,36 @@ class TestAnswerGuards(FrappeTestCase):
 		self.assertTrue(answer.grounded("It is 245.00 INR per Kg.", sources, "price?"))
 		self.assertFalse(answer.grounded("It is 254 INR per Kg.", sources, "price?"))
 
-	def test_no_data_means_no_ai_call(self):
+	def test_with_no_data_the_ai_only_writes_the_holding_reply(self):
+		reply = {
+			"can_answer": True,
+			"answer": "It ships in 3 days.",
+			"confidence": 90,
+			"used_sources": [],
+			"holding": "Sorry for the trouble, our sales representative will contact you shortly.",
+		}
 		with (
 			patch.object(answer, "gather", return_value=[]),
-			patch.object(answer.assistant, "complete_json") as call,
+			patch.object(answer.assistant, "complete_json", return_value=reply) as call,
 		):
-			out = answer.build("Tell me about quantum computing")
-		call.assert_not_called()
-		self.assertFalse(out["can_answer"])
+			out = answer.build("My order is late, this is unacceptable")
+		self.assertIn("DATA:\n(none)", call.call_args.args[1])
+		self.assertFalse(out["can_answer"])  # nothing to answer from
+		self.assertEqual(out["holding"], reply["holding"])
+
+	def test_a_holding_reply_with_a_made_up_number_is_dropped(self):
+		reply = {
+			"can_answer": False,
+			"answer": "",
+			"confidence": 0,
+			"used_sources": [],
+			"holding": "Sorry, we will replace it within 2 days.",
+		}
+		with (
+			patch.object(answer, "gather", return_value=[]),
+			patch.object(answer.assistant, "complete_json", return_value=reply),
+		):
+			self.assertEqual(answer.build("The fabric is rejected")["holding"], "")
 
 	def test_answer_must_name_a_source_it_was_given(self):
 		sources = [{"id": "KB:1", "title": "MOQ", "text": "100 pieces"}]
