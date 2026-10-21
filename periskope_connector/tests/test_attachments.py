@@ -7,7 +7,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import attachments, messages
+from periskope_connector import attachments, linking, messages
 from periskope_connector.ai import classifier
 from periskope_connector.tests.utils import event, isolate, settings
 
@@ -160,6 +160,62 @@ class TestAttachments(FrappeTestCase):
 		self.assertEqual(doc.attachment_summary, answer["attachment_summary"])
 		comment = frappe.db.get_value("Comment", doc.timeline_comment, "content")
 		self.assertIn("Purchase order 1182", comment)
+
+	def _classify(self, name, answer):
+		seen = {}
+
+		def create(**request):
+			seen.update(request)
+			return SimpleNamespace(
+				stop_reason="end_turn",
+				usage=None,
+				content=[SimpleNamespace(type="text", text=frappe.as_json(answer))],
+			)
+
+		client = SimpleNamespace(messages=SimpleNamespace(create=create))
+		with (
+			patch.object(classifier, "_client", return_value=client),
+			patch("periskope_connector.ai.analyse.queue", lambda *a, **k: None),
+		):
+			classifier.classify(name)
+		return seen["messages"][0]["content"][1]["text"]
+
+	def test_the_ai_says_why_a_file_is_not_on_a_lead_or_deal(self):
+		answer = {
+			"category": "order_or_enquiry",
+			"summary": "A supplier's invoice",
+			"attachment_summary": "Invoice 77 from a yarn supplier.",
+			"attachment_not_on_crm": "A supplier sent its own invoice; it is not a customer's, so there is no lead.",
+		}
+		other = "919600000432"
+		name = messages.create_message(
+			event(
+				message_id=f"att_x_{frappe.generate_hash(length=5)}",
+				chat_id=f"{other}@c.us",
+				sender_phone=f"{other}@c.us",
+				message_type="image",
+				media=_media(mimetype="image/jpeg", filename="IMG.jpg"),
+			)
+		)
+		prompt = self._classify(name, answer)
+		self.assertIn("not linked to any lead or deal (no lead or deal in the CRM has this phone", prompt)
+		self.assertEqual(
+			frappe.db.get_value("Periskope Message", name, "attachment_not_on_crm"),
+			answer["attachment_not_on_crm"],
+		)
+
+		# Once the number is in the CRM the message links, the file goes there and the reason is cleared.
+		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Later", "mobile_no": f"+{other}"})
+		lead.flags.ignore_mandatory = True
+		lead.insert(ignore_permissions=True)
+		linking.link_message(name)
+		self.assertFalse(frappe.db.get_value("Periskope Message", name, "attachment_not_on_crm"))
+
+	def test_a_linked_file_keeps_no_reason(self):
+		name = self._message()
+		prompt = self._classify(name, {"category": "order_or_enquiry", "attachment_not_on_crm": "Anything"})
+		self.assertIn(f"linked to CRM Lead {self.lead}", prompt)
+		self.assertFalse(frappe.db.get_value("Periskope Message", name, "attachment_not_on_crm"))
 
 
 class TestCleanupPatch(FrappeTestCase):

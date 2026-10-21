@@ -130,7 +130,13 @@ DECISIONS_NOTE = (
 	"chatter.\n"
 	"attachment_summary: when an image or document is attached, one or two English sentences on what "
 	"it is and its key facts (for an invoice, quotation or purchase order: the party, number, items, "
-	"quantities, amounts and dates; for a screenshot: what it shows). Empty when nothing is attached."
+	"quantities, amounts and dates; for a screenshot: what it shows). Empty when nothing is attached.\n"
+	"attachment_not_on_crm: when an image or document is attached and the CRM line under the message "
+	"says the chat is not linked to a lead or deal, one English sentence, in your own words, on why "
+	"this file is not on any lead or deal and what would put it there, judged from this message and "
+	"the chat (who sent it, whether it is a customer's, a supplier's or the team's own document, "
+	"whether a customer is named, whether it is a new enquiry). Empty when the chat is linked or "
+	"nothing is attached."
 )
 
 # Added to every prompt too, so edited instructions still list the tasks (see chat_tasks.py).
@@ -213,6 +219,7 @@ def build_schema() -> dict:
 			"create_lead": {"type": "boolean"},
 			"on_timeline": {"type": "boolean"},
 			"attachment_summary": text,
+			"attachment_not_on_crm": text,
 			"tasks": {
 				"type": "array",
 				"items": {
@@ -247,6 +254,7 @@ def build_schema() -> dict:
 			"create_lead",
 			"on_timeline",
 			"attachment_summary",
+			"attachment_not_on_crm",
 			"tasks",
 		],
 		"additionalProperties": False,
@@ -295,7 +303,26 @@ def build_user_message(doc, history: list[dict], quoted: str | None = None) -> s
 	if attachments.has_file(doc):
 		name = getattr(doc, "media_filename", None) or ""
 		lines.append(f"Attached to this message: {doc.message_type} {name}".strip())
+		lines.append(crm_line(doc))
 	return "\n".join(lines)
+
+
+# Facts for the AI to explain a file that is not on a lead or deal in its own words.
+UNLINKED = {
+	"No Match": "no lead or deal in the CRM has this phone number",
+	"Internal": "a team group where no customer could be identified from the group or the message",
+}
+
+
+def crm_line(doc) -> str:
+	"""Where the attached file is saved in the CRM, or why the connector found no lead or deal."""
+	record = attachments._record(doc)
+	if record:
+		return f"CRM: this chat is linked to {record[0]} {record[1]}, and the file is saved there."
+	why = UNLINKED.get(
+		getattr(doc, "link_status", None) or "", "it has not been matched to a lead or deal yet"
+	)
+	return f"CRM: this chat is not linked to any lead or deal ({why}), so the file is not saved on one."
 
 
 def get_quoted_body(doc) -> str | None:
@@ -400,7 +427,7 @@ def is_claude(model: str) -> bool:
 JSON_REPLY_INSTRUCTIONS = """
 
 Reply with ONLY one JSON object and nothing else (no explanation, no code fences), with exactly these keys:
-category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string), escalate ("none", "managers" or "md"), escalation_reason (string), create_lead (true or false), on_timeline (true or false), attachment_summary (string), tasks (list of objects with customer, task, assignee_phone and due_date, all strings)."""
+category ({categories}), sentiment ("Positive", "Neutral" or "Negative"), severity ("Low", "Medium" or "High"), summary (string), confidence (integer 0 to 100), needs_reply (true or false), follow_up_on (string), mentioned_products (string), mentioned_amount (string), competitor_name (string), customer_name (string), contact_name (string), language (string), escalate ("none", "managers" or "md"), escalation_reason (string), create_lead (true or false), on_timeline (true or false), attachment_summary (string), attachment_not_on_crm (string), tasks (list of objects with customer, task, assignee_phone and due_date, all strings)."""
 
 
 def json_reply_instructions() -> str:
@@ -563,10 +590,20 @@ def apply_result(doc, result: dict):
 	save_as_system(doc)
 	link_message(doc.name)
 	decisions.act(doc.name, result)
+	if attachments.has_file(doc):
+		_note_unsaved_attachment(doc.name, result)
 	# Keep the CRM record's summary, notes and follow-ups current (throttled per chat).
 	from periskope_connector.ai import analyse
 
 	analyse.queue(doc.chat_id)
+
+
+def _note_unsaved_attachment(message: str, result: dict):
+	"""The AI's reason the file is not on a lead or deal, kept only while that is still so (a lead
+	created for the message, or a link found after the analysis, puts the file there)."""
+	linked = frappe.db.get_value("Periskope Message", message, ["crm_lead", "crm_deal"], as_dict=True)
+	reason = "" if (linked.crm_lead or linked.crm_deal) else (result.get("attachment_not_on_crm") or "")
+	_mark(message, attachment_not_on_crm=reason[:1000])
 
 
 def _mark(name: str, **values):
