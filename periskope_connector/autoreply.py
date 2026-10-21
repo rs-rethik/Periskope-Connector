@@ -10,7 +10,8 @@
    the AI words for the situation (an apology for a complaint, thanks for an enquiry; the fixed
    holding message when the AI cannot be asked). In the holding case the rep also gets a task and
    the reminder ladder follows. After a holding reply only the messages that came later are
-   answered, so a new question is not held back by an earlier complaint.
+   answered, so a new question is not held back by an earlier complaint, and every later message
+   gets its own reply: an answer, or a holding reply that acknowledges what is new.
 
 Nothing is sent unless "Reply to Customers" is on, and never in a group. In test mode (safety.py) a
 chat that is not on the allow list gets a dry run: the reply is prepared and kept on the row, nothing
@@ -287,15 +288,16 @@ def process(name: str) -> str:
 	else:
 		try:
 			result = answer.build(
-				customer_text, row.contact_number or "", bool(pending[-1].is_group), chat_id=row.chat_id
+				customer_text,
+				row.contact_number or "",
+				bool(pending[-1].is_group),
+				chat_id=row.chat_id,
+				already_held=held_before,
 			)
 		except Exception:
 			health.log_once("Periskope: could not prepare an auto reply")
 
 	confident = result["can_answer"] and result["confidence"] >= MIN_CONFIDENCE
-	if not confident and held_before:
-		# The customer was already told a rep will come back; do not repeat it.
-		return end("Skipped", _("The holding message was already sent"))
 	text = result["answer"] if confident else (result.get("holding") or DEFAULT_HOLDING)
 	status = "Sent" if confident else "Holding Sent"
 

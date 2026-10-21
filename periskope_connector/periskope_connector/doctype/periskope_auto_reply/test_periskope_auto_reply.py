@@ -315,10 +315,16 @@ class TestAutoReply(FrappeTestCase):
 			],
 		)
 		self.assertTrue(reminders.unanswered(rows))
-		# A second customer message does not trigger a second holding message.
-		self._incoming("Hello? any update", minutes_ago=-0.1)
-		self._make_due()
+		# A second customer message gets its own holding reply, worded for what is new.
+		self._incoming("Can you also send the catalogue?", minutes_ago=-0.1)
+		frappe.db.set_value(
+			"Periskope Auto Reply",
+			{"chat_id": CHAT, "status": "Waiting"},
+			"due_on",
+			now_datetime() - timedelta(minutes=1),
+		)
 		self.send.reset_mock()
+		noted = "Noted, our sales representative will share the catalogue with you too."
 		with patch.object(
 			answer,
 			"build",
@@ -328,11 +334,13 @@ class TestAutoReply(FrappeTestCase):
 				"confidence": 0,
 				"used_sources": [],
 				"sources": [],
+				"holding": noted,
 			},
-		):
+		) as build:
 			autoreply.run_due()
-		self.send.assert_not_called()
-		self.assertEqual(self._row().status, "Skipped")
+		self.assertEqual(build.call_args.args[0], "Can you also send the catalogue?")
+		self.assertTrue(build.call_args.kwargs["already_held"])
+		self.assertEqual(self.send.call_args.args[1], noted)
 
 	def test_a_rep_who_wrote_while_the_answer_was_prepared_wins(self):
 		self._incoming()

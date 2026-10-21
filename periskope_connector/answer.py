@@ -59,7 +59,7 @@ SYSTEM_PROMPT = """You write the reply to a customer's WhatsApp message for a co
 - used_sources lists the ids of the sources you used.
 - A source that says "Applies only when: ..." may be used only if the customer's messages or the CRM context show that condition holds. You may use common knowledge to judge a condition, for example which state a city is in. A source that applies when "none of these is true" may be used only when you are sure none of them holds. When you cannot tell which condition holds, set can_answer to false.
 - CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source.
-- holding: when can_answer is false, the reply the customer gets instead, written for their situation. For a complaint, a rejection, a threat (for example a legal notice) or any problem: apologise for the inconvenience, say we are checking it from our side and a sales representative will contact them shortly, and ask them to bear with us. For an enquiry or a request: thank them and say a sales representative will contact them shortly. One to three short sentences in the customer's language, plain text, no signature. Never give facts, prices, dates or numbers, never admit fault or promise a replacement, refund or anything else: only that a sales representative will contact them. Empty when can_answer is true."""
+- holding: when can_answer is false, the reply the customer gets instead, written for their situation. For a complaint, a rejection, a threat (for example a legal notice) or any problem: apologise for the inconvenience, say we are checking it from our side and a sales representative will contact them shortly, and ask them to bear with us. For an enquiry or a request: thank them and say a sales representative will contact them shortly. When you are told the customer already got a holding reply, do not repeat it: briefly acknowledge what is new (for example "Noted, our sales representative will share the catalogue with you too."). One to three short sentences in the customer's language, plain text, no signature. Never give facts, prices, dates or numbers, never admit fault or promise a replacement, refund or anything else: only that a sales representative will contact them shortly. Never say when ("today", "within an hour", a day or a time) and never say "I will": you cannot make sure of it. Empty when can_answer is true."""
 
 SCHEMA = {
 	"type": "object",
@@ -223,13 +223,20 @@ def _no_new_numbers(text: str, customer_text: str) -> bool:
 	return set(re.findall(r"\d+", text)) <= set(re.findall(r"\d+", customer_text or ""))
 
 
-def build(customer_text: str, contact_number: str = "", is_group: bool = False, chat_id: str = "") -> dict:
+def build(
+	customer_text: str,
+	contact_number: str = "",
+	is_group: bool = False,
+	chat_id: str = "",
+	already_held: bool = False,
+) -> dict:
 	"""{can_answer, answer, confidence, used_sources, sources, holding}. can_answer is False when
 	there is no data, the AI is unsure, or the answer fails the checks; holding is then the AI's
 	reply for the situation, or "" when it wrote none that passes the checks.
 
 	With the chat known, the CRM record is read first: its last quotation and deal stage join the
-	data (they may be quoted), the rest is internal context (crm_context.py)."""
+	data (they may be quoted), the rest is internal context (crm_context.py). already_held: the
+	customer was already told a rep will contact them, so a holding reply acknowledges what is new."""
 	context = crm_context.build(chat_id) if chat_id else None
 	sources = gather(customer_text, contact_number, is_group) + crm_context.customer_sources(context)
 	# With no data the AI is still asked, for a holding reply that fits what the customer wrote.
@@ -237,8 +244,17 @@ def build(customer_text: str, contact_number: str = "", is_group: bool = False, 
 	background = (
 		f"CRM CONTEXT (internal, never quote):\n{crm_context.internal_text(context)}\n\n" if context else ""
 	)
+	held = (
+		"EARLIER: the customer already got a holding reply saying a sales representative will contact "
+		"them. These are their messages since.\n\n"
+		if already_held
+		else ""
+	)
 	reply = assistant.complete_json(
-		SYSTEM_PROMPT, f"{background}DATA:\n{data}\n\nCUSTOMER MESSAGES:\n{customer_text}", SCHEMA, 800
+		SYSTEM_PROMPT,
+		f"{background}DATA:\n{data}\n\n{held}CUSTOMER MESSAGES:\n{customer_text}",
+		SCHEMA,
+		800,
 	)
 	ids = {s["id"] for s in sources}
 	used = [i for i in reply.get("used_sources") or [] if i in ids]
