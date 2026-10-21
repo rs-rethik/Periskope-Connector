@@ -325,6 +325,20 @@ def process(name: str) -> str:
 	):
 		return end("Cancelled", _("A rep replied"))
 
+	# Record the reply before it goes out, and commit: WhatsApp's copy of our own message can arrive
+	# through the webhook within a second, and it is told from a rep's reply by this row (match_sent).
+	frappe.db.set_value(
+		"Periskope Auto Reply",
+		name,
+		{
+			"status": status,
+			"reply_text": text,
+			"confidence": result["confidence"],
+			"sources": ", ".join(result["used_sources"]),
+			"sent_on": now_datetime(),
+		},
+	)
+	frappe.db.commit()
 	try:
 		send_message(row.chat_id, text, phone, origin="Auto Reply", detail={"auto_reply": name})
 	except safety.SendNotAllowed as e:
@@ -334,26 +348,19 @@ def process(name: str) -> str:
 			name,
 			{
 				"status": e.mode,
-				"reply_text": text,
-				"confidence": result["confidence"],
-				"sources": ", ".join(result["used_sources"]),
+				"sent_on": None,
 				"cancel_reason": _("Holding message") if not confident else "",
 			},
 		)
 		return e.mode
 	except Exception as e:
+		frappe.db.set_value("Periskope Auto Reply", name, "sent_on", None)
 		_fail_and_follow(name, row, pending, rep, str(e))
 		return "Failed"
 
-	values = {
-		"status": status,
-		"reply_text": text,
-		"confidence": result["confidence"],
-		"sources": ", ".join(result["used_sources"]),
-		"sent_on": now_datetime(),
-	}
-	# The message is out: record it first, so nothing after this can turn the row into Failed.
-	frappe.db.set_value("Periskope Auto Reply", name, values)
+	# The message is out (and its send log committed for the echo); the rep's follow-up and the CRM
+	# updates come after, and none of them can turn the row into Failed.
+	frappe.db.commit()
 	if not confident:
 		frappe.db.set_value("Periskope Auto Reply", name, "follow_up", _follow_up(row, pending, rep))
 	_guarded(
