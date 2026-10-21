@@ -186,6 +186,41 @@ class TestAutoReply(FrappeTestCase):
 		self.assertFalse(row.follow_up)
 		self.send.assert_called_once()
 
+	def test_the_echo_that_arrives_during_the_send_is_our_own_reply(self):
+		# WhatsApp's copy of our message can come through the webhook while the send is still being
+		# handled: the row must already be committed, or the webhook takes the copy for a rep's reply.
+		self._incoming("Sample iruka?")
+		self._make_due()
+		echoes, committed = [], []
+		# Commits are no-ops in tests (isolate): note what the row held at each one instead.
+		frappe.db.commit.side_effect = lambda: committed.append(
+			frappe.db.get_value("Periskope Auto Reply", self._row().name, ["status", "reply_text"])
+		)
+
+		def send(chat_id, text, *a, **k):
+			# The webhook runs in its own transaction: it sees only what was committed before the send.
+			self.assertEqual(committed[-1], ("Holding Sent", text))
+			self.n += 1
+			echoes.append(
+				messages.create_message(
+					event(
+						message_id=f"echo_{self.n}",
+						chat_id=CHAT,
+						from_me=True,
+						body=text,
+						sender_phone="919786387999@c.us",
+						timestamp=_utc(),
+					)
+				)
+			)
+
+		self.send.side_effect = send
+		held = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
+		with patch.object(answer, "build", return_value=held):
+			autoreply.run_due()
+		self.assertEqual(self._row().status, "Holding Sent")
+		self.assertEqual(frappe.db.get_value("Periskope Message", echoes[0], "agent_reply"), "Holding")
+
 	def test_the_holding_reply_is_the_ais_words_for_the_situation(self):
 		self._incoming("The fabric is rejected, I will send a legal notice")
 		self._make_due()
