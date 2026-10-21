@@ -7,7 +7,8 @@ Sources, in the order they are collected:
 
 The AI may only use what is listed. The code then checks the answer again: it must name the
 sources it used and every number in it must come from a source or from the customer's own text.
-When there is nothing to answer from, the AI is not even asked.
+When it cannot answer, it writes the holding reply instead, in words that fit the situation (an
+apology for a complaint, thanks for an enquiry), which only says a sales rep will contact them.
 """
 
 import re
@@ -57,7 +58,8 @@ SYSTEM_PROMPT = """You write the reply to a customer's WhatsApp message for a co
 - confidence is 0-100: how sure you are the answer is fully supported by the data.
 - used_sources lists the ids of the sources you used.
 - A source that says "Applies only when: ..." may be used only if the customer's messages or the CRM context show that condition holds. You may use common knowledge to judge a condition, for example which state a city is in. A source that applies when "none of these is true" may be used only when you are sure none of them holds. When you cannot tell which condition holds, set can_answer to false.
-- CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source."""
+- CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source.
+- holding: when can_answer is false, the reply the customer gets instead, written for their situation. For a complaint, a rejection, a threat (for example a legal notice) or any problem: apologise for the inconvenience, say we are checking it from our side and a sales representative will contact them shortly, and ask them to bear with us. For an enquiry or a request: thank them and say a sales representative will contact them shortly. One to three short sentences in the customer's language, plain text, no signature. Never give facts, prices, dates or numbers, never admit fault or promise a replacement, refund or anything else: only that a sales representative will contact them. Empty when can_answer is true."""
 
 SCHEMA = {
 	"type": "object",
@@ -66,8 +68,9 @@ SCHEMA = {
 		"answer": {"type": "string"},
 		"confidence": {"type": "integer"},
 		"used_sources": {"type": "array", "items": {"type": "string"}},
+		"holding": {"type": "string"},
 	},
-	"required": ["can_answer", "answer", "confidence", "used_sources"],
+	"required": ["can_answer", "answer", "confidence", "used_sources", "holding"],
 	"additionalProperties": False,
 }
 
@@ -215,18 +218,22 @@ def grounded(answer: str, sources: list[dict], customer_text: str) -> bool:
 	return _numbers(answer) <= allowed
 
 
+def _no_new_numbers(text: str, customer_text: str) -> bool:
+	"""A holding reply carries no facts: not even one digit the customer did not write themselves."""
+	return set(re.findall(r"\d+", text)) <= set(re.findall(r"\d+", customer_text or ""))
+
+
 def build(customer_text: str, contact_number: str = "", is_group: bool = False, chat_id: str = "") -> dict:
-	"""{can_answer, answer, confidence, used_sources, sources}. can_answer is False when there is
-	no data, the AI is unsure, or the answer fails the checks.
+	"""{can_answer, answer, confidence, used_sources, sources, holding}. can_answer is False when
+	there is no data, the AI is unsure, or the answer fails the checks; holding is then the AI's
+	reply for the situation, or "" when it wrote none that passes the checks.
 
 	With the chat known, the CRM record is read first: its last quotation and deal stage join the
 	data (they may be quoted), the rest is internal context (crm_context.py)."""
 	context = crm_context.build(chat_id) if chat_id else None
 	sources = gather(customer_text, contact_number, is_group) + crm_context.customer_sources(context)
-	result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": sources}
-	if not sources:
-		return result
-	data = "\n".join(f"[{s['id']}] {s['title']}: {s['text']}" for s in sources)
+	# With no data the AI is still asked, for a holding reply that fits what the customer wrote.
+	data = "\n".join(f"[{s['id']}] {s['title']}: {s['text']}" for s in sources) or "(none)"
 	background = (
 		f"CRM CONTEXT (internal, never quote):\n{crm_context.internal_text(context)}\n\n" if context else ""
 	)
@@ -242,10 +249,12 @@ def build(customer_text: str, contact_number: str = "", is_group: bool = False, 
 		and bool(used)
 		and grounded(answer, sources, customer_text)
 	)
+	holding = (reply.get("holding") or "").strip()
 	return {
 		"can_answer": ok,
 		"answer": answer if ok else "",
 		"confidence": int(reply.get("confidence") or 0) if ok else 0,
 		"used_sources": used,
 		"sources": sources,
+		"holding": holding if holding and _no_new_numbers(holding, customer_text) else "",
 	}

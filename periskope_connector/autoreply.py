@@ -6,8 +6,11 @@
 2. A rep's reply cancels the row: a human got there first. There is no pause: the next unanswered
    message starts a new clock.
 3. A job every minute handles the rows that are due, day or night: it reads all the unanswered
-   messages, asks answer.py, and sends either the answer (confident, from data) or the holding
-   message. In the holding case the rep also gets a task and the reminder ladder follows.
+   messages, asks answer.py, and sends either the answer (confident, from data) or a holding reply
+   the AI words for the situation (an apology for a complaint, thanks for an enquiry; the fixed
+   holding message when the AI cannot be asked). In the holding case the rep also gets a task and
+   the reminder ladder follows. After a holding reply only the messages that came later are
+   answered, so a new question is not held back by an earlier complaint.
 
 Nothing is sent unless "Reply to Customers" is on, and never in a group. In test mode (safety.py) a
 chat that is not on the allow list gets a dry run: the reply is prepared and kept on the row, nothing
@@ -211,6 +214,23 @@ def _fail_and_follow(name: str, row, pending, rep, message: str):
 	)
 
 
+def _held_until(row, messages: list):
+	"""Up to when the customer was told a rep will come back: our last holding reply's WhatsApp echo,
+	or the last customer message that reply covered (the echo may not have arrived yet). Both are
+	WhatsApp times, so they compare with the customer's messages."""
+	times = [m.message_timestamp for m in messages if m.agent_reply == "Holding"]
+	covered = frappe.db.get_value(
+		"Periskope Auto Reply",
+		{"chat_id": row.chat_id, "status": "Holding Sent", "name": ["!=", row.name]},
+		"last_customer_message",
+		order_by="sent_on desc",
+	)
+	stamp = covered and frappe.db.get_value("Periskope Message", covered, "message_timestamp")
+	if stamp:
+		times.append(get_datetime(stamp))
+	return max(times, default=None)
+
+
 def process(name: str) -> str:
 	"""Handle one due row. Returns the final status."""
 	settings = _settings()
@@ -236,6 +256,10 @@ def process(name: str) -> str:
 	)
 	messages.reverse()
 	pending = reminders.unanswered(messages, cfg.ack_words)
+	held = _held_until(row, messages)
+	held_before = bool(held and pending and held >= pending[0].message_timestamp)
+	if held_before:
+		pending = [m for m in pending if m.message_timestamp > held]
 	if not pending:
 		return end("Cancelled", _("Already answered, or nothing to answer"))
 
@@ -255,9 +279,21 @@ def process(name: str) -> str:
 	customer_text = "\n".join(readable_text(m) for m in pending if readable_text(m))
 	rep = next((m.rep for m in reversed(messages) if m.rep), None) or row.rep
 	phone = row.org_phone or pending[-1].org_phone
-	frappe.db.set_value("Periskope Auto Reply", name, "customer_text", customer_text)
+	# The last message this reply covers: a later holding reply starts after it (_held_until).
+	frappe.db.set_value(
+		"Periskope Auto Reply",
+		name,
+		{"customer_text": customer_text, "last_customer_message": pending[-1].name},
+	)
 
-	result = {"can_answer": False, "answer": "", "confidence": 0, "used_sources": [], "sources": []}
+	result = {
+		"can_answer": False,
+		"answer": "",
+		"confidence": 0,
+		"used_sources": [],
+		"sources": [],
+		"holding": "",
+	}
 	ready, reason = assistant.readiness()
 	if not ready:
 		# No AI call at all: the customer gets the holding message, the rep a task, the admin one email.
@@ -271,13 +307,10 @@ def process(name: str) -> str:
 			health.log_once("Periskope: could not prepare an auto reply")
 
 	confident = result["can_answer"] and result["confidence"] >= MIN_CONFIDENCE
-	if not confident and frappe.db.exists(
-		"Periskope Auto Reply",
-		{"chat_id": row.chat_id, "status": "Holding Sent", "sent_on": [">=", pending[0].message_timestamp]},
-	):
+	if not confident and held_before:
 		# The customer was already told a rep will come back; do not repeat it.
 		return end("Skipped", _("The holding message was already sent"))
-	text = result["answer"] if confident else DEFAULT_HOLDING
+	text = result["answer"] if confident else (result.get("holding") or DEFAULT_HOLDING)
 	status = "Sent" if confident else "Holding Sent"
 
 	# A rep may have written while the answer was prepared.
