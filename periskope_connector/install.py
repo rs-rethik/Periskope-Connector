@@ -208,11 +208,40 @@ def _ensure_working_hours():
 			frappe.db.set_single_value("Periskope Settings", field, value)
 
 
+# On a CRM lead or deal: open its WhatsApp chat in the inbox (the newest, on whichever number).
+INBOX_SCRIPT = """class %(cls)s {
+	onLoad() {
+		call("periskope_connector.api.crm_panel.chats_for_record", { doctype: "%(dt)s", name: this.doc.name }).then((chats) => {
+			if (!chats || !chats.length || this.actions.find((a) => a.periskopeInbox)) return
+			this.actions.push({
+				periskopeInbox: true,
+				label: __("Open WhatsApp inbox"),
+				onClick: () => window.open("/whatsapp/inbox/" + encodeURIComponent(chats[0].name), "_blank"),
+			})
+		})
+	}
+}
+"""
+
+
 def _ensure_crm_ui():
-	"""The Periskope WhatsApp account, so the CRM shows its WhatsApp tab."""
+	"""The Periskope WhatsApp account, so the CRM shows its WhatsApp tab, and the "Open WhatsApp
+	inbox" action on leads and deals."""
 	from periskope_connector.mirror import ensure_account
 
 	ensure_account()
+	if not frappe.db.exists("DocType", "CRM Form Script"):
+		return
+	for dt in ("CRM Lead", "CRM Deal"):
+		name = f"Periskope Inbox ({dt})"
+		script = INBOX_SCRIPT % {"cls": dt.replace(" ", ""), "dt": dt}
+		if frappe.db.exists("CRM Form Script", name):
+			frappe.db.set_value("CRM Form Script", name, {"script": script, "enabled": 1})
+			continue
+		doc = frappe.get_doc(
+			{"doctype": "CRM Form Script", "dt": dt, "view": "Form", "enabled": 1, "script": script}
+		)
+		doc.insert(set_name=name, ignore_permissions=True)
 
 
 # The workspace's Messages by Tag block: every tag with its full name, a bar and the count of the last 30

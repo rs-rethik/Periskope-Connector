@@ -77,7 +77,7 @@ class PeriskopeWhatsAppMessage(WhatsAppMessage):
 		# here lets mirror.upsert find this row instead of adding a second one.
 		self.message_id = f"true_{chat_id}_{unique_id}" if unique_id else None
 		self.status = "sent"
-		self.label = "Rep reply"
+		self.label = f"Rep reply · via {numbers.label(phone)}"
 		from periskope_connector.autoreply import cancel
 
 		cancel(chat_id, _("A rep replied"))

@@ -45,6 +45,7 @@ FIELDS = [
 	"transcript",
 	"is_deleted",
 	"send_status",
+	"attachment_file",
 ]
 # Sent from the inbox but not taken by Periskope (yet): nothing to show in the CRM.
 UNSENT = ("Sending", "Failed", "Not Sent")
@@ -93,6 +94,16 @@ def _text(m) -> str:
 	return (AI_PREFIX + body) if m.agent_reply else body
 
 
+def _label(m) -> str:
+	"""What the CRM tab shows beside a message: the AI's replies, and which of our numbers it was on,
+	so a lead that wrote to two numbers reads clearly."""
+	from periskope_connector import numbers
+
+	ai = {"Answer": "AI reply", "Holding": "AI holding message"}.get(m.agent_reply or "", "")
+	via = f"via {numbers.label(m.org_phone)}" if m.org_phone else ""
+	return " · ".join(part for part in (ai, via) if part)
+
+
 def _values(m, reference: tuple[str, str]) -> dict:
 	incoming = m.direction == "Incoming"
 	customer = f"+{m.contact_number}" if m.contact_number else ""
@@ -106,12 +117,15 @@ def _values(m, reference: tuple[str, str]) -> dict:
 		"message_id": m.message_id,
 		"whatsapp_account": ACCOUNT,
 		"status": "" if incoming else ACK_STATUS.get(str(m.ack or ""), "sent"),
-		"label": {"Answer": "AI reply", "Holding": "AI holding message"}.get(m.agent_reply or "", ""),
+		"label": _label(m),
 		"reference_doctype": reference[0],
 		"reference_name": reference[1],
 	}
 	if (m.media_path or "").startswith(("http://", "https://")):
 		values["attach"] = m.media_path
+	elif m.attachment_file:
+		# Sent from the inbox: the file we saved (private; opened with the message's permission).
+		values["attach"] = frappe.db.get_value("File", m.attachment_file, "file_url")
 	return values
 
 
@@ -150,7 +164,9 @@ def upsert(message: str) -> str | None:
 			m.message_id and frappe.db.get_value("WhatsApp Message", {"message_id": m.message_id})
 		)
 		if existing and frappe.db.exists("WhatsApp Message", existing):
-			keep = ("message", "status", "label", "reference_doctype", "reference_name")
+			keep = ("message", "status", "label", "reference_doctype", "reference_name") + (
+				("attach",) if values.get("attach") else ()
+			)
 			frappe.db.set_value(
 				"WhatsApp Message", existing, {k: values[k] for k in keep}, update_modified=False
 			)

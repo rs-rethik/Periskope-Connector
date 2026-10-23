@@ -19,6 +19,8 @@
   "crm_lead",
   "organization",
   "summary_note",
+  "linked_by_hand",
+  "linked_by",
   "section_inbox",
   "last_message_preview",
   "last_message_direction",
@@ -159,11 +161,25 @@
    "fieldtype": "Int",
    "label": "Messages",
    "read_only": 1
+  },
+  {
+   "fieldname": "linked_by_hand",
+   "fieldtype": "Check",
+   "label": "Linked by Hand",
+   "read_only": 1,
+   "description": "Someone chose this lead or deal in the inbox; the automatic match by number no longer changes it."
+  },
+  {
+   "fieldname": "linked_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Linked By",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 13:36:03.949798",
+ "modified": "2026-10-23 15:30:42.682535",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

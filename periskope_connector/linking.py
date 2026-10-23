@@ -310,6 +310,15 @@ LINK_FIELDS = ["is_group", "contact_number", "chat_id", "sender_phone", "mention
 def find_link(doc) -> tuple[str | None, str | None, str, str]:
 	"""(lead, deal, status, method) for a Periskope Message, or a status with no lead/deal."""
 	if not doc.is_group:
+		# A lead or deal chosen by hand in the inbox wins over the match by number.
+		manual = frappe.db.get_value(
+			"Periskope Chat",
+			{"chat_id": doc.chat_id, "linked_by_hand": 1},
+			["crm_lead", "crm_deal"],
+			as_dict=True,
+		)
+		if manual and (manual.crm_lead or manual.crm_deal):
+			return manual.crm_lead, manual.crm_deal, "Linked", "Chosen in the Inbox"
 		lead, deal, status = resolve(by_mobile(doc.contact_number))
 		return lead, deal, status, "Mobile Number"
 

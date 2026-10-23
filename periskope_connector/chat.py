@@ -91,6 +91,9 @@ def ensure(message) -> str | None:
 		if message.direction == "Incoming" and newest:
 			values["last_incoming_at"] = message.message_timestamp
 		if name:
+			if frappe.db.get_value("Periskope Chat", name, "linked_by_hand"):
+				values.pop("crm_lead", None)  # chosen by hand in the inbox: kept as it is
+				values.pop("crm_deal", None)
 			if not message.crm_lead and not message.crm_deal:
 				values.pop("crm_lead", None)
 				values.pop("crm_deal", None)
