@@ -24,7 +24,7 @@
 		</template>
 		<template #body="{ close }">
 			<div
-				class="ml-2 w-96 rounded-lg border border-outline-gray-2 bg-surface-white shadow-xl"
+				class="ml-2 w-96 rounded-lg border border-outline-gray-2 bg-surface-base shadow-xl"
 			>
 				<div class="flex items-center border-b border-outline-gray-1 px-3 py-2">
 					<span class="text-base font-medium text-ink-gray-9">Notifications</span>

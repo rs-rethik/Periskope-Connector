@@ -1,7 +1,7 @@
 <template>
 	<Dialog v-model="open" :options="{ size: '6xl' }">
 		<template #body>
-			<div class="flex h-[80vh] overflow-hidden rounded-xl bg-surface-white">
+			<div class="flex h-[80vh] overflow-hidden rounded-xl bg-surface-base">
 				<!-- Menu -->
 				<nav
 					class="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-outline-gray-1 bg-surface-gray-1 p-2"
@@ -19,7 +19,7 @@
 							class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
 							:class="
 								page === item.key
-									? 'bg-surface-white text-ink-gray-9 shadow-sm'
+									? 'bg-surface-base text-ink-gray-9 shadow-sm'
 									: 'text-ink-gray-7 hover:bg-surface-gray-2'
 							"
 							@click="page = item.key"

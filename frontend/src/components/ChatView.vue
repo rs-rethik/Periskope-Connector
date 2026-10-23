@@ -2,7 +2,7 @@
 	<div class="flex h-full min-w-0 flex-col bg-surface-gray-1">
 		<div
 			v-if="chat"
-			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-white px-4 py-2.5"
+			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-2.5"
 		>
 			<Avatar :label="chat.chat_name || chat.contact_number || chat.title" size="lg" />
 			<div class="min-w-[14rem] flex-1">
@@ -38,7 +38,7 @@
 					class="my-2 flex justify-center"
 				>
 					<span
-						class="rounded-full bg-surface-white px-3 py-0.5 text-xs text-ink-gray-6 shadow-sm"
+						class="rounded-full bg-surface-base px-3 py-0.5 text-xs text-ink-gray-6 shadow-sm"
 					>
 						{{ dayLabel(item.at) }}
 					</span>

@@ -1,6 +1,6 @@
 <template>
 	<FrappeUIProvider>
-		<div class="flex h-full w-full overflow-hidden bg-surface-white">
+		<div class="flex h-full w-full overflow-hidden bg-surface-base">
 			<AppSidebar />
 			<main class="flex min-w-0 flex-1 flex-col">
 				<router-view :key="$route.name" />

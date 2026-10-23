@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="flex h-full flex-col overflow-y-auto border-l border-outline-gray-1 bg-surface-white p-4"
+		class="flex h-full flex-col overflow-y-auto border-l border-outline-gray-1 bg-surface-base p-4"
 	>
 		<div v-if="!rows.length" class="text-sm text-ink-gray-5">
 			Nothing has happened to this chat yet.

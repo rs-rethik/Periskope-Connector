@@ -18,7 +18,7 @@
 				</template>
 				<template #body>
 					<div
-						class="mt-1 w-96 rounded-lg border border-outline-gray-2 bg-surface-white p-3 shadow-xl"
+						class="mt-1 w-96 rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
 					>
 						<div v-for="(f, i) in extra" :key="i" class="mb-2 flex items-center gap-2">
 							<Select
@@ -245,7 +245,7 @@
 		<!-- Bulk actions -->
 		<div
 			v-if="selected.size"
-			class="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-surface-white px-4 py-2 shadow-2xl ring-1 ring-outline-gray-2"
+			class="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-surface-base px-4 py-2 shadow-2xl ring-1 ring-outline-gray-2"
 		>
 			<span class="mr-2 text-sm text-ink-gray-8">{{ selected.size }} selected</span>
 			<Button size="sm" label="Assign to me" @click="bulk('assign_to_me')" />

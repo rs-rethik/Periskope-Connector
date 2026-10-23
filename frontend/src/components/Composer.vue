@@ -1,5 +1,5 @@
 <template>
-	<div class="border-t border-outline-gray-1 bg-surface-white">
+	<div class="border-t border-outline-gray-1 bg-surface-base">
 		<div class="flex items-center gap-1 px-3 pt-2">
 			<Button
 				size="sm"
@@ -67,7 +67,7 @@
 		<div class="relative px-3 py-2" :class="mode === 'note' ? 'bg-surface-amber-1' : ''">
 			<div
 				v-if="suggestions.length"
-				class="absolute bottom-full left-3 z-10 mb-1 max-h-60 w-80 overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-white p-1 shadow-lg"
+				class="absolute bottom-full left-3 z-10 mb-1 max-h-60 w-80 overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base p-1 shadow-lg"
 			>
 				<button
 					v-for="(s, i) in suggestions"
@@ -104,7 +104,7 @@
 					</template>
 					<template #body="{ close }">
 						<div
-							class="grid w-72 grid-cols-8 gap-1 rounded-lg border border-outline-gray-2 bg-surface-white p-2 shadow-lg"
+							class="grid w-72 grid-cols-8 gap-1 rounded-lg border border-outline-gray-2 bg-surface-base p-2 shadow-lg"
 						>
 							<button
 								v-for="e in EMOJI"

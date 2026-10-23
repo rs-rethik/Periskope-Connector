@@ -6,7 +6,7 @@
 			<span
 				v-for="v in chosen"
 				:key="v"
-				class="inline-flex items-center gap-1 rounded bg-surface-white px-1.5 py-0.5 text-sm text-ink-gray-8 shadow-sm"
+				class="inline-flex items-center gap-1 rounded bg-surface-base px-1.5 py-0.5 text-sm text-ink-gray-8 shadow-sm"
 			>
 				{{ labelOf(v) }}
 				<button class="text-ink-gray-5 hover:text-ink-gray-8" @click="remove(v)">
@@ -25,7 +25,7 @@
 		</div>
 		<div
 			v-if="open && options.length"
-			class="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-white p-1 shadow-lg"
+			class="absolute z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base p-1 shadow-lg"
 		>
 			<button
 				v-for="o in options"

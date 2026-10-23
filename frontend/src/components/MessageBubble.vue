@@ -14,7 +14,7 @@
 		<div
 			class="relative max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm"
 			:class="[
-				outgoing ? 'bg-surface-green-1' : 'border border-outline-gray-1 bg-surface-white',
+				outgoing ? 'bg-surface-green-1' : 'border border-outline-gray-1 bg-surface-base',
 				unsent ? 'ring-1 ring-outline-red-2' : '',
 				hasReactions ? 'mb-3' : '',
 			]"
@@ -139,7 +139,7 @@
 			</div>
 			<div
 				v-if="hasReactions"
-				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-white px-1.5 py-0.5 text-sm shadow-sm"
+				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-base px-1.5 py-0.5 text-sm shadow-sm"
 				:class="outgoing ? 'right-2' : 'left-2'"
 				:title="reactionTitle"
 			>

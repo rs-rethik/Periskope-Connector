@@ -1,6 +1,6 @@
 <template>
 	<div
-		class="flex h-full flex-col overflow-y-auto border-l border-outline-gray-1 bg-surface-white"
+		class="flex h-full flex-col overflow-y-auto border-l border-outline-gray-1 bg-surface-base"
 	>
 		<div v-if="chat" class="flex flex-col gap-5 p-4">
 			<section>

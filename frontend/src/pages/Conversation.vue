@@ -24,7 +24,7 @@
 		</div>
 		<div class="hidden w-[320px] shrink-0 flex-col lg:flex">
 			<div
-				class="flex gap-1 border-b border-l border-outline-gray-1 bg-surface-white px-3 py-2"
+				class="flex gap-1 border-b border-l border-outline-gray-1 bg-surface-base px-3 py-2"
 			>
 				<Button
 					size="sm"
