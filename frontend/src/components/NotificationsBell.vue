@@ -1,7 +1,8 @@
 <template>
-	<Popover placement="right-start">
+	<!-- full width, like the other rows, so the panel opens beside the sidebar, not over it -->
+	<Popover class="w-full" placement="right-start">
 		<template #target="{ togglePopover }">
-			<SidebarItem label="Notifications" @click="togglePopover()">
+			<SidebarItem class="w-full" label="Notifications" @click="togglePopover()">
 				<template #prefix>
 					<span class="relative grid size-4 place-items-center">
 						<LucideBell class="size-4 text-ink-gray-6" />
