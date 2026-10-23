@@ -10,7 +10,7 @@
 		/>
 		<template v-else>
 			<label class="mb-1 block text-xs text-ink-gray-5">
-				{{ field.label }}<span v-if="field.reqd" class="text-ink-red-4"> *</span>
+				{{ field.label }}<span v-if="field.reqd" class="text-ink-red-8"> *</span>
 			</label>
 			<div
 				v-if="field.read_only"

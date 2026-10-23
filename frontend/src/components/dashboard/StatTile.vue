@@ -29,8 +29,8 @@ defineProps({
 defineEmits(["open"]);
 // Status tones come with an icon and a label, never colour alone.
 const toneClass = {
-	critical: "text-ink-red-4",
-	warning: "text-ink-amber-4",
+	critical: "text-ink-red-8",
+	warning: "text-ink-amber-8",
 	good: "text-ink-green-6",
 };
 </script>

@@ -110,3 +110,38 @@ class TestReports(DeskPagesCase):
 			out = desk_pages.run_report(name, {"from_date": "2026-10-01", "to_date": "2026-10-23"})
 			self.assertTrue(out["columns"], name)
 		self.assertRaises(frappe.PermissionError, desk_pages.run_report, "Stock Balance")
+
+
+class TestDeskRetired(DeskPagesCase):
+	def test_the_desk_screens_are_removed_and_the_doctypes_stay(self):
+		from periskope_connector.patches import retire_desk_screens
+
+		frappe.get_doc(
+			{"doctype": "Custom HTML Block", "__newname": retire_desk_screens.BLOCK, "html": "<div></div>"}
+		).insert(ignore_permissions=True)
+		for label in ("Messages Today", "Holding Messages Today"):  # a current and an older card name
+			frappe.get_doc(
+				{
+					"doctype": "Number Card",
+					"label": label,
+					"document_type": "Periskope Message",
+					"function": "Count",
+					"module": retire_desk_screens.MODULE,
+				}
+			).insert(ignore_permissions=True)
+		other = frappe.get_doc(
+			{"doctype": "Number Card", "label": "Not Ours", "document_type": "ToDo", "function": "Count"}
+		).insert(ignore_permissions=True)
+		retire_desk_screens.execute()
+		for doctype, name in (
+			("Workspace", retire_desk_screens.WORKSPACE),
+			("Custom HTML Block", retire_desk_screens.BLOCK),
+			("Number Card", "Messages Today"),
+			("Number Card", "Holding Messages Today"),
+			("Page", retire_desk_screens.PAGE),
+		):
+			self.assertFalse(frappe.db.exists(doctype, name), name)
+		self.assertTrue(frappe.db.exists("Number Card", other.name))
+		for doctype in ("Periskope Settings", "Periskope Message", "Periskope Chat", "Periskope Contact"):
+			self.assertTrue(frappe.db.exists("DocType", doctype), doctype)
+		retire_desk_screens.execute()  # runs again without error

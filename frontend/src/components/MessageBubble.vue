@@ -122,7 +122,7 @@
 					:title="tick.title"
 				/>
 			</div>
-			<div v-if="unsent" class="mt-1 flex items-center gap-2 text-xs text-ink-red-4">
+			<div v-if="unsent" class="mt-1 flex items-center gap-2 text-xs text-ink-red-8">
 				<LucideCircleAlert class="size-3.5 shrink-0" />
 				<span class="min-w-0 flex-1">
 					{{ message.send_status === "Not Sent" ? "Not sent" : "Failed" }}:

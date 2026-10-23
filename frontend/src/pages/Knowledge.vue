@@ -153,7 +153,7 @@
 					</span>
 					<span
 						v-if="n.draft || n.status === 'Suggested'"
-						class="absolute -top-2.5 right-2 rounded bg-surface-amber-2 px-1.5 text-[10px] text-ink-amber-4"
+						class="absolute -top-2.5 right-2 rounded bg-surface-amber-2 px-1.5 text-[10px] text-ink-amber-8"
 					>
 						{{ n.draft ? "Not saved" : "Waiting for approval" }}
 					</span>
@@ -176,7 +176,7 @@
 				<!-- unhook a wire -->
 				<button
 					v-if="wire"
-					class="absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 shadow hover:text-ink-red-4"
+					class="absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 shadow hover:text-ink-red-8"
 					:style="{ left: `${wire.x}px`, top: `${wire.y}px` }"
 					title="Disconnect"
 					@pointerdown.stop
@@ -393,8 +393,7 @@ import LucideX from "~icons/lucide/x";
 import { boot } from "@/boot";
 import { fromNow } from "@/utils/format";
 
-// The knowledge base the auto reply answers from, as a node graph (the Desk canvas of
-// public/js/periskope_knowledge.js, moved here). Every node is a Periskope Knowledge Entry and its
+// The knowledge base the auto reply answers from, as a node graph. Every node is a Periskope Knowledge Entry and its
 // wire is its parent_entry; everything saves as it is made (knowledge_canvas.py).
 const API = "periskope_connector.knowledge_canvas.";
 const NODE_W = 240;

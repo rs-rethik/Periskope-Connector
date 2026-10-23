@@ -156,7 +156,7 @@
 							<dd class="text-right text-ink-gray-8">{{ r[1] ?? "—" }}</dd>
 						</template>
 					</dl>
-					<div v-if="panel.warn" class="mt-2 text-xs text-ink-amber-4">
+					<div v-if="panel.warn" class="mt-2 text-xs text-ink-amber-8">
 						{{ panel.warn }}
 					</div>
 
@@ -307,7 +307,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideCircleMinus from "~icons/lucide/circle-minus";
 import { boot } from "@/boot";
 
-// The same diagram as the Flow dialog of the Settings form (public/js/periskope_flow.js): four lanes,
+// The Flow diagram (flow.py): four lanes,
 // the steps at fixed places, and the arrows between them.
 const COL = { A: 24, B: 272, C: 520, D: 768 };
 const ROW = { 1: 60, 2: 255, 3: 450, 4: 645 };
@@ -359,8 +359,8 @@ const EDGES = [
 ];
 const legend = [
 	{ label: "Working", icon: LucideCircleCheck, cls: "text-ink-green-6" },
-	{ label: "Needs a look", icon: LucideTriangleAlert, cls: "text-ink-amber-4" },
-	{ label: "Not working", icon: LucideCircleX, cls: "text-ink-red-4" },
+	{ label: "Needs a look", icon: LucideTriangleAlert, cls: "text-ink-amber-8" },
+	{ label: "Not working", icon: LucideCircleX, cls: "text-ink-red-8" },
 	{ label: "Off", icon: LucideCircleMinus, cls: "text-ink-gray-5" },
 ];
 

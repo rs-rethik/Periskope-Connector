@@ -16,10 +16,10 @@
 		</div>
 		<div v-if="h" class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
 			<div
-				v-if="h.test_mode"
-				class="mb-4 rounded-lg bg-surface-amber-1 px-3 py-2 text-sm text-ink-amber-4"
+				v-if="h.test_mode_on"
+				class="mb-4 rounded-lg bg-surface-amber-1 px-3 py-2 text-sm text-ink-amber-8"
 			>
-				{{ h.test_mode }}
+				Test mode is {{ h.test_mode }}
 			</div>
 			<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 				<section
@@ -37,10 +37,10 @@
 				</section>
 			</div>
 			<section
-				v-if="h.last_problem"
+				v-if="h.has_problem"
 				class="mt-4 rounded-lg border border-outline-red-2 bg-surface-red-1 p-4"
 			>
-				<h2 class="mb-1 flex items-center gap-1.5 text-sm font-medium text-ink-red-4">
+				<h2 class="mb-1 flex items-center gap-1.5 text-sm font-medium text-ink-red-8">
 					<LucideCircleAlert class="size-4" /> Last problem
 				</h2>
 				<pre class="whitespace-pre-wrap text-xs text-ink-gray-8">{{ h.last_problem }}</pre>

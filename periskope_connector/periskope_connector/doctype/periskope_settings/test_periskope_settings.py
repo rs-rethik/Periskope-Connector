@@ -424,6 +424,20 @@ class TestGetHealth(FrappeTestCase):
 		):
 			self.assertIn(key, figures)
 
+	def test_the_flags_follow_test_mode_and_the_error_log_not_the_shown_text(self):
+		with patch.object(flow.safety, "test_mode", lambda: False):
+			figures = health.agent_health()
+		self.assertFalse(figures["test_mode_on"])
+		self.assertTrue(figures["test_mode"])  # "off" is shown, so the text alone cannot be the flag
+		with patch.object(flow.safety, "test_mode", lambda: True):
+			self.assertTrue(health.agent_health()["test_mode_on"])
+		get_all = frappe.get_all
+		no_errors = lambda doctype, *a, **k: [] if doctype == "Error Log" else get_all(doctype, *a, **k)  # noqa: E731
+		with patch.object(frappe, "get_all", no_errors):
+			figures = health.agent_health()
+		self.assertFalse(figures["has_problem"])
+		self.assertTrue(figures["last_problem"])
+
 
 class TestHealthFigures(FrappeTestCase):
 	def setUp(self):

@@ -32,7 +32,7 @@
 			</div>
 			<div
 				v-if="sectionKey === 'test_mode' && form.test_mode"
-				class="mb-4 rounded-lg bg-surface-red-1 px-3 py-2 text-sm text-ink-red-4"
+				class="mb-4 rounded-lg bg-surface-red-1 px-3 py-2 text-sm text-ink-red-8"
 			>
 				Test mode is on: WhatsApp messages go only to the numbers below, and emails only to
 				the addresses below.

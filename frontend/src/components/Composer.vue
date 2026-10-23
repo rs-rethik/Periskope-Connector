@@ -134,7 +134,7 @@
 						><template #icon><LucideZap class="size-4" /></template
 					></Button>
 				</Dropdown>
-				<span v-if="error" class="ml-2 truncate text-sm text-ink-red-4">{{ error }}</span>
+				<span v-if="error" class="ml-2 truncate text-sm text-ink-red-8">{{ error }}</span>
 				<Button
 					class="ml-auto"
 					variant="solid"

@@ -17,10 +17,10 @@ import LucideTimer from "~icons/lucide/timer";
 const props = defineProps({ chat: { type: Object, required: true } });
 
 const classes = {
-	Breached: "bg-surface-red-2 text-ink-red-4",
-	"Due Soon": "bg-surface-amber-2 text-ink-amber-4",
+	Breached: "bg-surface-red-2 text-ink-red-8",
+	"Due Soon": "bg-surface-amber-2 text-ink-amber-8",
 	"On Track": "bg-surface-gray-2 text-ink-gray-6",
-	Met: "bg-surface-green-2 text-ink-green-4",
+	Met: "bg-surface-green-2 text-ink-green-8",
 };
 
 const text = computed(() => {

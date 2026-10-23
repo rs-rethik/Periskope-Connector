@@ -211,7 +211,7 @@
 										/>
 										<LucideCircleAlert
 											v-else
-											class="size-3.5 text-ink-red-4"
+											class="size-3.5 text-ink-red-8"
 										/>
 										{{
 											n.is_ready
@@ -270,7 +270,7 @@
 
 				<section class="rounded-lg border border-outline-gray-1 bg-surface-base p-4">
 					<h2 class="mb-2 flex items-center gap-2 text-base font-medium text-ink-gray-9">
-						<LucideTimerOff class="size-4 text-ink-red-4" /> SLA breached now
+						<LucideTimerOff class="size-4 text-ink-red-8" /> SLA breached now
 					</h2>
 					<div
 						v-if="!d.breaches.length"
@@ -289,7 +289,7 @@
 						<span class="text-xs text-ink-gray-5">{{
 							b.assigned_to.length ? b.assigned_to[0].split("@")[0] : "Unassigned"
 						}}</span>
-						<span class="text-xs font-medium text-ink-red-4">{{ late(b.due) }}</span>
+						<span class="text-xs font-medium text-ink-red-8">{{ late(b.due) }}</span>
 					</button>
 				</section>
 			</div>

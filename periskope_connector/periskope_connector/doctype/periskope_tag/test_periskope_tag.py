@@ -1,13 +1,11 @@
 """Tests for the Periskope Tag doctype and the code that works on it."""
 
-from datetime import datetime, timezone
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, now_datetime
 
-from periskope_connector import dashboard, install, messages, tags
+from periskope_connector import install, messages, tags
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system
 from periskope_connector.tests.utils import event, without_site_teams
@@ -180,52 +178,10 @@ class TestAIDecisions(FrappeTestCase):
 
 
 class TestDashboardGroups(FrappeTestCase):
-	"""The workspace cards count the tags in a dashboard group, not fixed tag names."""
-
-	def setUp(self):
-		for target in (
-			patch.object(frappe.db, "commit"),
-			patch("periskope_connector.messages.fetch_chat_name", lambda *a, **k: ""),
-		):
-			target.start()
-			self.addCleanup(target.stop)
+	def test_the_starting_tags_are_grouped(self):
 		frappe.db.savepoint("periskope_dashboard_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_dashboard_test")
-		without_site_teams(self, "periskope_dashboard_test")
 		install._ensure_tags()
-
-	def _message(self, tag, message_id):
-		now = datetime.now(timezone.utc).isoformat()
-		name = messages.create_message(
-			event(message_id=message_id, chat_id="919000000088@c.us", timestamp=now)
-		)
-		frappe.db.set_value("Periskope Message", name, "ai_category", tag)
-		return name
-
-	def test_messages_by_tag_lists_every_active_tag_with_its_count(self):
-		before = {r["tag"]: r["count"] for r in dashboard.tag_counts()}
-		self._message("payment_issue", "tc1")
-		self._message("payment_issue", "tc2")
-		rows = dashboard.tag_counts()
-		counts = {r["tag"]: r["count"] for r in rows}
-		self.assertEqual(counts["payment_issue"], before.get("payment_issue", 0) + 2)
-		self.assertEqual(set(counts), set(tags.names()))  # an unused tag shows 0
-		self.assertEqual([r["count"] for r in rows], sorted((r["count"] for r in rows), reverse=True))
-		self.assertEqual(next(r for r in rows if r["tag"] == "payment_issue")["label"], "payment issue")
-
-	def test_the_block_is_on_the_workspace_for_the_managers(self):
-		install._ensure_dashboard_block()
-		block = frappe.get_doc("Custom HTML Block", install.DASHBOARD_BLOCK)
-		self.assertIn("dashboard.tag_counts", block.script)
-		self.assertEqual({r.role for r in block.roles}, set(install.DASHBOARD_ROLES))
-		workspace = frappe.get_doc("Workspace", "Periskope")
-		# the page finds the block by its label, so the two must be the same
-		self.assertIn(
-			(install.DASHBOARD_BLOCK, install.DASHBOARD_BLOCK),
-			[(b.custom_block_name, b.label) for b in workspace.custom_blocks],
-		)
-
-	def test_the_starting_tags_are_grouped(self):
 		groups = {
 			t.name: t.dashboard_group
 			for t in frappe.get_all("Periskope Tag", fields=["name", "dashboard_group"])
@@ -233,29 +189,3 @@ class TestDashboardGroups(FrappeTestCase):
 		self.assertEqual(groups["order_or_enquiry"], "Enquiry")
 		self.assertEqual((groups["quality_complaint"], groups["payment_issue"]), ("Issue", "Issue"))
 		self.assertFalse(groups["general"])
-
-	def test_a_card_counts_the_recent_messages_of_the_tags_in_its_group(self):
-		before = dashboard.issues()["value"]
-		self._message("quality_complaint", "dg_1")
-		self._message("general", "dg_2")  # no group: not counted
-		self.assertEqual(dashboard.issues()["value"], before + 1)
-
-	def test_a_tag_moved_into_a_group_is_counted_at_once(self):
-		before = dashboard.enquiries()["value"]
-		self._message("sample_request", "dg_3")
-		self.assertEqual(dashboard.enquiries()["value"], before)
-		recent = frappe.db.count(
-			"Periskope Message",
-			{
-				"ai_category": "sample_request",
-				"direction": "Incoming",
-				"message_timestamp": [">=", add_days(now_datetime(), -dashboard.DAYS)],
-			},
-		)  # includes the one above, and any the site already has
-		frappe.db.set_value("Periskope Tag", "sample_request", "dashboard_group", "Enquiry")
-		self.assertEqual(dashboard.enquiries()["value"], before + recent)
-
-	def test_the_card_opens_the_list_filtered_to_the_group(self):
-		result = dashboard.issues()
-		self.assertEqual(result["route"], ["List", "Periskope Message"])
-		self.assertIn("quality_complaint", result["route_options"]["ai_category"][1])
