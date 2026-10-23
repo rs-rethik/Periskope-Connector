@@ -40,26 +40,26 @@
 						/></template>
 					</SidebarItem>
 
-					<SidebarLabel label="Views" class="mt-3" divider />
+					<SidebarLabel class="mt-3" divider
+						><span class="text-sm">Views</span></SidebarLabel
+					>
 					<SidebarItem
 						v-for="f in QUICK_FILTERS"
 						:key="f.key"
 						:label="f.label"
 						:active="inbox.quick === f.key"
+						:suffix="inbox.counts[f.key] ? String(inbox.counts[f.key]) : ''"
 						@click="inbox.quick = f.key"
 					>
 						<template #prefix
 							><component :is="filterIcons[f.key]" class="size-4 text-ink-gray-6"
 						/></template>
-						<template #suffix>
-							<span v-if="inbox.counts[f.key]" class="mr-2 text-xs text-ink-gray-5">
-								{{ inbox.counts[f.key] }}
-							</span>
-						</template>
 					</SidebarItem>
 
 					<template v-if="inbox.views.length">
-						<SidebarLabel label="Saved views" class="mt-3" divider />
+						<SidebarLabel class="mt-3" divider
+							><span class="text-sm">Saved views</span></SidebarLabel
+						>
 						<SidebarItem
 							v-for="v in inbox.views"
 							:key="v.name"
@@ -76,7 +76,9 @@
 					</template>
 
 					<template v-if="boot.is_manager">
-						<SidebarLabel label="Manage" class="mt-3" divider />
+						<SidebarLabel class="mt-3" divider
+							><span class="text-sm">Manage</span></SidebarLabel
+						>
 						<SidebarItem
 							v-for="m in manage"
 							:key="m.label"
@@ -90,7 +92,9 @@
 						</SidebarItem>
 					</template>
 
-					<SidebarLabel label="Numbers" class="mt-3" divider />
+					<SidebarLabel class="mt-3" divider
+						><span class="text-sm">Numbers</span></SidebarLabel
+					>
 					<SidebarItem
 						label="All numbers"
 						:active="!inbox.number"
@@ -103,23 +107,20 @@
 						:key="n.name"
 						:label="n.label"
 						:active="inbox.number === n.name"
+						:suffix="unreadOn(n.name) ? String(unreadOn(n.name)) : ''"
 						@click="inbox.number = n.name"
 					>
 						<template #prefix>
+							<!-- a 16px box, like the icons, so the number lines up with the rows above -->
 							<span
-								class="size-2 rounded-full"
-								:class="n.is_ready ? 'bg-surface-green-3' : 'bg-surface-red-5'"
+								class="grid size-4 place-items-center"
 								:title="n.is_ready ? 'Connected' : n.wa_state || 'Not connected'"
-							/>
-						</template>
-						<template #suffix>
-							<Badge
-								v-if="unreadOn(n.name)"
-								class="mr-2"
-								:label="String(unreadOn(n.name))"
-								variant="subtle"
-								theme="green"
-							/>
+							>
+								<span
+									class="size-2 rounded-full"
+									:class="n.is_ready ? 'bg-surface-green-3' : 'bg-surface-red-5'"
+								/>
+							</span>
 						</template>
 					</SidebarItem>
 					<div
@@ -156,7 +157,7 @@
 
 <script setup>
 import { onMounted, ref } from "vue";
-import { Badge, Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel } from "frappe-ui";
+import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel } from "frappe-ui";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideList from "~icons/lucide/list";
 import LucidePhone from "~icons/lucide/phone";
