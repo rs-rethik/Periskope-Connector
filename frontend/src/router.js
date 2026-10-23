@@ -24,6 +24,18 @@ const routes = [
 		component: () => import("@/pages/Dashboard.vue"),
 		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
 	},
+	...[
+		["/health", "Health", "Health"],
+		["/flow", "Flow", "Flow"],
+		["/reports/:report?", "Reports", "Reports"],
+		["/data/:kind", "DataList", "DataList"],
+		["/knowledge", "Knowledge", "Knowledge"],
+	].map(([path, name, page]) => ({
+		path,
+		name,
+		component: () => import(`@/pages/${page}.vue`),
+		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
+	})),
 	{ path: "/:pathMatch(.*)*", redirect: { name: "Inbox" } },
 ];
 

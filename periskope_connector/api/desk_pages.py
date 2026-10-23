@@ -1,0 +1,302 @@
+"""The Desk screens of the app, served to the WhatsApp inbox so managers never need Desk: the data
+lists (contact queue, groups, auto replies, reminders, the agent's log, AI usage, webhook logs), the
+learning agent's suggestions, and the reports.
+
+Everything here is read-only except what the screens offered in Desk: a contact can be made a lead,
+linked or ignored (api/contacts.py), a group mapped to a lead, deal or organization, and a suggestion
+approved or rejected (suggestions.decide). Managers only; each report also keeps its own roles.
+"""
+
+import importlib
+import json
+
+import frappe
+from frappe import _
+from frappe.utils import cint
+
+from periskope_connector import access
+from periskope_connector.api.permission import require_manager
+
+PAGE = 50
+
+# The lists, with the columns they show, the filters they offer and how they are sorted.
+LISTS = {
+	"contacts": {
+		"doctype": "Periskope Contact",
+		"title": "Contact queue",
+		"fields": [
+			"name",
+			"status",
+			"phone",
+			"display_name",
+			"message_count",
+			"last_message_at",
+			"linked_lead",
+			"linked_deal",
+			"reps",
+		],
+		"filters": ["status"],
+		"search": ["phone", "display_name"],
+		"order_by": "last_message_at desc",
+	},
+	"groups": {
+		"doctype": "Periskope Group",
+		"title": "Groups",
+		"fields": ["name", "group_name", "group_type", "crm_lead", "crm_deal", "organization"],
+		"filters": ["group_type"],
+		"search": ["group_name", "name"],
+		"order_by": "modified desc",
+	},
+	"auto_replies": {
+		"doctype": "Periskope Auto Reply",
+		"title": "Auto replies",
+		"fields": [
+			"name",
+			"status",
+			"contact_number",
+			"due_on",
+			"sent_on",
+			"confidence",
+			"customer_text",
+			"reply_text",
+			"cancel_reason",
+			"error",
+		],
+		"filters": ["status"],
+		"search": ["contact_number", "customer_text", "reply_text"],
+		"order_by": "creation desc",
+	},
+	"reminders": {
+		"doctype": "Periskope Reply Reminder",
+		"title": "Reply reminders",
+		"fields": ["name", "status", "rep", "contact_number", "waiting_since", "level", "message_preview"],
+		"filters": ["status", "level"],
+		"search": ["contact_number", "message_preview"],
+		"order_by": "creation desc",
+	},
+	"agent_actions": {
+		"doctype": "Periskope Agent Action",
+		"title": "What the agent did",
+		"fields": ["name", "creation", "action", "mode", "origin", "chat_id", "summary", "error"],
+		"filters": ["action", "mode", "origin"],
+		"search": ["summary", "chat_id"],
+		"order_by": "creation desc",
+	},
+	"agent_runs": {
+		"doctype": "Periskope Agent Run",
+		"title": "Agent runs",
+		"fields": ["name", "status", "started_on", "knowledge_added", "suggestions_added"],
+		"filters": ["status"],
+		"search": [],
+		"order_by": "creation desc",
+	},
+	"ai_usage": {
+		"doctype": "Periskope AI Usage",
+		"title": "AI usage",
+		"fields": ["name", "creation", "model", "input_tokens", "output_tokens", "status"],
+		"filters": ["model", "status"],
+		"search": [],
+		"order_by": "creation desc",
+	},
+	"webhook_logs": {
+		"doctype": "Periskope Webhook Log",
+		"title": "Webhook logs",
+		"fields": ["name", "creation", "event_type", "signature_valid"],
+		"filters": ["event_type", "signature_valid"],
+		"search": [],
+		"order_by": "creation desc",
+	},
+	"suggestions": {
+		"doctype": "Periskope Suggestion",
+		"title": "Suggestions",
+		"fields": ["name", "creation", "kind", "operation", "target", "status", "summary", "reason"],
+		"filters": ["kind", "operation", "status"],
+		"search": ["summary", "target"],
+		"order_by": "creation desc",
+	},
+}
+REPORTS = [
+	"Periskope Response Time",
+	"Periskope Open Escalations",
+	"Periskope Lead Source",
+	"Periskope Unmatched Numbers",
+	"Periskope Tagging Review",
+	"Periskope Sync Health",
+	"Periskope AI Usage",
+]
+
+
+def _manager():
+	access.require_inbox_user()
+	require_manager()
+	if not access.is_manager():
+		frappe.throw(_("This page is for managers."), frappe.PermissionError)
+
+
+def _list(kind: str) -> dict:
+	cfg = LISTS.get(kind)
+	if not cfg:
+		frappe.throw(_("Unknown list {0}").format(kind))
+	return cfg
+
+
+@frappe.whitelist()
+def list_meta(kind: str) -> dict:
+	"""The columns and filter choices of a list (labels and options from the doctype)."""
+	access.require_inbox_user()
+	_manager()
+	cfg = _list(kind)
+	meta = frappe.get_meta(cfg["doctype"])
+
+	def describe(name):
+		if name in ("name", "creation"):
+			return {
+				"fieldname": name,
+				"label": _("ID") if name == "name" else _("Created"),
+				"fieldtype": "Data" if name == "name" else "Datetime",
+			}
+		df = meta.get_field(name)
+		return {"fieldname": name, "label": _(df.label), "fieldtype": df.fieldtype, "options": df.options}
+
+	return {
+		"title": _(cfg["title"]),
+		"doctype": cfg["doctype"],
+		"columns": [describe(f) for f in cfg["fields"]],
+		"filters": [describe(f) for f in cfg["filters"]],
+		"searchable": bool(cfg["search"]),
+	}
+
+
+@frappe.whitelist()
+def list_rows(kind: str, filters: str | dict | None = None, search: str = "", start: int = 0) -> dict:
+	access.require_inbox_user()
+	_manager()
+	cfg = _list(kind)
+	filters = json.loads(filters) if isinstance(filters, str) else (filters or {})
+	where = {f: v for f, v in filters.items() if f in cfg["filters"] and v not in (None, "")}
+	or_filters = (
+		[[f, "like", f"%{search.strip()}%"] for f in cfg["search"]] if (search or "").strip() else None
+	)
+	rows = frappe.get_all(
+		cfg["doctype"],
+		filters=where,
+		or_filters=or_filters,
+		fields=cfg["fields"],
+		order_by=cfg["order_by"],
+		start=cint(start),
+		page_length=PAGE,
+	)
+	total = len(
+		frappe.get_all(cfg["doctype"], filters=where, or_filters=or_filters, pluck="name", limit=5000)
+	)
+	return {"rows": rows, "total": total}
+
+
+# --- What the Desk screens let you do -------------------------------------------------------------
+
+
+@frappe.whitelist(methods=["POST"])
+def contact_action(
+	contact: str, action: str, reason: str = "", lead: str | None = None, deal: str | None = None
+):
+	"""The contact queue's buttons (api/contacts.py keeps the work and its own checks)."""
+	access.require_inbox_user()
+	_manager()
+	from periskope_connector.api import contacts
+
+	if action == "create_lead":
+		return contacts.create_lead(contact)
+	if action == "ignore":
+		return contacts.ignore(contact, reason or "Ignored (Personal)")
+	if action == "link":
+		return contacts.link_to(contact, lead=lead, deal=deal)
+	if action == "matches":
+		return contacts.find_matches(contact)
+	frappe.throw(_("Unknown action {0}").format(action))
+
+
+@frappe.whitelist(methods=["POST"])
+def map_group(
+	group: str,
+	group_type: str | None = None,
+	crm_lead: str | None = None,
+	crm_deal: str | None = None,
+	organization: str | None = None,
+) -> dict:
+	"""Map a WhatsApp group to its customer (a lead, a deal or an organization), or mark it internal.
+	Its messages are linked again."""
+	access.require_inbox_user()
+	_manager()
+	doc = frappe.get_doc("Periskope Group", group)
+	if group_type:
+		doc.group_type = group_type
+	doc.crm_lead = crm_lead or None
+	doc.crm_deal = crm_deal or None
+	doc.organization = organization or None
+	doc.flags.ignore_permissions = True
+	doc.save()
+	from periskope_connector.linking import link_message
+
+	for name in frappe.get_all("Periskope Message", filters={"chat_id": doc.chat_id}, pluck="name"):
+		link_message(name)
+	return doc.as_dict()
+
+
+@frappe.whitelist(methods=["POST"])
+def decide_suggestion(name: str, decision: str) -> str:
+	"""Approve or reject one of the learning agent's suggestions, as the emailed links do."""
+	access.require_inbox_user()
+	_manager()
+	from periskope_connector.suggestions import decide
+
+	return decide(name, decision)
+
+
+# --- Reports --------------------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def reports() -> list[dict]:
+	"""The app's reports the user may run."""
+	access.require_inbox_user()
+	_manager()
+	roles = set(frappe.get_roles())
+	out = []
+	for name in REPORTS:
+		allowed = {
+			r.role
+			for r in frappe.get_all(
+				"Has Role", filters={"parent": name, "parenttype": "Report"}, fields=["role"]
+			)
+		}
+		if frappe.session.user == "Administrator" or not allowed or allowed & roles:
+			out.append(
+				{"name": name, "label": name.replace("Periskope ", ""), "filters": _report_filters(name)}
+			)
+	return out
+
+
+def _report_filters(name: str) -> list[dict]:
+	if name == "Periskope Unmatched Numbers":
+		return [
+			{"fieldname": "from_date", "label": _("From"), "fieldtype": "Date", "default_days": -7},
+			{"fieldname": "to_date", "label": _("To"), "fieldtype": "Date", "default_days": 0},
+		]
+	return []
+
+
+@frappe.whitelist()
+def run_report(name: str, filters: str | dict | None = None) -> dict:
+	"""Run one of the app's script reports with its own execute(), as Desk does."""
+	access.require_inbox_user()
+	_manager()
+	if name not in REPORTS or name not in [r["name"] for r in reports()]:
+		frappe.throw(_("You cannot run that report."), frappe.PermissionError)
+	filters = frappe._dict(json.loads(filters) if isinstance(filters, str) else (filters or {}))
+	module = importlib.import_module(
+		f"periskope_connector.periskope_connector.report.{frappe.scrub(name)}.{frappe.scrub(name)}"
+	)
+	result = module.execute(filters)
+	columns, data = result[0], result[1]
+	columns = [c if isinstance(c, dict) else {"label": c, "fieldname": c} for c in columns]
+	return {"columns": columns, "data": data}

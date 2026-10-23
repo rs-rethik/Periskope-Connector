@@ -75,6 +75,21 @@
 						</SidebarItem>
 					</template>
 
+					<template v-if="boot.is_manager">
+						<SidebarLabel label="Manage" class="mt-3" divider />
+						<SidebarItem
+							v-for="m in manage"
+							:key="m.label"
+							:label="m.label"
+							:to="m.to"
+							:active="m.active($route)"
+						>
+							<template #prefix
+								><component :is="m.icon" class="size-4 text-ink-gray-6"
+							/></template>
+						</SidebarItem>
+					</template>
+
 					<SidebarLabel label="Numbers" class="mt-3" divider />
 					<SidebarItem
 						label="All numbers"
@@ -159,12 +174,71 @@ import NotificationsBell from "@/components/NotificationsBell.vue";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import LucideSettings from "~icons/lucide/settings";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideUserSearch from "~icons/lucide/user-search";
+import LucideUsers from "~icons/lucide/users";
+import LucideLightbulb from "~icons/lucide/lightbulb";
+import LucideBookOpen from "~icons/lucide/book-open";
+import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideActivity from "~icons/lucide/activity";
+import LucideScrollText from "~icons/lucide/scroll-text";
 import { boot } from "@/boot";
 import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
 const collapsed = ref(false);
 const settingsOpen = ref(false);
+const manage = [
+	{
+		label: "Contact queue",
+		icon: LucideUserSearch,
+		to: { name: "DataList", params: { kind: "contacts" } },
+		active: (r) => r.params.kind === "contacts",
+	},
+	{
+		label: "Groups",
+		icon: LucideUsers,
+		to: { name: "DataList", params: { kind: "groups" } },
+		active: (r) => r.params.kind === "groups",
+	},
+	{
+		label: "Suggestions",
+		icon: LucideLightbulb,
+		to: { name: "DataList", params: { kind: "suggestions" } },
+		active: (r) => r.params.kind === "suggestions",
+	},
+	{
+		label: "Knowledge base",
+		icon: LucideBookOpen,
+		to: { name: "Knowledge" },
+		active: (r) => r.name === "Knowledge",
+	},
+	{
+		label: "Reports",
+		icon: LucideFileChartColumn,
+		to: { name: "Reports" },
+		active: (r) => r.name === "Reports",
+	},
+	{
+		label: "Health and flow",
+		icon: LucideActivity,
+		to: { name: "Health" },
+		active: (r) => ["Health", "Flow"].includes(r.name),
+	},
+	{
+		label: "Logs",
+		icon: LucideScrollText,
+		to: { name: "DataList", params: { kind: "agent_actions" } },
+		active: (r) =>
+			[
+				"agent_actions",
+				"agent_runs",
+				"ai_usage",
+				"webhook_logs",
+				"auto_replies",
+				"reminders",
+			].includes(r.params.kind),
+	},
+];
 const filterIcons = {
 	all: LucideInbox,
 	mine: LucideUser,
