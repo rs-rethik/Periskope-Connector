@@ -106,6 +106,15 @@
 				</div>
 
 				<div class="mt-auto pt-2">
+					<SidebarItem
+						v-if="boot.is_manager"
+						label="Settings"
+						@click="settingsOpen = true"
+					>
+						<template #prefix
+							><LucideSettings class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
 					<SidebarItem label="Open CRM" to="/crm" @click.prevent="goTo('/crm')">
 						<template #prefix
 							><LucideExternalLink class="size-4 text-ink-gray-6"
@@ -115,6 +124,7 @@
 				</div>
 			</div>
 		</Sidebar>
+		<SettingsModal v-if="boot.is_manager" v-model="settingsOpen" />
 	</div>
 </template>
 
@@ -135,11 +145,14 @@ import LucideUsersRound from "~icons/lucide/users-round";
 import LucideBookmark from "~icons/lucide/bookmark";
 import LucideBookmarkCheck from "~icons/lucide/bookmark-check";
 import NotificationsBell from "@/components/NotificationsBell.vue";
+import SettingsModal from "@/components/settings/SettingsModal.vue";
+import LucideSettings from "~icons/lucide/settings";
 import { boot } from "@/boot";
 import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
 const collapsed = ref(false);
+const settingsOpen = ref(false);
 const filterIcons = {
 	all: LucideInbox,
 	mine: LucideUser,

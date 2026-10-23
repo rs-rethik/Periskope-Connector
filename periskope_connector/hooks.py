@@ -95,7 +95,11 @@ scheduler_events = {
 		],
 		# The background learning agent: reads new conversations, builds the knowledge base and
 		# emails suggested changes for approval (nothing is applied without a manager's approval).
-		"*/15 * * * *": ["periskope_connector.agent.run"],
+		"*/15 * * * *": [
+			"periskope_connector.agent.run",
+			# The connection state of every WhatsApp number; managers hear when one drops.
+			"periskope_connector.numbers.health_check",
+		],
 		# Send the AI replies that are due (after the delay; a rep's reply or a new message moves or cancels them).
 		"* * * * *": [
 			"periskope_connector.autoreply.run_due",

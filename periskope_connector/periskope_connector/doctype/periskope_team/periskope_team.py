@@ -16,8 +16,10 @@ class PeriskopeTeam(Document):
 		self.sync_assignment_rule()
 
 	def on_trash(self):
-		if self.assignment_rule and frappe.db.exists("Assignment Rule", self.assignment_rule):
-			frappe.delete_doc("Assignment Rule", self.assignment_rule, ignore_permissions=True)
+		rule = self.assignment_rule
+		if rule and frappe.db.exists("Assignment Rule", rule):
+			self.db_set("assignment_rule", None)  # the team's link would stop the rule being deleted
+			frappe.delete_doc("Assignment Rule", rule, ignore_permissions=True)
 
 	def member_users(self) -> list[str]:
 		return [m.user for m in self.members if m.user]

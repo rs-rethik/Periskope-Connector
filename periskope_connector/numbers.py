@@ -122,3 +122,61 @@ def label(number: str | None) -> str:
 	if not number:
 		return ""
 	return frappe.db.get_value(DOCTYPE, digits(number), "display_name") or digits(number)
+
+
+def health_check() -> list[str]:
+	"""Scheduler, every 15 minutes: read the numbers' connection state from Periskope. A number that
+	was connected and now is not alerts the managers once (a bell, and an email to the alert list);
+	when it is back, the next disconnection alerts again. Returns the numbers that just dropped."""
+	settings = frappe.get_single("Periskope Settings")
+	if not settings.enabled or not settings.get_password("api_key", raise_exception=False):
+		return []
+	before = {n.name: n.is_ready for n in all_numbers()}
+	try:
+		from periskope_connector.api.settings import _fetch_phones
+
+		after = {n.name: n for n in sync_from_periskope(_fetch_phones())}
+	except Exception:
+		from periskope_connector.health import log_once
+
+		log_once("Periskope: could not read the numbers' connection state")
+		return []
+	dropped = [n for n, ready in before.items() if ready and n in after and not after[n].is_ready]
+	if dropped:
+		_alert_dropped([after[n] for n in dropped])
+	frappe.db.commit()
+	return dropped
+
+
+def _alert_dropped(rows: list):
+	from frappe import _
+
+	from periskope_connector import reminders
+	from periskope_connector.access import is_manager
+	from periskope_connector.sla import _bell
+
+	names = ", ".join(f"{r.display_name or r.number} (+{r.number})" for r in rows)
+	subject = _("WhatsApp number disconnected: {0}").format(names)
+	managers = [
+		u
+		for u in frappe.get_all("User", filters={"enabled": 1, "user_type": "System User"}, pluck="name")
+		if u != "Administrator" and is_manager(u)
+	]
+	for row in rows:
+		# The bell opens the number's newest chat, the closest page the inbox has for a number.
+		chat = frappe.db.get_value(
+			"Periskope Chat", {"whatsapp_number": row.name}, "name", order_by="last_message_at desc"
+		)
+		if chat:
+			_bell(managers, chat, subject)
+	emails = reminders.get_config().emails
+	if emails:
+		frappe.sendmail(
+			recipients=emails,
+			subject=subject,
+			message=_(
+				"Periskope reports {0} as not connected. Customers' messages to it are not received until it is "
+				"linked again in Periskope."
+			).format(names),
+			delayed=True,
+		)
