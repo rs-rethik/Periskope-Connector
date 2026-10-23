@@ -16,7 +16,7 @@
 </div>
 
 <div align="center">
-	<a target="_blank" href="#license" title="License: MIT"><img src="https://img.shields.io/badge/License-MIT-success.svg"></a>
+	<a target="_blank" href="#license" title="License: AGPL-3.0"><img src="https://img.shields.io/badge/License-AGPL--3.0-success.svg"></a>
 	<a target="_blank" href="https://www.python.org/downloads/" title="Python version"><img src="https://img.shields.io/badge/python-%3E=_3.10-success.svg"></a>
 	<a target="_blank" href="https://frappeframework.com" title="Frappe version"><img src="https://img.shields.io/badge/frappe-v15%20%7C%20v16-success.svg"></a>
 	<a target="_blank" href="https://docs.periskope.app" title="Periskope docs"><img src="https://img.shields.io/badge/docs-Periskope-success.svg"></a>
@@ -538,4 +538,4 @@ bench --site $SITE_NAME execute periskope_connector.contacts.backfill_contacts
 
 ## License
 
-This repository has been released under the [MIT License](license.txt).
+This repository has been released under the [GNU Affero General Public License v3.0](license.txt). It includes code adapted from Frappe Helpdesk and Frappe CRM, which are licensed under AGPL-3.0.

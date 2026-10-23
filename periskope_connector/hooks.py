@@ -5,7 +5,7 @@ app_description = (
 	"A Frappe connector for integrating and synchronizing WhatsApp communication through Periskope."
 )
 app_email = "hello@aerele.in"
-app_license = "mit"
+app_license = "agpl-3.0"
 
 # Apps
 # ------------------
