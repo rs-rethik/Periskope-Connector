@@ -2,10 +2,10 @@
 	<div class="flex h-full min-w-0 flex-col bg-surface-gray-1">
 		<div
 			v-if="chat"
-			class="flex items-center gap-3 border-b border-outline-gray-1 bg-surface-white px-4 py-2.5"
+			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-white px-4 py-2.5"
 		>
 			<Avatar :label="chat.chat_name || chat.contact_number || chat.title" size="lg" />
-			<div class="min-w-0 flex-1">
+			<div class="min-w-[14rem] flex-1">
 				<div class="flex items-center gap-2">
 					<LucideUsers v-if="chat.is_group" class="size-4 shrink-0 text-ink-gray-5" />
 					<span class="truncate text-base font-medium text-ink-gray-9">{{
@@ -18,6 +18,7 @@
 					on {{ chat.number_label }}
 				</div>
 			</div>
+			<ChatActions ref="actions" :chat="chat" @changed="load({ keepPosition: true })" />
 			<slot name="actions" />
 		</div>
 
@@ -96,6 +97,7 @@ import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
 import MessageBubble from "@/components/MessageBubble.vue";
 import Composer from "@/components/Composer.vue";
+import ChatActions from "@/components/ChatActions.vue";
 import { inbox } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
@@ -112,6 +114,7 @@ const error = ref("");
 const scroller = ref(null);
 const composer = ref(null);
 const replyTo = ref(null);
+const actions = ref(null);
 
 // Messages and the team's private notes, in time order.
 const timeline = computed(() =>
@@ -247,12 +250,18 @@ function replace(m) {
 	messages.value = messages.value.map((x) => (x.name === m.name ? { ...x, ...m } : x));
 }
 
-// "r" puts the cursor in the reply box.
+// Keyboard: r reply, a assign to me, e resolve.
 function onKey(e) {
-	if (e.key !== "r" || e.metaKey || e.ctrlKey || e.altKey) return;
+	if (e.metaKey || e.ctrlKey || e.altKey) return;
 	if (e.target.closest("input, textarea, [contenteditable]")) return;
+	const keys = {
+		r: () => composer.value?.focus(),
+		a: () => actions.value?.assignToMe(),
+		e: () => actions.value?.resolve(),
+	};
+	if (!keys[e.key]) return;
 	e.preventDefault();
-	composer.value?.focus();
+	keys[e.key]();
 }
 
 watch(

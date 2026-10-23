@@ -10,6 +10,7 @@
   "periskope_phone_id",
   "phone_name",
   "column_team",
+  "default_team",
   "default_assignee",
   "sales_person",
   "section_health",
@@ -114,11 +115,18 @@
    "fieldtype": "Datetime",
    "label": "Last Message",
    "read_only": 1
+  },
+  {
+   "fieldname": "default_team",
+   "fieldtype": "Link",
+   "options": "Periskope Team",
+   "label": "Default Team",
+   "description": "New chats on this number go to this team (and its assignment rule). A team that lists this number is used when this is empty."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 12:00:00.000000",
+ "modified": "2026-10-23 15:44:38.153562",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "WhatsApp Number",

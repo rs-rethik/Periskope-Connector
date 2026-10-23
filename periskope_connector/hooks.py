@@ -90,6 +90,8 @@ scheduler_events = {
 			"periskope_connector.ai.classifier.run_batch",
 			# The delivery ticks of inbox replies where no webhook arrives.
 			"periskope_connector.api.compose.refresh_ticks",
+			# Alert the assignee and the managers once when a customer waits past the SLA reply time.
+			"periskope_connector.sla.check_breaches",
 		],
 		# The background learning agent: reads new conversations, builds the knowledge base and
 		# emails suggested changes for approval (nothing is applied without a manager's approval).

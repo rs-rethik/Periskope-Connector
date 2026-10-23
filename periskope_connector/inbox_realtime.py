@@ -22,13 +22,19 @@ def _recipients(number: str | None) -> list[str]:
 	)
 	agents = []
 	if number:
-		agents = frappe.get_all(
+		rows = frappe.get_all(
 			"Periskope Agent Number",
-			filters={"whatsapp_number": number, "parenttype": "Periskope Agent"},
-			pluck="parent",
+			filters={"whatsapp_number": number, "parenttype": ["in", ["Periskope Agent", "Periskope Team"]]},
+			fields=["parent", "parenttype"],
 		)
+		agent_rows = [r.parent for r in rows if r.parenttype == "Periskope Agent"]
+		team_rows = [r.parent for r in rows if r.parenttype == "Periskope Team"]
 		agents = frappe.get_all(
-			"Periskope Agent", filters={"name": ["in", agents or [""]], "is_active": 1}, pluck="user"
+			"Periskope Agent", filters={"name": ["in", agent_rows or [""]], "is_active": 1}, pluck="user"
+		) + frappe.get_all(
+			"Periskope Team Member",
+			filters={"parent": ["in", team_rows or [""]], "parenttype": "Periskope Team"},
+			pluck="user",
 		)
 	enabled = set(
 		frappe.get_all(

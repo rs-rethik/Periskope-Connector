@@ -13,7 +13,6 @@ import frappe
 from frappe.utils import get_datetime
 
 from periskope_connector.periskope_connector.doctype.periskope_chat.periskope_chat import key
-from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import MEDIA_LABELS, readable_text
 
 PREVIEW_CHARS = 140
@@ -99,9 +98,8 @@ def ensure(message) -> str | None:
 				values.pop("crm_deal", None)
 			frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
 		else:
-			name = insert_as_system(
-				{"doctype": "Periskope Chat", "chat_id": message.chat_id, "status": "Open", **values}
-			).name
+			name = _insert_chat({"chat_id": message.chat_id, "status": "Open", **values})
+			_lifecycle("new_chat", name, message.message_timestamp)
 		if message.get("name") and message.get("periskope_chat") != name:
 			frappe.db.set_value(
 				"Periskope Message", message.name, "periskope_chat", name, update_modified=False
@@ -113,6 +111,8 @@ def ensure(message) -> str | None:
 			frappe.db.count("Periskope Message", {"periskope_chat": name}),
 			update_modified=False,
 		)
+		if newest:
+			_lifecycle("on_message", name, message)
 		from periskope_connector import inbox_realtime
 
 		inbox_realtime.chat_changed(name)
@@ -152,6 +152,30 @@ def refresh(name: str):
 			last_message_direction=last[0].direction,
 		)
 	frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
+
+
+def _insert_chat(values: dict) -> str:
+	"""Save a new chat row without the document hooks: Frappe would run the assignment rules on it
+	there, and a broken rule must not stop a message from getting its chat. workflow.new_chat runs
+	them afterwards, guarded."""
+	doc = frappe.get_doc({"doctype": "Periskope Chat", **values})
+	doc.chat_key = key(doc.whatsapp_number or doc.org_phone, doc.chat_id)
+	doc.set_new_name()
+	doc.set_user_and_timestamp()
+	doc.db_insert()
+	return doc.name
+
+
+def _lifecycle(step: str, *args):
+	"""Status, assignment and SLA clocks (workflow.py). Guarded: a message is saved whatever happens."""
+	from periskope_connector import workflow
+
+	try:
+		frappe.db.savepoint("periskope_chat_lifecycle")
+		getattr(workflow, step)(*args)
+	except Exception:
+		frappe.db.rollback(save_point="periskope_chat_lifecycle")
+		frappe.log_error(title=f"Periskope: chat {step} failed")
 
 
 def for_record(doctype: str, name: str) -> list[str]:

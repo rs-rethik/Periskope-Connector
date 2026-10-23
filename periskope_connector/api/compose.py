@@ -426,14 +426,15 @@ def start_chat(number: str, phone: str, text: str) -> dict:
 			.insert(ignore_permissions=True)
 			.name
 		)
-	if not access.can_see_chat(name):
-		# The user who starts the chat owns it, so they see it (access.py).
-		from frappe.desk.form.assign_to import _add
+		# The user who starts the chat owns it (so they see it, access.py); then its team and clocks.
+		from periskope_connector import workflow
 
-		_add(
-			{"doctype": "Periskope Chat", "name": name, "assign_to": [frappe.session.user]},
-			ignore_permissions=True,
-		)
+		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
+		workflow.new_chat(name)
+	elif not access.can_see_chat(name):
+		from periskope_connector import workflow
+
+		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
 	frappe.db.commit()
 	result = send(name, text)
 	return {"chat": name, "message": result}

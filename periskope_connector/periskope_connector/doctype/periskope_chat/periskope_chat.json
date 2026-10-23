@@ -9,6 +9,8 @@
   "chat_key",
   "whatsapp_number",
   "status",
+  "team",
+  "labels",
   "chat_name",
   "is_group",
   "contact_number",
@@ -26,7 +28,18 @@
   "last_message_direction",
   "column_inbox",
   "last_incoming_at",
-  "message_count"
+  "message_count",
+  "section_sla",
+  "sla_policy",
+  "waiting_since",
+  "response_due",
+  "first_responded_on",
+  "column_sla",
+  "opened_on",
+  "resolution_due",
+  "resolved_on",
+  "response_breached",
+  "breach_alerted"
  ],
  "fields": [
   {
@@ -175,11 +188,92 @@
    "options": "User",
    "label": "Linked By",
    "read_only": 1
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "options": "Periskope Team",
+   "label": "Team",
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Table MultiSelect",
+   "options": "Periskope Chat Label",
+   "label": "Labels"
+  },
+  {
+   "fieldname": "section_sla",
+   "fieldtype": "Section Break",
+   "label": "SLA",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "sla_policy",
+   "fieldtype": "Link",
+   "options": "Periskope SLA Policy",
+   "label": "SLA Policy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "waiting_since",
+   "fieldtype": "Datetime",
+   "label": "Customer Waiting Since",
+   "read_only": 1,
+   "description": "The customer's first unanswered message, while no reply has gone out."
+  },
+  {
+   "fieldname": "response_due",
+   "fieldtype": "Datetime",
+   "label": "Reply Due",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_responded_on",
+   "fieldtype": "Datetime",
+   "label": "First Reply",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_sla",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "opened_on",
+   "fieldtype": "Datetime",
+   "label": "Opened On",
+   "read_only": 1,
+   "description": "When this chat was last opened (new or reopened)."
+  },
+  {
+   "fieldname": "resolution_due",
+   "fieldtype": "Datetime",
+   "label": "Resolution Due",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_on",
+   "fieldtype": "Datetime",
+   "label": "Resolved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "response_breached",
+   "fieldtype": "Check",
+   "label": "Reply Was Late",
+   "read_only": 1
+  },
+  {
+   "fieldname": "breach_alerted",
+   "fieldtype": "Check",
+   "label": "Breach Alert Sent",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 15:30:42.682535",
+ "modified": "2026-10-23 15:44:38.153562",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

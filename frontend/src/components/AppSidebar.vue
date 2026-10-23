@@ -11,6 +11,7 @@
 				</div>
 
 				<div class="-mx-2 mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto px-2">
+					<NotificationsBell :collapsed="collapsed" />
 					<SidebarItem
 						label="Inbox"
 						:to="{ name: 'Inbox' }"
@@ -45,6 +46,23 @@
 							</span>
 						</template>
 					</SidebarItem>
+
+					<template v-if="inbox.views.length">
+						<SidebarLabel label="Saved views" class="mt-3" divider />
+						<SidebarItem
+							v-for="v in inbox.views"
+							:key="v.name"
+							:label="v.label"
+							:to="{ name: 'Conversations', query: { view: v.name } }"
+							:active="$route.query.view === v.name"
+						>
+							<template #prefix
+								><component
+									:is="v.is_shared ? LucideBookmarkCheck : LucideBookmark"
+									class="size-4 text-ink-gray-6"
+							/></template>
+						</SidebarItem>
+					</template>
 
 					<SidebarLabel label="Numbers" class="mt-3" divider />
 					<SidebarItem
@@ -112,8 +130,13 @@ import LucideUser from "~icons/lucide/user";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
 import LucideMail from "~icons/lucide/mail";
+import LucideTimerOff from "~icons/lucide/timer-off";
+import LucideUsersRound from "~icons/lucide/users-round";
+import LucideBookmark from "~icons/lucide/bookmark";
+import LucideBookmarkCheck from "~icons/lucide/bookmark-check";
+import NotificationsBell from "@/components/NotificationsBell.vue";
 import { boot } from "@/boot";
-import { QUICK_FILTERS, inbox, loadCounts } from "@/stores/inbox";
+import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
 const collapsed = ref(false);
@@ -123,6 +146,8 @@ const filterIcons = {
 	unassigned: LucideUserX,
 	unanswered: LucideMessageCircleQuestion,
 	unread: LucideMail,
+	breached: LucideTimerOff,
+	my_team: LucideUsersRound,
 };
 
 function unreadOn(number) {
@@ -133,5 +158,9 @@ function goTo(url) {
 	window.location.href = url;
 }
 
-onMounted(loadCounts);
+onMounted(() => {
+	loadCounts();
+	loadViews();
+	loadBell();
+});
 </script>

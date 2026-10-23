@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "creation": "2026-10-23 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "team_name",
+  "assignment",
+  "team_can_see_team_chats",
+  "members",
+  "numbers",
+  "assignment_rule"
+ ],
+ "fields": [
+  {
+   "fieldname": "team_name",
+   "fieldtype": "Data",
+   "label": "Team Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "assignment",
+   "fieldtype": "Select",
+   "label": "Assign New Chats",
+   "options": "Round Robin\nLoad Balancing\nManual",
+   "default": "Round Robin",
+   "in_list_view": 1,
+   "description": "Round Robin: in turn. Load Balancing: to whoever has the fewest open chats. Manual: nobody is assigned by itself."
+  },
+  {
+   "fieldname": "team_can_see_team_chats",
+   "fieldtype": "Check",
+   "label": "Members See the Team's Chats",
+   "default": "1",
+   "description": "On: every member sees all chats of the team. Off: each sees only the chats assigned to them."
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table MultiSelect",
+   "options": "Periskope Team Member",
+   "label": "Members"
+  },
+  {
+   "fieldname": "numbers",
+   "fieldtype": "Table MultiSelect",
+   "options": "Periskope Agent Number",
+   "label": "WhatsApp Numbers",
+   "description": "The numbers this team answers. Their new chats go to this team."
+  },
+  {
+   "fieldname": "assignment_rule",
+   "fieldtype": "Link",
+   "options": "Assignment Rule",
+   "label": "Assignment Rule",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-23 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Team",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "WhatsApp Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "Sales Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:team_name",
+ "naming_rule": "By fieldname",
+ "title_field": "team_name"
+}

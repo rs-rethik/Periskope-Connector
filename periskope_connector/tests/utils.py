@@ -11,7 +11,12 @@ from periskope_connector import reminders
 # not make these: on Frappe v16 with ERPNext that walks User > Email Account > Company > ... into
 # doctypes of apps that may not be installed (Payment Gateway). Doctype test modules set this as
 # IGNORE_TEST_RECORD_DEPENDENCIES (v16) and test_ignore (v15).
+# Our own inbox doctypes that link out (Periskope Team to users and an Assignment Rule) are listed too:
+# they have no test records of their own, so the walk must stop at them.
 OTHER_APP_DOCTYPES = [
+	"Assignment Rule",
+	"Periskope SLA Policy",
+	"Periskope Team",
 	"CRM Deal",
 	"CRM Lead",
 	"CRM Organization",

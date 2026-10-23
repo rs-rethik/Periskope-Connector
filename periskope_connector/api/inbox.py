@@ -22,11 +22,15 @@ SORTS = {
 	"status": "c.status",
 	"message_count": "c.message_count",
 	"creation": "c.creation",
+	"team": "c.team",
+	"response_due": "c.response_due",
+	"waiting_since": "c.waiting_since",
 }
 STATUSES = ("Open", "Pending", "Resolved", "Closed")
 CHAT_COLUMNS = """c.name, c.chat_id, c.chat_name, c.is_group, c.contact_number, c.whatsapp_number,
 	c.status, c.last_message_at, c.last_message_preview, c.last_message_direction, c.last_incoming_at,
-	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign,
+	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign, c.team, c.waiting_since,
+	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached,
 	(select m.ai_category from `tabPeriskope Message` m where m.periskope_chat = c.name
 		and ifnull(m.ai_category, '') != '' order by m.message_timestamp desc limit 1) as ai_tag"""
 MESSAGE_FIELDS = [
@@ -100,6 +104,28 @@ def _where(filters: dict) -> tuple[list[str], dict]:
 	if filters.get("linked") is not None and filters.get("linked") != "":
 		linked = "(ifnull(c.crm_lead, '') != '' or ifnull(c.crm_deal, '') != '')"
 		conditions.append(linked if cint(filters["linked"]) else f"not {linked}")
+	if filters.get("team"):
+		conditions.append("c.team = %(team)s")
+		values["team"] = filters["team"]
+	if filters.get("my_team"):
+		from periskope_connector.periskope_connector.doctype.periskope_team.periskope_team import teams_of
+
+		mine = [t.name for t in teams_of(user)]
+		conditions.append(f"c.team in ({', '.join(frappe.db.escape(t) for t in mine)})" if mine else "1=0")
+	if filters.get("assigned_to"):
+		conditions.append("c._assign like %(assigned_to)s")
+		values["assigned_to"] = f'%"{filters["assigned_to"]}"%'
+	if filters.get("label"):
+		conditions.append(
+			"""exists (select 1 from `tabPeriskope Chat Label` l where l.parent = c.name
+			and l.parenttype = 'Periskope Chat' and l.tag = %(label)s)"""
+		)
+		values["label"] = filters["label"]
+	if filters.get("sla") == "breached":
+		from periskope_connector.sla import breached_condition
+
+		conditions.append(breached_condition("c"))
+		values["sla_now"] = frappe.utils.now_datetime()
 	if filters.get("tag"):
 		conditions.append(
 			"""exists (select 1 from `tabPeriskope Message` t where t.periskope_chat = c.name
@@ -157,6 +183,17 @@ def _decorate(rows: list[dict]) -> list[dict]:
 		)
 	)
 	labels = {n.name: n.display_name or n.number for n in numbers.all_numbers()}
+	chat_labels = {}
+	for row in frappe.get_all(
+		"Periskope Chat Label",
+		filters={"parent": ["in", names], "parenttype": "Periskope Chat"},
+		fields=["parent", "tag"],
+		order_by="idx asc",
+	):
+		chat_labels.setdefault(row.parent, []).append(row.tag)
+	from periskope_connector import sla
+
+	now = frappe.utils.now_datetime()
 	leads = _titles("CRM Lead", [r.crm_lead for r in rows if r.crm_lead], "lead_name")
 	deals = _titles("CRM Deal", [r.crm_deal for r in rows if r.crm_deal], "organization")
 	for row in rows:
@@ -167,6 +204,8 @@ def _decorate(rows: list[dict]) -> list[dict]:
 		row.lead_title = leads.get(row.crm_lead) if row.crm_lead else None
 		row.deal_title = deals.get(row.crm_deal) if row.crm_deal else None
 		row.title = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.chat_id)
+		row.labels = chat_labels.get(row.name, [])
+		row.update(sla.state(row, now))
 	return rows
 
 
@@ -191,6 +230,8 @@ def counts() -> dict:
 		"unassigned": {"status": "active", "unassigned": 1},
 		"unanswered": {"status": "active", "unanswered": 1},
 		"unread": {"unread": 1},
+		"breached": {"sla": "breached"},
+		"my_team": {"status": "active", "my_team": 1},
 	}.items():
 		conditions, values = _where(flt)
 		out[key] = frappe.db.sql(

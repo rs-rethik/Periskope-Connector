@@ -110,6 +110,20 @@
 							variant="subtle"
 							size="sm"
 						/>
+						<Badge
+							v-for="l in c.labels"
+							:key="l"
+							:label="l"
+							variant="outline"
+							size="sm"
+						/>
+						<SlaBadge v-if="c.sla && c.sla !== 'On Track'" :chat="c" />
+						<span
+							v-if="c.assigned_to.length"
+							class="ml-auto truncate text-xs text-ink-gray-5"
+							:title="c.assigned_to.join(', ')"
+							>{{ c.assigned_to[0].split("@")[0] }}</span
+						>
 					</div>
 				</div>
 			</button>
@@ -133,6 +147,7 @@ import LucideCheckCheck from "~icons/lucide/check-check";
 import { QUICK_FILTERS, currentFilters, inbox } from "@/stores/inbox";
 import LucideSquarePen from "~icons/lucide/square-pen";
 import NewChatDialog from "@/components/NewChatDialog.vue";
+import SlaBadge from "@/components/SlaBadge.vue";
 import { boot, numberLabel } from "@/boot";
 import { listTime } from "@/utils/format";
 

@@ -1,6 +1,6 @@
 import { reactive, watch } from "vue";
 import { call } from "frappe-ui";
-import { onInboxUpdate } from "@/socket";
+import { onInboxUpdate, onNotification } from "@/socket";
 
 export const QUICK_FILTERS = [
 	{ key: "all", label: "All open", filters: { status: "active" } },
@@ -8,6 +8,8 @@ export const QUICK_FILTERS = [
 	{ key: "unassigned", label: "Unassigned", filters: { status: "active", unassigned: 1 } },
 	{ key: "unanswered", label: "Unanswered", filters: { status: "active", unanswered: 1 } },
 	{ key: "unread", label: "Unread", filters: { unread: 1 } },
+	{ key: "breached", label: "SLA breached", filters: { sla: "breached" } },
+	{ key: "my_team", label: "My team", filters: { status: "active", my_team: 1 } },
 ];
 
 // The sidebar's choice (quick filter + number) is shared by the chat view and the list view, so
@@ -18,7 +20,24 @@ export const inbox = reactive({
 	counts: {},
 	version: 0, // bumped on every live update; views watch it to reload
 	changed: [], // the chats in the latest update
+	views: [], // saved list views (own and shared)
+	bell: { notifications: [], unread: 0 },
+	teams: [],
 });
+
+export async function loadViews() {
+	inbox.views = await call("periskope_connector.api.views.list_views");
+}
+
+export async function loadBell() {
+	inbox.bell = await call("periskope_connector.api.notifications.get_notifications");
+}
+
+export async function loadTeams() {
+	inbox.teams = await call("periskope_connector.api.chat_actions.teams");
+}
+
+onNotification(() => loadBell());
 
 export function currentFilters(extra = {}) {
 	const quick = QUICK_FILTERS.find((f) => f.key === inbox.quick) || QUICK_FILTERS[0];

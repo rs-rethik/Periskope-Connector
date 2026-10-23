@@ -223,6 +223,15 @@ def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
 	)
 	for name in frappe.get_all("Periskope Message", filters={"chat_id": row.chat_id}, pluck="name"):
 		link_message(name)
+	from periskope_connector import workflow
+
+	record = deal or lead
+	workflow.log(
+		row.name,
+		"Linked",
+		_("Linked to {0}").format(record) if record else _("Link removed: matched by number again"),
+		user=frappe.session.user,
+	)
 
 
 @frappe.whitelist(methods=["POST"])

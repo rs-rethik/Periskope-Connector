@@ -3,8 +3,10 @@ conditions and has_permission hooks of Periskope Chat and Periskope Message (hoo
 list and read, and the inbox API only reads through them.
 
 - Managers (System Manager, WhatsApp Manager, Sales Manager) see every chat on every number.
-- A sales user (a Periskope Agent) sees a chat only when it is on one of their numbers AND
+- A sales user sees a chat only when it is on one of their numbers (as a Periskope Agent, or
+  through a Periskope Team they are in) AND
   - it is assigned to them, or
+  - it belongs to one of their teams whose members see the team's chats, or
   - its lead or deal is theirs (lead owner / deal owner).
 - Anyone else sees nothing.
 """
@@ -12,6 +14,7 @@ list and read, and the inbox API only reads through them.
 import frappe
 
 from periskope_connector.api.permission import MANAGER_ROLES
+from periskope_connector.periskope_connector.doctype.periskope_team.periskope_team import teams_of
 
 INBOX_ROLES = (*MANAGER_ROLES, "Sales User")
 
@@ -39,13 +42,16 @@ def allowed_numbers(user: str | None = None) -> list[str] | None:
 	if is_manager(user):
 		return None
 	agent = frappe.db.get_value("Periskope Agent", {"user": user, "is_active": 1})
-	if not agent:
-		return []
-	return frappe.get_all(
-		"Periskope Agent Number",
-		filters={"parent": agent, "parenttype": "Periskope Agent"},
-		pluck="whatsapp_number",
-	)
+	parents = [("Periskope Agent", agent)] if agent else []
+	parents += [("Periskope Team", t.name) for t in teams_of(user)]
+	found = []
+	for parenttype, parent in parents:
+		found += frappe.get_all(
+			"Periskope Agent Number",
+			filters={"parent": parent, "parenttype": parenttype},
+			pluck="whatsapp_number",
+		)
+	return sorted(set(found))
 
 
 def _owned(user: str, doctype: str, field: str) -> str:
@@ -62,9 +68,12 @@ def chat_condition(user: str | None = None, table: str = "`tabPeriskope Chat`") 
 		return "1=0"
 	listed = ", ".join(frappe.db.escape(n) for n in numbers)
 	assigned = frappe.db.escape(f'%"{user}"%')
+	open_teams = [t.name for t in teams_of(user) if t.team_can_see_team_chats]
+	team = f" or {table}.team in ({', '.join(frappe.db.escape(t) for t in open_teams)})" if open_teams else ""
 	return (
 		f"({table}.whatsapp_number in ({listed}) and ("
 		f"{table}._assign like {assigned}"
+		f"{team}"
 		f" or {table}.crm_lead in ({_owned(user, 'CRM Lead', 'lead_owner')})"
 		f" or {table}.crm_deal in ({_owned(user, 'CRM Deal', 'deal_owner')})"
 		"))"

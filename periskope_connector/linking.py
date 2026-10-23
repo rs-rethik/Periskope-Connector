@@ -385,6 +385,7 @@ CHAT_FIELDS = [
 	"chat_id",
 	"whatsapp_number",
 	"periskope_chat",
+	"agent_reply",
 	"body",
 	"message_type",
 	"transcript",
