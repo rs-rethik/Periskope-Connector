@@ -50,9 +50,9 @@
 						v-for="f in QUICK_FILTERS"
 						:key="f.key"
 						:label="f.label"
-						:active="inbox.quick === f.key"
+						:active="onList && inbox.quick === f.key"
 						:suffix="inbox.counts[f.key] ? String(inbox.counts[f.key]) : ''"
-						@click="inbox.quick = f.key"
+						@click="pick({ quick: f.key })"
 					>
 						<template #prefix
 							><component :is="filterIcons[f.key]" class="size-4 text-ink-gray-6"
@@ -100,8 +100,8 @@
 					>
 					<SidebarItem
 						label="All numbers"
-						:active="!inbox.number"
-						@click="inbox.number = ''"
+						:active="onList && !inbox.number"
+						@click="pick({ number: '' })"
 					>
 						<template #prefix><LucidePhone class="size-4 text-ink-gray-6" /></template>
 					</SidebarItem>
@@ -109,9 +109,9 @@
 						v-for="n in boot.numbers"
 						:key="n.name"
 						:label="n.label"
-						:active="inbox.number === n.name"
+						:active="onList && inbox.number === n.name"
 						:suffix="unreadOn(n.name) ? String(unreadOn(n.name)) : ''"
-						@click="inbox.number = n.name"
+						@click="pick({ number: n.name })"
 					>
 						<template #prefix>
 							<!-- a 16px box, like the icons, so the number lines up with the rows above -->
@@ -159,7 +159,8 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel } from "frappe-ui";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideList from "~icons/lucide/list";
@@ -252,6 +253,17 @@ const filterIcons = {
 	breached: LucideTimerOff,
 	my_team: LucideUsersRound,
 };
+
+// Views and numbers filter the chat list, so on any other page (Health, Reports, ...) a click opens
+// the inbox with that filter; they show as selected only where the list is.
+const route = useRoute();
+const router = useRouter();
+const onList = computed(() => ["Inbox", "Conversations"].includes(route.name));
+
+function pick(choice) {
+	Object.assign(inbox, choice);
+	if (!onList.value) router.push({ name: "Inbox" });
+}
 
 function unreadOn(number) {
 	return (inbox.counts.unread_by_number || {})[number] || 0;
