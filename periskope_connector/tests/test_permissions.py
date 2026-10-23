@@ -14,8 +14,9 @@ CONFIG = (
 	"Periskope Tag",
 	"Periskope Knowledge Entry",
 	"Periskope Suggestion",
-	"Periskope Chat",
 )
+# The inbox (/whatsapp): sales users read these, limited row by row in access.py.
+INBOX = ("Periskope Chat", "Periskope Message")
 QUEUE = ("Periskope Contact", "Periskope Group")
 LOGS = (
 	"Periskope Message",
@@ -27,7 +28,7 @@ LOGS = (
 	"Periskope Reply Reminder",
 	"Periskope CRM Record",
 )
-CHECKS = {"require_admin", "require_manager"}
+CHECKS = {"require_admin", "require_manager", "require_inbox_user"}
 SELF_AUTHENTICATED = {("api/webhook.py", "receive"), ("api/suggestions.py", "decide")}
 
 
@@ -54,12 +55,19 @@ class TestRoleMatrix(FrappeTestCase):
 				self.assertTrue(perms[role].get("read"), f"{role} cannot read {doctype}")
 				self.assertFalse(perms[role].get("write"), f"{role} can edit {doctype}")
 
-	def test_sales_users_get_nothing_in_desk(self):
+	def test_sales_users_only_read_the_inbox_doctypes(self):
+		inbox = {d.lower().replace(" ", "_") for d in INBOX}
 		for folder in DOCTYPES.iterdir():
 			path = folder / f"{folder.name}.json"
-			if path.exists():
-				roles = {p["role"] for p in json.loads(path.read_text()).get("permissions", [])}
-				self.assertNotIn("Sales User", roles, folder.name)
+			if not path.exists():
+				continue
+			perms = {p["role"]: p for p in json.loads(path.read_text()).get("permissions", [])}
+			if folder.name in inbox:
+				self.assertEqual(
+					{k for k, v in perms["Sales User"].items() if v and k != "role"}, {"read"}, folder.name
+				)
+			else:
+				self.assertNotIn("Sales User", perms, folder.name)
 
 
 class TestEveryEndpointChecks(FrappeTestCase):

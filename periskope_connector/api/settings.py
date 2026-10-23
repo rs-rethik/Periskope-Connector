@@ -97,25 +97,9 @@ def sync_phones() -> list[dict]:
 
 
 def _save_phones(phones: list[dict]) -> list[dict]:
-	settings = frappe.get_doc("Periskope Settings")
-	assigned = {row.phone_id: (row.rep, row.sales_person) for row in settings.phones}
-	settings.set("phones", [])
-	for phone in phones:
-		rep, sales_person = assigned.get(phone.get("phone_id"), (None, None))
-		settings.append(
-			"phones",
-			{
-				"phone_id": phone.get("phone_id"),
-				"phone_name": phone.get("phone_name"),
-				"number": (phone.get("org_phone") or "").split("@")[0],
-				"wa_state": phone.get("wa_state"),
-				"is_ready": 1 if phone.get("is_ready") else 0,
-				"rep": rep,
-				"sales_person": sales_person,
-			},
-		)
-	settings.save()
-	return [row.as_dict() for row in settings.phones]
+	from periskope_connector import numbers
+
+	return numbers.sync_from_periskope(phones)
 
 
 @frappe.whitelist()

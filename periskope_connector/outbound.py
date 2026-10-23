@@ -4,7 +4,7 @@ come here. Every attempt is a Periskope Agent Action row: Live (sent, with Peris
 
 import frappe
 
-from periskope_connector import client, safety
+from periskope_connector import client, numbers, safety
 from periskope_connector.api.permission import require_admin
 
 
@@ -47,9 +47,7 @@ def send_test(chat_id: str, text: str = "", phone: str = "") -> dict:
 	bench --site <site> execute periskope_connector.outbound.send_test --args '["9163...@c.us"]'
 	Only allowed chats get it while test mode is on."""
 	require_admin()
-	phone = phone or frappe.db.get_value(
-		"Periskope Phone", {"parent": "Periskope Settings", "is_ready": 1}, "number"
-	)
+	phone = phone or numbers.first_ready()
 	text = text or "Periskope connector test message. Please ignore."
 	result = send(chat_id, text, phone, origin="Manual Test")
 	frappe.db.commit()

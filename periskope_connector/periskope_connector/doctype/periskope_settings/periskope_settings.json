@@ -35,8 +35,6 @@
   "escalation_emails",
   "column_team",
   "default_rep",
-  "section_phones",
-  "phones",
   "section_agent",
   "enable_auto_reply",
   "reply_delay_minutes",
@@ -254,17 +252,6 @@
    "options": "User",
    "label": "Default Sales Rep",
    "description": "Gets the follow-ups of chats on a number that has no rep below."
-  },
-  {
-   "fieldname": "section_phones",
-   "fieldtype": "Section Break",
-   "label": ""
-  },
-  {
-   "fieldname": "phones",
-   "fieldtype": "Table",
-   "label": "Company Numbers and Sales Reps",
-   "options": "Periskope Phone"
   },
   {
    "fieldname": "section_agent",
@@ -504,7 +491,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-10-23 13:38:57.775670",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

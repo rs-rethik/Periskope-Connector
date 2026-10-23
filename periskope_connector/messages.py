@@ -6,7 +6,7 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
-from periskope_connector import attachments
+from periskope_connector import attachments, numbers
 from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
@@ -49,25 +49,13 @@ def normalise_type(raw: str | None) -> str:
 
 
 def _sales_person_for_phone(number: str) -> str | None:
-	"""The Sales Person assigned to this company number in Periskope Settings."""
-	if not number:
-		return None
-	return frappe.db.get_value(
-		"Periskope Phone",
-		{"parent": "Periskope Settings", "number": number},
-		"sales_person",
-	)
+	"""The Sales Person set on this company number (WhatsApp Number)."""
+	return numbers.sales_person(number)
 
 
 def _rep_for_phone(number: str) -> str | None:
-	"""The sales rep assigned to this company number in Periskope Settings."""
-	if not number:
-		return None
-	return frappe.db.get_value(
-		"Periskope Phone",
-		{"parent": "Periskope Settings", "number": number},
-		"rep",
-	)
+	"""The default rep set on this company number (WhatsApp Number)."""
+	return numbers.rep(number)
 
 
 def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
@@ -132,6 +120,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			"periskope_type": data.get("message_type"),
 			"message_timestamp": _to_site_datetime(data.get("timestamp")),
 			"org_phone": org_phone,
+			"whatsapp_number": numbers.ensure(org_phone),
 			"rep": _rep_for_phone(org_phone),
 			"sales_person": _sales_person_for_phone(org_phone),
 			# In a 1-to-1 chat the chat id is the customer's number; groups have no single customer.
@@ -249,9 +238,12 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	if not values:
 		return name
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
-	from periskope_connector import mirror
+	from periskope_connector import chat, mirror
+	from periskope_connector.linking import CHAT_FIELDS
 
 	mirror.upsert(name)
+	# The inbox shows the edit or the deletion at once (its list preview too).
+	chat.ensure(frappe.db.get_value("Periskope Message", name, CHAT_FIELDS, as_dict=True))
 	if values.get("classification_status") == "Pending":
 		from periskope_connector.ai import classifier
 

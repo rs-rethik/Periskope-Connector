@@ -1,11 +1,14 @@
 {
  "actions": [],
- "autoname": "field:chat_id",
+ "autoname": "hash",
  "creation": "2026-10-14 15:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "chat_id",
+  "chat_key",
+  "whatsapp_number",
+  "status",
   "chat_name",
   "is_group",
   "contact_number",
@@ -15,7 +18,13 @@
   "crm_deal",
   "crm_lead",
   "organization",
-  "summary_note"
+  "summary_note",
+  "section_inbox",
+  "last_message_preview",
+  "last_message_direction",
+  "column_inbox",
+  "last_incoming_at",
+  "message_count"
  ],
  "fields": [
   {
@@ -23,8 +32,9 @@
    "fieldtype": "Data",
    "label": "Chat",
    "reqd": 1,
-   "unique": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "search_index": 1,
+   "description": "The contact's WhatsApp id (the same on every number); one chat row per number."
   },
   {
    "fieldname": "chat_name",
@@ -41,17 +51,20 @@
   {
    "fieldname": "contact_number",
    "fieldtype": "Data",
-   "label": "Customer Number"
+   "label": "Customer Number",
+   "search_index": 1
   },
   {
    "fieldname": "org_phone",
    "fieldtype": "Data",
-   "label": "Company Number"
+   "label": "Company Number (digits)",
+   "read_only": 1
   },
   {
    "fieldname": "last_message_at",
    "fieldtype": "Datetime",
-   "label": "Last Message"
+   "label": "Last Message",
+   "search_index": 1
   },
   {
    "fieldname": "column_crm",
@@ -83,15 +96,78 @@
    "options": "FCRM Note",
    "label": "Summary Note",
    "read_only": 1
+  },
+  {
+   "fieldname": "chat_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "unique": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "description": "number|chat_id"
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "options": "WhatsApp Number",
+   "label": "WhatsApp Number",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "options": "Open\nPending\nResolved\nClosed",
+   "default": "Open",
+   "label": "Status",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_inbox",
+   "fieldtype": "Section Break",
+   "label": "Inbox"
+  },
+  {
+   "fieldname": "last_message_preview",
+   "fieldtype": "Small Text",
+   "label": "Last Message Preview",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_direction",
+   "fieldtype": "Select",
+   "options": "\nIncoming\nOutgoing",
+   "label": "Last Message From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_inbox",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_incoming_at",
+   "fieldtype": "Datetime",
+   "label": "Last Customer Message",
+   "read_only": 1,
+   "description": "Unread counts compare this with when each user last opened the chat."
+  },
+  {
+   "fieldname": "message_count",
+   "fieldtype": "Int",
+   "label": "Messages",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-10-23 13:36:03.949798",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",
- "naming_rule": "By fieldname",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [
   {
@@ -113,10 +189,15 @@
    "role": "WhatsApp Manager"
   },
   {
+   "role": "Sales Manager",
    "read": 1,
+   "write": 1,
    "report": 1,
-   "export": 1,
-   "role": "Sales Manager"
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
   }
  ],
  "sort_field": "last_message_at",

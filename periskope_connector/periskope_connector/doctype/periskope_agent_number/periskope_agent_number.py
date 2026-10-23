@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class PeriskopePhone(Document):
+class PeriskopeAgentNumber(Document):
 	pass

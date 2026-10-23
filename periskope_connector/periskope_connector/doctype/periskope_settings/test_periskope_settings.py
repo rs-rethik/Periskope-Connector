@@ -83,14 +83,19 @@ class TestPeriskopeSettings(FrappeTestCase):
 		]
 		with patch("periskope_connector.client.requests.request", return_value=_response(200, phones)):
 			rows = settings_api.sync_phones()
-			self.assertEqual(rows[0]["number"], "919876512340")
+			self.assertIn("919876512340", [r["number"] for r in rows])
 
-			s = frappe.get_single("Periskope Settings")
-			s.phones[0].rep = "Administrator"
-			s.save()
+			# What an admin sets on the number survives the next sync.
+			frappe.db.set_value(
+				"WhatsApp Number",
+				"919876512340",
+				{"default_assignee": "Administrator", "display_name": "Sales desk"},
+			)
 
-			rows = settings_api.sync_phones()
-			self.assertEqual(rows[0]["rep"], "Administrator")
+			rows = {r["number"]: r for r in settings_api.sync_phones()}
+			self.assertEqual(rows["919876512340"]["default_assignee"], "Administrator")
+			self.assertEqual(rows["919876512340"]["display_name"], "Sales desk")
+			self.assertEqual(rows["919876512340"]["phone_name"], "Rep A")
 
 	def _call_receive(self, body: bytes, signature: str | None):
 		headers = {"x-periskope-signature": signature} if signature else {}
@@ -361,13 +366,15 @@ class TestSyncCheck(FrappeTestCase):
 		self.addCleanup(frappe.db.rollback, save_point="periskope_sync_test")
 		frappe.cache().delete_keys("periskope_alert:*")
 
-	def _phones(self, **columns):
-		defaults = {"phone_name": "Sales A", "rep": "Administrator"}
-		defaults.update(columns)
-		settings = frappe.get_doc("Periskope Settings")
-		settings.append("phones", {"phone_id": "health-1", "number": "919600000001", **defaults})
-		settings.flags.ignore_permissions = True
-		settings.save()
+	def _phones(self):
+		frappe.get_doc(
+			{
+				"doctype": "WhatsApp Number",
+				"number": "919600000001",
+				"display_name": "Sales A",
+				"default_assignee": "Administrator",
+			}
+		).insert(ignore_permissions=True)
 
 	def test_a_normally_busy_number_that_goes_silent_alerts(self):
 		self._phones()

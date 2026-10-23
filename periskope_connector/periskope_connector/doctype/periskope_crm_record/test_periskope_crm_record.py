@@ -71,7 +71,9 @@ class TestNotesAndTasks(CrmCase):
 		self.assertEqual(len(notes), 1)
 		self.assertIn("245", notes[0].content)
 		self.assertEqual(notes[0].title, "WhatsApp summary")
-		self.assertEqual(frappe.db.get_value("Periskope Chat", CHAT, "summary_note"), notes[0].name)
+		self.assertEqual(
+			frappe.db.get_value("Periskope Chat", {"chat_id": CHAT}, "summary_note"), notes[0].name
+		)
 
 	def test_topic_notes_are_plain_sentences_one_per_topic(self):
 		writeback.upsert_note(CHAT, "delivery", "Needs delivery to Tirupur by Friday.")

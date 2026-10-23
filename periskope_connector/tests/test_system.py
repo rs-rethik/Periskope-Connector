@@ -147,7 +147,10 @@ class TestSystemWrites(FrappeTestCase):
 			else:
 				# every other endpoint gates the caller (api/permission.py)
 				self.assertTrue(
-					any(check in source for check in ("require_admin(", "require_manager(")),
+					any(
+						check in source
+						for check in ("require_admin(", "require_manager(", "require_inbox_user(")
+					),
 					fn.__name__,
 				)
 

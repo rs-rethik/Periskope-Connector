@@ -1,0 +1,162 @@
+{
+ "actions": [],
+ "creation": "2026-10-23 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "number",
+  "display_name",
+  "is_active",
+  "periskope_phone_id",
+  "phone_name",
+  "column_team",
+  "default_assignee",
+  "sales_person",
+  "section_health",
+  "wa_state",
+  "is_ready",
+  "disconnected_since",
+  "column_health",
+  "last_sync_on",
+  "last_message_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "number",
+   "fieldtype": "Data",
+   "label": "Number",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Digits only, with the country code, as Periskope sends it (for example 919786387999)."
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "label": "Display Name",
+   "in_list_view": 1,
+   "description": "The name the team sees on chats from this number."
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Active",
+   "default": "1",
+   "in_list_view": 1,
+   "description": "An inactive number keeps its chats but is hidden from the number switcher."
+  },
+  {
+   "fieldname": "periskope_phone_id",
+   "fieldtype": "Data",
+   "label": "Periskope Phone ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "phone_name",
+   "fieldtype": "Data",
+   "label": "Name in Periskope",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_team",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_assignee",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Default Rep",
+   "description": "The rep for chats on this number when no other rule assigns one."
+  },
+  {
+   "fieldname": "sales_person",
+   "fieldtype": "Link",
+   "options": "Sales Person",
+   "label": "Sales Person"
+  },
+  {
+   "fieldname": "section_health",
+   "fieldtype": "Section Break",
+   "label": "Connection"
+  },
+  {
+   "fieldname": "wa_state",
+   "fieldtype": "Data",
+   "label": "Connection State",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_ready",
+   "fieldtype": "Check",
+   "label": "Ready to Use",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "disconnected_since",
+   "fieldtype": "Datetime",
+   "label": "Disconnected Since",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_health",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_sync_on",
+   "fieldtype": "Datetime",
+   "label": "Last Checked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_on",
+   "fieldtype": "Datetime",
+   "label": "Last Message",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-23 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "WhatsApp Number",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "WhatsApp Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "Sales Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "number",
+ "sort_order": "ASC",
+ "states": [],
+ "autoname": "field:number",
+ "naming_rule": "By fieldname",
+ "title_field": "display_name",
+ "show_title_field_in_link": 1
+}

@@ -12,3 +12,5 @@ def on_doctype_update():
 	# serves the AI's chat-history lookup (one chat, newest first): with only the timestamp
 	# index that query still reads thousands of rows, and this one reads about ten.
 	frappe.db.add_index("Periskope Message", ["chat_id", "message_timestamp"])
+	# The inbox loads one chat row's history (one number), newest first, a page at a time.
+	frappe.db.add_index("Periskope Message", ["periskope_chat", "message_timestamp"])

@@ -372,7 +372,15 @@ def link_message(message: str) -> str:
 
 
 CHAT_FIELDS = [
+	"name",
 	"chat_id",
+	"whatsapp_number",
+	"periskope_chat",
+	"body",
+	"message_type",
+	"transcript",
+	"is_deleted",
+	"media_filename",
 	"chat_name",
 	"sender_name",
 	"direction",

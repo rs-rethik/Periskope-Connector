@@ -7,13 +7,6 @@ frappe.ui.form.on("Periskope Settings", {
 	},
 
 	refresh(frm) {
-		// Phones come from Periskope via Sync Phones; users only pick the sales rep.
-		const grid = frm.get_field("phones").grid;
-		grid.cannot_add_rows = true;
-		grid.cannot_delete_rows = true;
-		grid.refresh();
-		grid.wrapper.find(".grid-add-row, .grid-remove-rows").hide();
-
 		frm.add_custom_button(__("Test Connection"), () => test_connection(frm), __("Actions"));
 		frm.add_custom_button(__("Sync Phones"), () => sync_phones(frm), __("Actions"));
 		frm.add_custom_button(
@@ -176,8 +169,9 @@ function sync_phones(frm) {
 			freeze: true,
 			freeze_message: __("Syncing phones..."),
 			callback(r) {
+				// The numbers are WhatsApp Number records; the rep of each is set there.
 				frappe.show_alert({
-					message: __("Synced {0} phone(s)", [(r.message || []).length]),
+					message: __("Synced {0} WhatsApp number(s)", [(r.message || []).length]),
 					indicator: "green",
 				});
 				frm.reload_doc();

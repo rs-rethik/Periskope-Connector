@@ -12,6 +12,8 @@
   "column_who",
   "rep",
   "org_phone",
+  "whatsapp_number",
+  "periskope_chat",
   "sales_person",
   "contact_number",
   "customer_phone",
@@ -605,11 +607,27 @@
    "fieldtype": "Small Text",
    "label": "Text Before the Edit",
    "read_only": 1
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "options": "WhatsApp Number",
+   "label": "WhatsApp Number",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "periskope_chat",
+   "fieldtype": "Link",
+   "options": "Periskope Chat",
+   "label": "Chat Record",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-21 10:50:17.381810",
+ "modified": "2026-10-23 13:36:03.949798",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",
@@ -635,6 +653,10 @@
    "report": 1,
    "export": 1,
    "role": "Sales Manager"
+  },
+  {
+   "role": "Sales User",
+   "read": 1
   }
  ],
  "sort_field": "message_timestamp",

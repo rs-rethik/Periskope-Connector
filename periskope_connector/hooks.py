@@ -20,13 +20,18 @@ add_to_apps_screen = [
 		"name": "periskope_connector",
 		"logo": "/assets/periskope_connector/images/logo.svg",
 		"title": "Periskope Connector",
-		"route": "/app/periskope",
+		"route": "/whatsapp",
 		"has_permission": "periskope_connector.api.permission.has_app_permission",
 	}
 ]
 
 # Installation
 # ------------
+
+# The WhatsApp inbox app (frontend/, built into www/whatsapp.html).
+website_route_rules = [
+	{"from_route": "/whatsapp/<path:app_path>", "to_route": "whatsapp"},
+]
 
 after_install = "periskope_connector.install.after_install"
 after_migrate = "periskope_connector.install.after_migrate"
@@ -58,6 +63,16 @@ doctype_js = {"Periskope Settings": "public/js/periskope_flow.js"}
 
 # The CRM's WhatsApp tab sends through Periskope for the Periskope account (frappe_whatsapp is optional:
 # the override is only loaded when its doctype exists).
+# The WhatsApp inbox: a sales user sees only the chats on their numbers that are theirs (access.py).
+permission_query_conditions = {
+	"Periskope Chat": "periskope_connector.access.chat_query",
+	"Periskope Message": "periskope_connector.access.message_query",
+}
+has_permission = {
+	"Periskope Chat": "periskope_connector.access.chat_permission",
+	"Periskope Message": "periskope_connector.access.message_permission",
+}
+
 override_doctype_class = {
 	"WhatsApp Message": "periskope_connector.overrides.whatsapp_message.PeriskopeWhatsAppMessage",
 }

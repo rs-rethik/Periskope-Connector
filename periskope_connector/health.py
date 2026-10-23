@@ -87,9 +87,9 @@ def sync_check() -> list[str]:
 	counts = phone_counts()
 	silent = []
 	for phone in frappe.get_all(
-		"Periskope Phone",
-		filters={"parent": "Periskope Settings"},
-		fields=["number", "phone_name", "rep"],
+		"WhatsApp Number",
+		filters={"is_active": 1},
+		fields=["number", "display_name as phone_name", "default_assignee as rep"],
 	):
 		stats = counts.get(phone.number)
 		if not stats or stats.today > 0:
