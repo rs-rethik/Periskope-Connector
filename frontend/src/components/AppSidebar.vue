@@ -2,7 +2,7 @@
 	<div class="relative flex h-full bg-surface-gray-1">
 		<Sidebar v-model:collapsed="collapsed" class="border-r border-outline-gray-1">
 			<div class="flex h-full flex-col p-2">
-				<div class="flex items-center gap-2 px-2 py-1.5">
+				<div class="flex shrink-0 items-center gap-2 px-2 py-1.5">
 					<img :src="logo" class="size-7 shrink-0 rounded" alt="" />
 					<div v-if="!collapsed" class="min-w-0">
 						<div class="truncate text-base font-medium text-ink-gray-9">WhatsApp</div>
@@ -10,7 +10,10 @@
 					</div>
 				</div>
 
-				<div class="-mx-2 mt-3 flex flex-1 flex-col gap-0.5 overflow-y-auto px-2">
+				<!-- rows keep their height; a long list scrolls instead of squeezing them -->
+				<div
+					class="-mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 [&>*]:shrink-0"
+				>
 					<NotificationsBell :collapsed="collapsed" />
 					<SidebarItem
 						label="Inbox"
@@ -132,7 +135,7 @@
 					</div>
 				</div>
 
-				<div class="mt-auto pt-2">
+				<div class="mt-auto shrink-0 border-t border-outline-gray-1 pt-2">
 					<SidebarItem
 						v-if="boot.is_manager"
 						label="Settings"
