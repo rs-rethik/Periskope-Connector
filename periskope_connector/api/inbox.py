@@ -53,6 +53,12 @@ MESSAGE_FIELDS = [
 	"edited_on",
 	"ai_category",
 	"severity",
+	"whatsapp_number",
+	"sent_by",
+	"send_status",
+	"send_error",
+	"reactions",
+	"reply_to",
 ]
 
 
@@ -237,14 +243,42 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 	rows = list(reversed(rows[:limit]))
 	names = _participant_names([r.sender_phone for r in rows if r.sender_phone])
 	quoted = _quoted(chat, [r.quoted_message_id for r in rows if r.quoted_message_id])
+	senders = {u: frappe.utils.get_fullname(u) for u in {r.sent_by for r in rows if r.sent_by}}
 	for row in rows:
 		row.has_media = attachments.has_file(row) or bool(row.attachment_file)
 		row.pop("media_path", None)  # Periskope's link never goes to the browser
-		row.sender_label = (
-			_("AI assistant") if row.agent_reply else names.get(row.sender_phone) or row.sender_name or ""
-		)
+		if row.agent_reply:
+			row.sender_label = _("AI assistant")
+		elif row.sent_by:
+			row.sender_label = senders.get(row.sent_by)
+		else:
+			row.sender_label = names.get(row.sender_phone) or row.sender_name or ""
 		row.quoted = quoted.get(row.quoted_message_id) if row.quoted_message_id else None
-	return {"messages": rows, "has_more": more}
+		row.reactions = json.loads(row.reactions) if row.reactions else {}
+	return {"messages": rows, "has_more": more, "notes": _notes(chat, rows, more, before)}
+
+
+def _notes(chat: str, rows: list, more: bool, before: str | None) -> list[dict]:
+	"""The team's private notes in the same stretch of time as this page of messages."""
+	from periskope_connector.api.compose import comment_row
+
+	filters = {"chat": chat}
+	if more and rows:
+		filters["creation"] = [">=", rows[0].message_timestamp]
+	if before:
+		filters["creation"] = (
+			["between", [rows[0].message_timestamp, before]] if more and rows else ["<", before]
+		)
+	return [
+		comment_row(row)
+		for row in frappe.get_all(
+			"Periskope Chat Comment",
+			filters=filters,
+			fields=["name", "content", "owner", "creation", "mentions"],
+			order_by="creation asc",
+			limit=500,
+		)
+	]
 
 
 def _participant_names(phones: list[str]) -> dict:

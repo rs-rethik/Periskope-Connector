@@ -8,14 +8,24 @@ from periskope_connector import client, numbers, safety
 from periskope_connector.api.permission import require_admin
 
 
-def send(chat_id: str, text: str, phone: str, origin: str, **values) -> dict:
-	"""Send `text` to `chat_id` from the company number `phone`. Returns Periskope's reply
-	({status, unique_id, ...}). Raises safety.SendNotAllowed when test mode stops it, and the
-	Periskope error when the send fails; both are logged first."""
+def send(
+	chat_id: str,
+	text: str,
+	phone: str,
+	origin: str,
+	media: dict | None = None,
+	reply_to: str | None = None,
+	**values,
+) -> dict:
+	"""Send `text` (or a file with `text` as its caption) to `chat_id` from the company number
+	`phone`. Returns Periskope's reply ({status, unique_id, ...}). Raises safety.SendNotAllowed when
+	test mode stops it, and the Periskope error when the send fails; both are logged first."""
 	detail = values.pop("detail", None) or {}
+	if media:
+		detail = {**detail, "file": media.get("filename"), "mimetype": media.get("mimetype")}
 	where = {"chat_id": chat_id, "origin": origin, "message_text": text, **values}
 	try:
-		result = client.send_message(chat_id, text, phone)
+		result = client.send_message(chat_id, text, phone, media=media, reply_to=reply_to)
 	except safety.SendNotAllowed as e:
 		verb = "Would send" if e.mode == safety.DRY_RUN else "Blocked"
 		safety.log("Send Message", e.mode, f"{verb} a WhatsApp message ({origin})", detail=detail, **where)
@@ -62,7 +72,9 @@ def match_sent(chat_id: str, data: dict) -> str:
 	"true_<chat>_<unique_id>"), so the send is found exactly; the text match is the fallback."""
 	from periskope_connector.autoreply import match_sent as match_by_text
 
-	unique_id = data.get("unique_id") or (data.get("message_id") or "").rpartition("_")[2]
+	# "true_<chat>_<id>", with "_<participant>" after it in a group: the id is the third part.
+	parts = (data.get("message_id") or "").split("_")
+	unique_id = data.get("unique_id") or (parts[2] if len(parts) >= 3 else "")
 	if unique_id:
 		detail = frappe.db.get_value(
 			"Periskope Agent Action",

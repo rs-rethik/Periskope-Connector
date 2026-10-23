@@ -164,11 +164,11 @@ class TestPeriskopeSettings(FrappeTestCase):
 		self.assertEqual(frappe.db.count("Periskope Webhook Log"), before)
 
 	def test_webhook_accepts_the_signature_in_any_letter_case(self):
-		body = json.dumps({"event_type": "reaction.created", "data": {}}).encode()
+		body = json.dumps({"event_type": "chat.created", "data": {}}).encode()
 		self.assertEqual(self._call_receive(body, _sign(body).upper()), {"ok": True})
 
 	def test_webhook_only_queues_message_events(self):
-		body = json.dumps({"event_type": "reaction.created", "data": {}}).encode()
+		body = json.dumps({"event_type": "chat.created", "data": {}}).encode()
 		with patch.object(webhook.frappe, "enqueue") as enqueue:
 			self._call_receive(body, _sign(body))
 		enqueue.assert_not_called()

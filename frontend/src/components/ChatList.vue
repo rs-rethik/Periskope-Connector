@@ -1,10 +1,20 @@
 <template>
 	<div class="flex h-full flex-col">
 		<div class="flex flex-col gap-2 border-b border-outline-gray-1 p-3">
-			<div class="flex items-center justify-between">
-				<h2 class="text-lg font-semibold text-ink-gray-9">{{ title }}</h2>
+			<div class="flex items-center gap-2">
+				<h2 class="truncate text-lg font-semibold text-ink-gray-9">{{ title }}</h2>
 				<span class="text-sm text-ink-gray-5">{{ total }}</span>
+				<Button
+					v-if="boot.numbers.length"
+					class="ml-auto"
+					size="sm"
+					label="New chat"
+					@click="newChat = true"
+				>
+					<template #prefix><LucideSquarePen class="size-4" /></template>
+				</Button>
 			</div>
+			<NewChatDialog v-model="newChat" />
 			<TextInput
 				v-model="search"
 				placeholder="Search name, number or message"
@@ -121,12 +131,15 @@ import LucideSearch from "~icons/lucide/search";
 import LucideUsers from "~icons/lucide/users";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import { QUICK_FILTERS, currentFilters, inbox } from "@/stores/inbox";
-import { numberLabel } from "@/boot";
+import LucideSquarePen from "~icons/lucide/square-pen";
+import NewChatDialog from "@/components/NewChatDialog.vue";
+import { boot, numberLabel } from "@/boot";
 import { listTime } from "@/utils/format";
 
 defineProps({ selected: { type: String, default: "" } });
 defineEmits(["select"]);
 
+const newChat = ref(false);
 const tabs = [
 	{ key: "all", label: "All" },
 	{ key: "chats", label: "Chats" },

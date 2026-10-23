@@ -44,9 +44,13 @@ FIELDS = [
 	"whatsapp_message",
 	"transcript",
 	"is_deleted",
+	"send_status",
 ]
+# Sent from the inbox but not taken by Periskope (yet): nothing to show in the CRM.
+UNSENT = ("Sending", "Failed", "Not Sent")
 CONTENT_TYPES = {"text": "text", "image": "image", "document": "document", "audio": "audio", "video": "video"}
-ACK_STATUS = {"2": "delivered", "3": "read", "4": "read"}
+# Periskope's ack: 1-2 sent, 3 delivered to the recipient, 4-5 read (docs: WhatsApp Message Ack Status).
+ACK_STATUS = {"1": "sent", "2": "sent", "3": "delivered", "4": "read", "5": "read"}
 
 
 def available() -> bool:
@@ -134,7 +138,7 @@ def upsert(message: str) -> str | None:
 		if not available():
 			return None
 		m = frappe.db.get_value("Periskope Message", message, FIELDS, as_dict=True)
-		if not m or not m.chat_id:
+		if not m or not m.chat_id or m.send_status in UNSENT:
 			return None
 		reference = (
 			("CRM Deal", m.crm_deal) if m.crm_deal else ("CRM Lead", m.crm_lead) if m.crm_lead else None

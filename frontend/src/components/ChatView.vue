@@ -31,27 +31,39 @@
 					@click="loadOlder"
 				/>
 			</div>
-			<template v-for="(m, i) in messages" :key="m.name">
+			<template v-for="(item, i) in timeline" :key="item.kind + item.name">
 				<div
-					v-if="
-						i === 0 || !sameDay(messages[i - 1].message_timestamp, m.message_timestamp)
-					"
+					v-if="i === 0 || !sameDay(timeline[i - 1].at, item.at)"
 					class="my-2 flex justify-center"
 				>
 					<span
 						class="rounded-full bg-surface-white px-3 py-0.5 text-xs text-ink-gray-6 shadow-sm"
 					>
-						{{ dayLabel(m.message_timestamp) }}
+						{{ dayLabel(item.at) }}
 					</span>
 				</div>
+				<div v-if="item.kind === 'note'" class="flex justify-center px-4 py-1">
+					<div
+						class="w-full max-w-[80%] rounded-lg border border-outline-amber-2 bg-surface-amber-1 px-3 py-1.5"
+					>
+						<div class="flex items-center gap-1 text-xs font-medium text-ink-gray-7">
+							<LucideLock class="size-3" /> Private note · {{ item.note.owner_name }}
+							<span class="ml-auto font-normal text-ink-gray-5">{{
+								messageTime(item.at)
+							}}</span>
+						</div>
+						<div class="whitespace-pre-wrap break-words text-sm text-ink-gray-8">
+							{{ item.note.content }}
+						</div>
+					</div>
+				</div>
 				<MessageBubble
-					:message="m"
+					v-else
+					:message="item.message"
 					:is-group="!!chat?.is_group"
-					:show-sender-name="
-						i === 0 ||
-						messages[i - 1].sender_phone !== m.sender_phone ||
-						messages[i - 1].direction !== m.direction
-					"
+					:show-sender-name="showName(i)"
+					@reply="replyTo = $event"
+					@updated="replace"
 				/>
 			</template>
 			<div v-if="loading" class="flex justify-center p-6">
@@ -60,39 +72,70 @@
 			<div v-else-if="error" class="p-6 text-center text-sm text-ink-gray-6">
 				{{ error }}
 			</div>
-			<div v-else-if="!messages.length" class="p-6 text-center text-sm text-ink-gray-5">
+			<div v-else-if="!timeline.length" class="p-6 text-center text-sm text-ink-gray-5">
 				No messages yet.
 			</div>
 		</div>
 
-		<div
-			class="border-t border-outline-gray-1 bg-surface-white px-4 py-3 text-sm text-ink-gray-5"
-		>
-			<slot name="composer"
-				>Replying from here comes in the next step. Messages update live.</slot
-			>
-		</div>
+		<Composer
+			v-if="chat && !error"
+			ref="composer"
+			:chat="chat"
+			:reply-to="replyTo"
+			@sent="addMessage"
+			@noted="addNote"
+			@clear-reply="replyTo = null"
+		/>
 	</div>
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Avatar, Badge, Button, LoadingIndicator, call } from "frappe-ui";
 import LucideUsers from "~icons/lucide/users";
+import LucideLock from "~icons/lucide/lock";
 import MessageBubble from "@/components/MessageBubble.vue";
+import Composer from "@/components/Composer.vue";
 import { inbox } from "@/stores/inbox";
-import { dayLabel, sameDay } from "@/utils/format";
+import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
 const props = defineProps({ name: { type: String, required: true } });
 const emit = defineEmits(["loaded"]);
 
 const chat = ref(null);
 const messages = ref([]);
+const notes = ref([]);
 const hasMore = ref(false);
 const loading = ref(false);
 const loadingOlder = ref(false);
 const error = ref("");
 const scroller = ref(null);
+const composer = ref(null);
+const replyTo = ref(null);
+
+// Messages and the team's private notes, in time order.
+const timeline = computed(() =>
+	[
+		...messages.value.map((m) => ({
+			kind: "message",
+			name: m.name,
+			at: m.message_timestamp,
+			message: m,
+		})),
+		...notes.value.map((n) => ({ kind: "note", name: n.name, at: n.creation, note: n })),
+	].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
+);
+
+function showName(i) {
+	const prev = timeline.value[i - 1];
+	const m = timeline.value[i].message;
+	return (
+		!prev ||
+		prev.kind !== "message" ||
+		prev.message.sender_phone !== m.sender_phone ||
+		prev.message.direction !== m.direction
+	);
+}
 
 function nearBottom() {
 	const el = scroller.value;
@@ -103,6 +146,12 @@ function scrollToBottom() {
 	nextTick(() => {
 		if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 	});
+}
+
+function mergeNotes(list) {
+	const byName = new Map(notes.value.map((n) => [n.name, n]));
+	for (const n of list) byName.set(n.name, n);
+	notes.value = [...byName.values()];
 }
 
 async function load({ keepPosition = false } = {}) {
@@ -120,6 +169,7 @@ async function load({ keepPosition = false } = {}) {
 		const older =
 			keepPosition && first ? messages.value.filter((m) => m.message_timestamp < first) : [];
 		messages.value = [...older, ...r.messages];
+		mergeNotes(r.notes || []);
 		if (!older.length) hasMore.value = r.has_more;
 		if (stick) scrollToBottom();
 		error.value = "";
@@ -146,6 +196,7 @@ async function loadOlder() {
 			before: messages.value[0].message_timestamp,
 		});
 		messages.value = [...r.messages, ...messages.value];
+		mergeNotes(r.notes || []);
 		hasMore.value = r.has_more;
 		await nextTick();
 		el.scrollTop = el.scrollHeight - before;
@@ -158,11 +209,35 @@ function onScroll() {
 	if (scroller.value?.scrollTop < 60 && hasMore.value && !loadingOlder.value) loadOlder();
 }
 
+function addMessage(m) {
+	if (!messages.value.some((x) => x.name === m.name)) messages.value = [...messages.value, m];
+	scrollToBottom();
+}
+
+function addNote(n) {
+	mergeNotes([n]);
+	scrollToBottom();
+}
+
+function replace(m) {
+	messages.value = messages.value.map((x) => (x.name === m.name ? { ...x, ...m } : x));
+}
+
+// "r" puts the cursor in the reply box.
+function onKey(e) {
+	if (e.key !== "r" || e.metaKey || e.ctrlKey || e.altKey) return;
+	if (e.target.closest("input, textarea, [contenteditable]")) return;
+	e.preventDefault();
+	composer.value?.focus();
+}
+
 watch(
 	() => props.name,
 	() => {
 		messages.value = [];
+		notes.value = [];
 		chat.value = null;
+		replyTo.value = null;
 		load();
 	}
 );
@@ -172,7 +247,11 @@ watch(
 		if (inbox.changed.includes(props.name)) load({ keepPosition: true });
 	}
 );
-onMounted(() => load());
+onMounted(() => {
+	load();
+	window.addEventListener("keydown", onKey);
+});
+onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 
 defineExpose({ reload: () => load({ keepPosition: true }), chat });
 </script>

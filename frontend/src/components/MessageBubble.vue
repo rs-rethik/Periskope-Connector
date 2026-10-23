@@ -1,10 +1,23 @@
 <template>
-	<div class="flex px-4 py-0.5" :class="outgoing ? 'justify-end' : 'justify-start'">
+	<div
+		class="group flex items-center gap-1 px-4 py-0.5"
+		:class="outgoing ? 'justify-end' : 'justify-start'"
+	>
+		<button
+			v-if="outgoing && canReply"
+			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+			title="Reply to this message"
+			@click="$emit('reply', message)"
+		>
+			<LucideReply class="size-4" />
+		</button>
 		<div
-			class="max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm"
-			:class="
-				outgoing ? 'bg-surface-green-1' : 'bg-surface-white border border-outline-gray-1'
-			"
+			class="relative max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm"
+			:class="[
+				outgoing ? 'bg-surface-green-1' : 'border border-outline-gray-1 bg-surface-white',
+				unsent ? 'ring-1 ring-outline-red-2' : '',
+				hasReactions ? 'mb-3' : '',
+			]"
 		>
 			<div v-if="showSender" class="mb-0.5 text-xs font-medium text-ink-blue-6">
 				{{
@@ -18,6 +31,12 @@
 			>
 				<LucideBot class="size-3" /> AI
 				{{ message.agent_reply === "Holding" ? "holding reply" : "reply" }}
+			</div>
+			<div
+				v-else-if="outgoing && message.sender_label"
+				class="mb-0.5 text-xs font-medium text-ink-gray-6"
+			>
+				{{ message.sender_label }}
 			</div>
 
 			<div
@@ -103,18 +122,54 @@
 					:title="tick.title"
 				/>
 			</div>
+			<div v-if="unsent" class="mt-1 flex items-center gap-2 text-xs text-ink-red-4">
+				<LucideCircleAlert class="size-3.5 shrink-0" />
+				<span class="min-w-0 flex-1">
+					{{ message.send_status === "Not Sent" ? "Not sent" : "Failed" }}:
+					{{ message.send_error || "Periskope did not take it." }}
+				</span>
+				<Button
+					v-if="message.send_status === 'Failed'"
+					size="sm"
+					variant="subtle"
+					label="Retry"
+					:loading="retrying"
+					@click="retry"
+				/>
+			</div>
+			<div
+				v-if="hasReactions"
+				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-white px-1.5 py-0.5 text-sm shadow-sm"
+				:class="outgoing ? 'right-2' : 'left-2'"
+				:title="reactionTitle"
+			>
+				<span v-for="(n, e) in reactionCounts" :key="e"
+					>{{ e }}<span v-if="n > 1" class="text-xs text-ink-gray-5">{{ n }}</span></span
+				>
+			</div>
 		</div>
+		<button
+			v-if="!outgoing && canReply"
+			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+			title="Reply to this message"
+			@click="$emit('reply', message)"
+		>
+			<LucideReply class="size-4" />
+		</button>
 	</div>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { Button, call } from "frappe-ui";
 import LucideBot from "~icons/lucide/bot";
 import LucideBan from "~icons/lucide/ban";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideCheck from "~icons/lucide/check";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideClock from "~icons/lucide/clock";
+import LucideReply from "~icons/lucide/reply";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { messageTime } from "@/utils/format";
 
 const props = defineProps({
@@ -122,6 +177,7 @@ const props = defineProps({
 	isGroup: { type: Boolean, default: false },
 	showSenderName: { type: Boolean, default: true },
 });
+const emit = defineEmits(["reply", "updated"]);
 
 const outgoing = computed(() => props.message.direction === "Outgoing");
 const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);
@@ -138,18 +194,55 @@ const size = computed(() => {
 		: `${Math.max(1, Math.round(b / 1024))} KB`;
 });
 
-// Periskope's delivery state ("ack"): 0 pending, 1 sent, 2 delivered, 3 read, 4 played.
+const unsent = computed(() => ["Failed", "Not Sent"].includes(props.message.send_status));
+// A reply quotes a message WhatsApp knows: not one still being sent or that never went.
+const canReply = computed(
+	() =>
+		!props.message.is_deleted &&
+		!(props.message.message_id || "").startsWith("local_") &&
+		!unsent.value
+);
+
+// Periskope's delivery state ("ack"): -1 failed, 0 waiting, 1-2 sent, 3 delivered, 4-5 read.
 const tick = computed(() => {
+	if (props.message.send_status === "Sending")
+		return { icon: LucideClock, class: "", title: "Sending" };
+	if (unsent.value) return null;
 	const ack = String(props.message.ack ?? "").toLowerCase();
-	if (["3", "4", "read", "played"].includes(ack))
-		return { icon: LucideCheckCheck, class: "text-ink-blue-3", title: "Read" };
-	if (["2", "device", "delivered"].includes(ack))
+	if (["4", "5", "read", "played"].includes(ack))
+		return { icon: LucideCheckCheck, class: "text-ink-blue-6", title: "Read" };
+	if (["3", "delivered"].includes(ack))
 		return { icon: LucideCheckCheck, class: "", title: "Delivered" };
-	if (["1", "server", "sent"].includes(ack))
-		return { icon: LucideCheck, class: "", title: "Sent" };
-	if (["0", "pending"].includes(ack)) return { icon: LucideClock, class: "", title: "Waiting" };
+	if (["0", "pending"].includes(ack))
+		return { icon: LucideClock, class: "", title: "Waiting to send" };
 	return { icon: LucideCheck, class: "", title: "Sent" };
 });
+
+const reactions = computed(() => props.message.reactions || {});
+const hasReactions = computed(() => Object.keys(reactions.value).length > 0);
+const reactionCounts = computed(() => {
+	const out = {};
+	for (const e of Object.values(reactions.value)) out[e] = (out[e] || 0) + 1;
+	return out;
+});
+const reactionTitle = computed(() =>
+	Object.entries(reactions.value)
+		.map(([who, e]) => `${e} +${who}`)
+		.join(", ")
+);
+
+const retrying = ref(false);
+async function retry() {
+	retrying.value = true;
+	try {
+		emit(
+			"updated",
+			await call("periskope_connector.api.compose.retry", { message: props.message.name })
+		);
+	} finally {
+		retrying.value = false;
+	}
+}
 
 function open() {
 	window.open(mediaUrl.value, "_blank");

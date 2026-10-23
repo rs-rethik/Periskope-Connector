@@ -20,6 +20,10 @@ MESSAGE_CREATED = "message.created"
 MESSAGE_UPDATED = "message.updated"
 MESSAGE_DELETED = "message.deleted"
 MESSAGE_EVENTS = (MESSAGE_CREATED, MESSAGE_UPDATED, MESSAGE_DELETED)
+ACK_UPDATED = "message.ack.updated"
+REACTION_EVENTS = ("reaction.created", "reaction.updated")
+# Every event the webhook saves and processes.
+HANDLED_EVENTS = (*MESSAGE_EVENTS, ACK_UPDATED, *REACTION_EVENTS)
 
 
 def _digits(chat_id: str | None) -> str:
@@ -71,6 +75,11 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 
 	chat_id = data.get("chat_id") or ""
 	from_me = bool(data.get("from_me"))
+	if from_me:
+		from periskope_connector.api.compose import adopt_echo
+
+		if adopt_echo(data, webhook_log):
+			return None  # sent from the inbox: the row saved before the send is now filled in
 	is_group = chat_id.endswith("@g.us")
 	media = data.get("media") or {}
 	org_phone = _digits(data.get("org_phone"))
@@ -187,12 +196,16 @@ def process_webhook_log(log: str):
 	row = frappe.db.get_value(
 		"Periskope Webhook Log", log, ["event_type", "signature_valid", "payload"], as_dict=True
 	)
-	if not row or not row.signature_valid or row.event_type not in MESSAGE_EVENTS:
+	if not row or not row.signature_valid or row.event_type not in HANDLED_EVENTS:
 		return
 	try:
 		payload = json.loads(row.payload)
 		if row.event_type == MESSAGE_CREATED:
 			create_message(payload, webhook_log=log)
+		elif row.event_type == ACK_UPDATED:
+			update_ack(payload)
+		elif row.event_type in REACTION_EVENTS:
+			update_reaction(payload)
 		else:
 			update_message(payload, webhook_log=log)
 	except Exception:
@@ -252,6 +265,85 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 
 
 MAX_SWEEP_ATTEMPTS = 5  # per webhook log; past this it stays visible in Health as unprocessed
+
+
+def _find(data: dict) -> str | None:
+	"""Our row of the message an event is about: by Periskope's message id, else by the WhatsApp id
+	a reply sent from the inbox was given."""
+	name = data.get("message_id") and frappe.db.get_value(
+		"Periskope Message", {"message_id": data.get("message_id")}
+	)
+	unique_id = data.get("unique_id")
+	if not name and unique_id:
+		name = frappe.db.get_value("Periskope Message", {"outbound_id": unique_id})
+	return name
+
+
+def _changed(name: str, kind: str):
+	chat_row = frappe.db.get_value("Periskope Message", name, "periskope_chat")
+	if chat_row:
+		from periskope_connector import inbox_realtime
+
+		inbox_realtime.chat_changed(chat_row, kind=kind)
+
+
+def update_ack(payload: dict) -> str | None:
+	"""message.ack.updated: the delivery ticks of one of our messages. Acks only go up (sent,
+	delivered, read); -1 is a message WhatsApp could not send."""
+	data = payload.get("data") or {}
+	name = _find(data)
+	ack = str(data.get("ack") if data.get("ack") is not None else "")
+	if not name or not ack:
+		return None
+	old = frappe.db.get_value("Periskope Message", name, "ack")
+	values = {}
+	if ack == "-1":
+		values = {"ack": ack, "send_status": "Failed", "send_error": "WhatsApp could not send this message."}
+	elif not old or old == "-1" or _ack_rank(ack) > _ack_rank(old):
+		values = {"ack": ack}
+	if not values:
+		return name
+	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
+	from periskope_connector import mirror
+
+	mirror.upsert(name)
+	_changed(name, "ack")
+	return name
+
+
+def _ack_rank(ack: str | None) -> int:
+	try:
+		return int(ack)
+	except (TypeError, ValueError):
+		return -2
+
+
+def update_reaction(payload: dict) -> str | None:
+	"""reaction.created / reaction.updated: who reacted to a message, with what. An empty reaction
+	takes it away."""
+	data = payload.get("data") or {}
+	target = (data.get("msg_id") or {}).get("_serialized") or data.get("message_id")
+	name = target and frappe.db.get_value("Periskope Message", {"message_id": target})
+	if not name and data.get("unique_id"):
+		name = frappe.db.get_value("Periskope Message", {"outbound_id": data.get("unique_id")})
+	if not name:
+		return None
+	who = _digits(data.get("sender_id")) or "unknown"
+	reactions = json.loads(frappe.db.get_value("Periskope Message", name, "reactions") or "{}")
+	emoji = (data.get("reaction") or "").strip()
+	if emoji:
+		reactions[who] = emoji
+	else:
+		reactions.pop(who, None)
+	frappe.db.set_value(
+		"Periskope Message",
+		name,
+		"reactions",
+		json.dumps(reactions, ensure_ascii=False),
+		update_modified=False,
+	)
+	_changed(name, "reaction")
+	return name
 
 
 def sweep_unprocessed():

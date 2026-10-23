@@ -83,7 +83,16 @@
   "column_meta",
   "webhook_log",
   "raw_payload",
-  "agent_reply"
+  "agent_reply",
+  "section_inbox_send",
+  "sent_by",
+  "send_status",
+  "send_error",
+  "column_inbox_send",
+  "outbound_id",
+  "send_attempts",
+  "reply_to",
+  "reactions"
  ],
  "fields": [
   {
@@ -623,11 +632,72 @@
    "label": "Chat Record",
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "section_inbox_send",
+   "fieldtype": "Section Break",
+   "label": "Sent from the Inbox",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "sent_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Sent By",
+   "read_only": 1,
+   "description": "The user who sent it from the WhatsApp inbox."
+  },
+  {
+   "fieldname": "send_status",
+   "fieldtype": "Select",
+   "options": "\nSending\nQueued\nFailed\nNot Sent",
+   "label": "Send Status",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "Sending: saved, being handed to Periskope. Queued: Periskope took it (the ticks then show delivery). Failed: Periskope did not take it (see Send Error). Not Sent: stopped by test mode."
+  },
+  {
+   "fieldname": "send_error",
+   "fieldtype": "Small Text",
+   "label": "Send Error",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_inbox_send",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "outbound_id",
+   "fieldtype": "Data",
+   "label": "Periskope Send ID",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The unique_id Periskope returned on send; its webhook copy is matched to this row."
+  },
+  {
+   "fieldname": "send_attempts",
+   "fieldtype": "Int",
+   "label": "Send Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reply_to",
+   "fieldtype": "Data",
+   "label": "Replying To (message id)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reactions",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "label": "Reactions",
+   "read_only": 1,
+   "description": "Who reacted with what: {\"<number>\": \"<emoji>\"}."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-23 13:36:03.949798",
+ "modified": "2026-10-23 15:00:29.889883",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",
