@@ -264,6 +264,24 @@ class TestTicksWithoutWebhook(ComposeCase):
 		compose.refresh_ticks()
 		self.assertNotIn("UID1", asked)  # read: not asked again
 
+	def test_opening_a_chat_asks_only_for_its_ticks_and_not_too_often(self):
+		mine = self._incoming(A)
+		other = self._incoming(B)
+		compose.send(mine, "On it")
+		self.request.return_value = _ok("UID9")
+		compose.send(other, "Other number")
+		asked = []
+		self.request.side_effect = lambda method, url, **kw: asked.append(url) or SimpleNamespace(
+			status_code=200, ok=True, text="", json=lambda: {"ack": 3}
+		)
+		frappe.cache().delete_value(f"periskope_ticks:{mine}")
+		self.assertEqual(compose.refresh_chat_ticks(mine), 1)
+		self.assertEqual([u.split("message/")[1] for u in asked], ["UID1/status"])
+		self.assertEqual(compose.refresh_chat_ticks(mine), 0)  # asked again at once: skipped
+		rep = _user("compose.rep@example.com", "Sales User")
+		frappe.set_user(rep)
+		self.assertRaises(frappe.PermissionError, compose.refresh_chat_ticks, mine)
+
 
 class TestRetry(ComposeCase):
 	def test_a_send_that_never_reached_periskope_is_retried_by_itself(self):

@@ -326,21 +326,28 @@ def retry_failed() -> int:
 TICK_LOOKUPS = 30  # per run
 
 
-def refresh_ticks() -> int:
-	"""Scheduler, every 5 minutes: ask Periskope how far the inbox's recent replies got (sent,
-	delivered, read), for sites whose webhook cannot reach them (no public address). Webhook ack
-	events do the same at once where they arrive."""
+TICK_PAUSE_SECONDS = 10  # one chat's ticks are asked for at most this often
+
+
+def refresh_ticks(chat: str | None = None) -> int:
+	"""Ask Periskope how far the inbox's recent replies got (sent, delivered, read), for sites whose
+	webhook does not reach them (no public address, or the ack event not subscribed). Webhook ack
+	events do the same at once where they arrive. Runs from the scheduler every 5 minutes, and for
+	one chat when the inbox opens it or has just sent in it (refresh_chat_ticks)."""
 	from periskope_connector import health, messages
 	from periskope_connector.client import request
 
+	filters = {
+		"send_status": "Queued",
+		"outbound_id": ["is", "set"],
+		"ack": ["not in", ["4", "5"]],
+		"creation": [">", add_to_date(now_datetime(), days=-2)],
+	}
+	if chat:
+		filters["periskope_chat"] = chat
 	rows = frappe.get_all(
 		"Periskope Message",
-		filters={
-			"send_status": "Queued",
-			"outbound_id": ["is", "set"],
-			"ack": ["not in", ["4", "5"]],
-			"creation": [">", add_to_date(now_datetime(), days=-2)],
-		},
+		filters=filters,
 		fields=["name", "outbound_id", "org_phone", "message_id"],
 		order_by="creation desc",
 		limit=TICK_LOOKUPS,
@@ -359,6 +366,20 @@ def refresh_ticks() -> int:
 			updated += 1
 	frappe.db.commit()
 	return updated
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_chat_ticks(chat: str) -> int:
+	"""The inbox asks for a chat's ticks when it opens it and shortly after a send. At most once every
+	TICK_PAUSE_SECONDS per chat, whoever asks; the ticks then arrive like any live update."""
+	access.require_inbox_user()
+	if not access.can_see_chat(chat):
+		frappe.throw(_("You cannot open this chat."), frappe.PermissionError)
+	key = f"periskope_ticks:{chat}"
+	if frappe.cache().get_value(key, expires=True):
+		return 0
+	frappe.cache().set_value(key, 1, expires_in_sec=TICK_PAUSE_SECONDS)
+	return refresh_ticks(chat)
 
 
 def _row(name: str) -> dict:

@@ -174,6 +174,7 @@ async function load({ keepPosition = false } = {}) {
 		if (stick) scrollToBottom();
 		error.value = "";
 		call("periskope_connector.api.inbox.mark_seen", { chat: props.name });
+		if (!keepPosition && hasPendingTicks()) refreshTicks();
 	} catch (e) {
 		error.value =
 			e?.exc_type === "PermissionError" ||
@@ -212,6 +213,29 @@ function onScroll() {
 function addMessage(m) {
 	if (!messages.value.some((x) => x.name === m.name)) messages.value = [...messages.value, m];
 	scrollToBottom();
+	// Where no webhook arrives, ask Periskope for the ticks shortly after the send.
+	for (const seconds of [5, 20, 60]) timers.push(setTimeout(refreshTicks, seconds * 1000));
+}
+
+const timers = [];
+
+// Replies of ours that Periskope has taken but are not read yet.
+function hasPendingTicks() {
+	return messages.value.some(
+		(m) => m.send_status === "Queued" && !["4", "5"].includes(String(m.ack ?? ""))
+	);
+}
+
+async function refreshTicks() {
+	if (!hasPendingTicks()) return;
+	try {
+		const updated = await call("periskope_connector.api.compose.refresh_chat_ticks", {
+			chat: props.name,
+		});
+		if (updated) load({ keepPosition: true });
+	} catch (e) {
+		// the ticks stay as they are; the webhook or the next try updates them
+	}
 }
 
 function addNote(n) {
@@ -251,7 +275,10 @@ onMounted(() => {
 	load();
 	window.addEventListener("keydown", onKey);
 });
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onBeforeUnmount(() => {
+	window.removeEventListener("keydown", onKey);
+	timers.forEach(clearTimeout);
+});
 
 defineExpose({ reload: () => load({ keepPosition: true }), chat });
 </script>
