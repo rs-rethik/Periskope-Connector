@@ -29,6 +29,17 @@
 						<template #prefix><LucideList class="size-4 text-ink-gray-6" /></template>
 					</SidebarItem>
 
+					<SidebarItem
+						v-if="boot.is_manager"
+						label="Dashboard"
+						:to="{ name: 'Dashboard' }"
+						:active="$route.name === 'Dashboard'"
+					>
+						<template #prefix
+							><LucideChartColumn class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
+
 					<SidebarLabel label="Views" class="mt-3" divider />
 					<SidebarItem
 						v-for="f in QUICK_FILTERS"
@@ -147,6 +158,7 @@ import LucideBookmarkCheck from "~icons/lucide/bookmark-check";
 import NotificationsBell from "@/components/NotificationsBell.vue";
 import SettingsModal from "@/components/settings/SettingsModal.vue";
 import LucideSettings from "~icons/lucide/settings";
+import LucideChartColumn from "~icons/lucide/chart-column";
 import { boot } from "@/boot";
 import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
 

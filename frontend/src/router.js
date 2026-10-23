@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { boot } from "@/boot";
 
 const routes = [
 	{ path: "/", redirect: { name: "Inbox" } },
@@ -16,6 +17,12 @@ const routes = [
 		path: "/conversations/:chat",
 		name: "Conversation",
 		component: () => import("@/pages/Conversation.vue"),
+	},
+	{
+		path: "/dashboard",
+		name: "Dashboard",
+		component: () => import("@/pages/Dashboard.vue"),
+		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
 	},
 	{ path: "/:pathMatch(.*)*", redirect: { name: "Inbox" } },
 ];

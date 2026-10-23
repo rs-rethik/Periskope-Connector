@@ -16,7 +16,7 @@ from periskope_connector import timeline_comments as timeline
 from periskope_connector.ai import classifier
 from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import GROUP_CHAT, OTHER_APP_DOCTYPES, event
+from periskope_connector.tests.utils import GROUP_CHAT, OTHER_APP_DOCTYPES, event, without_site_teams
 from periskope_connector.text_rules import analysis_skip_reason, is_acknowledgement
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
@@ -115,6 +115,7 @@ class TestPeriskopeMessage(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_msg_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_msg_test")
+		without_site_teams(self, "periskope_msg_test")
 		rep = patch.object(
 			messages, "_rep_for_phone", lambda n: "Administrator" if n == "919786387999" else None
 		)
@@ -272,6 +273,7 @@ class TestEscalationAlert(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_alert_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_alert_test")
+		without_site_teams(self, "periskope_alert_test")
 		self.email = frappe.db.get_value("User", "Administrator", "email")
 		cfg = patch("periskope_connector.alerts.get_config")
 		self.config = cfg.start()
@@ -339,6 +341,7 @@ class TestBackfill(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_backfill_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_backfill_test")
+		without_site_teams(self, "periskope_backfill_test")
 		frappe.db.set_single_value("Periskope Settings", "enabled", 1)
 
 	def _run(self, chats, messages, days=1):
@@ -444,6 +447,7 @@ class TestLinking(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_link_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_link_test")
+		without_site_teams(self, "periskope_link_test")
 
 	def _lead(self, **values):
 		doc = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Test", **values})
@@ -563,6 +567,7 @@ class TestNewEnquiryLead(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_enquiry_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_enquiry_test")
+		without_site_teams(self, "periskope_enquiry_test")
 
 	def _tagged(self, message_id="enq1", category="order_or_enquiry", **data):
 		name = messages.create_message(event(message_id=message_id, **data))
@@ -629,6 +634,7 @@ class TestTimelineComment(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_comment_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_comment_test")
+		without_site_teams(self, "periskope_comment_test")
 		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Known", "mobile_no": "9600000001"})
 		lead.flags.ignore_mandatory = True
 		self.lead = lead.insert(ignore_permissions=True)
@@ -707,6 +713,7 @@ class TestPhoneFields(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_matching_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_matching_test")
+		without_site_teams(self, "periskope_matching_test")
 
 	def _lead(self, **values):
 		doc = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Test", **values})
@@ -799,6 +806,7 @@ class TestIngestUsesTheIndexedMatching(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_ingest_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_ingest_test")
+		without_site_teams(self, "periskope_ingest_test")
 
 	def test_a_message_from_a_known_number_links_on_the_indexed_fields(self):
 		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Known", "mobile_no": "+91 96000 00001"})
@@ -834,6 +842,7 @@ class TestRetention(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_retention_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_retention_test")
+		without_site_teams(self, "periskope_retention_test")
 
 	def test_raw_payloads_older_than_the_setting_are_cleared(self):
 		old, fresh = _message("ret1", days_old=100), _message("ret2")
@@ -868,6 +877,7 @@ class TestUnmatched(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_unmatched_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_unmatched_test")
+		without_site_teams(self, "periskope_unmatched_test")
 		frappe.db.delete("Periskope Message")  # only this test's messages, rolled back afterwards
 
 	def _rows(self):
@@ -964,6 +974,7 @@ class TestClassify(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_ai_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_ai_test")
+		without_site_teams(self, "periskope_ai_test")
 
 		rep = patch.object(messages, "_rep_for_phone", lambda n: None)
 		rep.start()
@@ -1470,6 +1481,7 @@ class TestFeedbackLoop(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_feedback_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_feedback_test")
+		without_site_teams(self, "periskope_feedback_test")
 		# the site's real corrections must not count; rolled back after the test
 		frappe.db.sql("update `tabPeriskope Message` set correct_category = null")
 

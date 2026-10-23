@@ -14,6 +14,7 @@ from periskope_connector import health, messages
 from periskope_connector.ai import classifier
 from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
+from periskope_connector.tests.utils import without_site_teams
 
 
 def _usage(input_tokens=100, output_tokens=20, status="OK", day_offset=0):
@@ -44,6 +45,7 @@ class TestSpend(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_health_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_health_test")
+		without_site_teams(self, "periskope_health_test")
 		frappe.db.delete("Periskope AI Usage")  # the site's real usage must not count; rolled back
 		frappe.cache().delete_keys("periskope_alert:*")
 
@@ -82,6 +84,7 @@ class TestCostControls(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_cost_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_cost_test")
+		without_site_teams(self, "periskope_cost_test")
 
 	def test_a_group_message_gets_more_room_for_its_tasks(self):
 		self.assertGreater(classifier.GROUP_MAX_TOKENS, classifier.MAX_TOKENS)

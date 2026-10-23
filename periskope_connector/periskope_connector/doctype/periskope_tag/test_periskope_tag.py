@@ -10,7 +10,7 @@ from frappe.utils import add_days, now_datetime
 from periskope_connector import dashboard, install, messages, tags
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import event
+from periskope_connector.tests.utils import event, without_site_teams
 from periskope_connector.text_rules import skip_fields
 
 
@@ -29,6 +29,7 @@ class TestTags(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_tags_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_tags_test")
+		without_site_teams(self, "periskope_tags_test")
 		install._ensure_tags()
 
 	def test_the_starting_set_is_created_once(self):
@@ -115,6 +116,7 @@ class TestAIDecisions(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_decisions_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_decisions_test")
+		without_site_teams(self, "periskope_decisions_test")
 		install._ensure_tags()
 		frappe.db.set_single_value(
 			"Periskope Settings",
@@ -189,6 +191,7 @@ class TestDashboardGroups(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_dashboard_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_dashboard_test")
+		without_site_teams(self, "periskope_dashboard_test")
 		install._ensure_tags()
 
 	def _message(self, tag, message_id):
