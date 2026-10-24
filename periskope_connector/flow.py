@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, now_datetime, nowdate
 
-from periskope_connector import health, query, reminders, safety
+from periskope_connector import health, numbers, query, reminders, safety
 from periskope_connector.setup_status import agent_on, auto_reply_on
 
 OWN_DOCTYPES = ("Periskope Message", "Periskope Reply Reminder")
@@ -42,13 +42,13 @@ def _count(doctype: str, filters: dict | None = None) -> int:
 def _periskope(settings) -> dict:
 	phones = [
 		{
-			"name": p.phone_name or p.number,
+			"name": p.display_name or p.phone_name or p.number,
 			"number": p.number,
 			"state": p.wa_state or "",
 			"ready": bool(p.is_ready),
-			"rep": p.rep,
+			"rep": p.default_assignee,
 		}
-		for p in settings.phones
+		for p in numbers.all_numbers(active_only=True)
 	]
 	failed = (settings.connection_status or "").startswith("Failed")
 	ready = sum(1 for p in phones if p["ready"])

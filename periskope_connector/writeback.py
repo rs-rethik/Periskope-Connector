@@ -22,7 +22,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, escape_html, now_datetime
 
-from periskope_connector import crm_context, safety
+from periskope_connector import chat, crm_context, numbers, safety
 from periskope_connector.system import insert_as_system, save_as_system
 
 TOPICS = {
@@ -81,13 +81,9 @@ def owner_of(chat_id: str, record: tuple[str, str] | None = None) -> str | None:
 	if record:
 		field = "deal_owner" if record[0] == "CRM Deal" else "lead_owner"
 		candidates.append(frappe.db.get_value(record[0], record[1], field))
-	org_phone = frappe.db.get_value("Periskope Chat", chat_id, "org_phone")
+	org_phone = chat.number_of(chat_id)
 	if org_phone:
-		candidates.append(
-			frappe.db.get_value(
-				"Periskope Phone", {"parent": "Periskope Settings", "number": org_phone}, "rep"
-			)
-		)
+		candidates.append(numbers.rep(org_phone))
 	candidates.append(frappe.db.get_single_value("Periskope Settings", "default_rep"))
 	return next(
 		(u for u in candidates if u and u != "Administrator" and frappe.db.get_value("User", u, "enabled")),
@@ -178,7 +174,7 @@ def summary(chat_id: str, wants: str, answered: str, pending: str) -> str | None
 	)
 	name = _upsert_note(chat_id, f"{chat_id}|summary", "Summary", _(SUMMARY_TITLE), content)
 	if name:
-		frappe.db.set_value("Periskope Chat", chat_id, "summary_note", name, update_modified=False)
+		chat.set_on_all(chat_id, {"summary_note": name})
 	return name
 
 
@@ -400,7 +396,7 @@ def link_organization(chat_id: str, organization: str) -> str | None:
 			group = frappe.db.get_value("Periskope Group", {"chat_id": chat_id})
 			if not frappe.db.get_value("Periskope Group", group, "organization"):
 				frappe.db.set_value("Periskope Group", group, "organization", name)
-		frappe.db.set_value("Periskope Chat", chat_id, "organization", name, update_modified=False)
+		chat.set_on_all(chat_id, {"organization": name})
 		return name
 
 	return safety.crm_write(

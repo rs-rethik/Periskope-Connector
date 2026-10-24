@@ -44,9 +44,14 @@ FIELDS = [
 	"whatsapp_message",
 	"transcript",
 	"is_deleted",
+	"send_status",
+	"attachment_file",
 ]
+# Sent from the inbox but not taken by Periskope (yet): nothing to show in the CRM.
+UNSENT = ("Sending", "Failed", "Not Sent")
 CONTENT_TYPES = {"text": "text", "image": "image", "document": "document", "audio": "audio", "video": "video"}
-ACK_STATUS = {"2": "delivered", "3": "read", "4": "read"}
+# Periskope's ack: 1-2 sent, 3 delivered to the recipient, 4-5 read (docs: WhatsApp Message Ack Status).
+ACK_STATUS = {"1": "sent", "2": "sent", "3": "delivered", "4": "read", "5": "read"}
 
 
 def available() -> bool:
@@ -89,6 +94,16 @@ def _text(m) -> str:
 	return (AI_PREFIX + body) if m.agent_reply else body
 
 
+def _label(m) -> str:
+	"""What the CRM tab shows beside a message: the AI's replies, and which of our numbers it was on,
+	so a lead that wrote to two numbers reads clearly."""
+	from periskope_connector import numbers
+
+	ai = {"Answer": "AI reply", "Holding": "AI holding message"}.get(m.agent_reply or "", "")
+	via = f"via {numbers.label(m.org_phone)}" if m.org_phone else ""
+	return " · ".join(part for part in (ai, via) if part)
+
+
 def _values(m, reference: tuple[str, str]) -> dict:
 	incoming = m.direction == "Incoming"
 	customer = f"+{m.contact_number}" if m.contact_number else ""
@@ -102,12 +117,15 @@ def _values(m, reference: tuple[str, str]) -> dict:
 		"message_id": m.message_id,
 		"whatsapp_account": ACCOUNT,
 		"status": "" if incoming else ACK_STATUS.get(str(m.ack or ""), "sent"),
-		"label": {"Answer": "AI reply", "Holding": "AI holding message"}.get(m.agent_reply or "", ""),
+		"label": _label(m),
 		"reference_doctype": reference[0],
 		"reference_name": reference[1],
 	}
 	if (m.media_path or "").startswith(("http://", "https://")):
 		values["attach"] = m.media_path
+	elif m.attachment_file:
+		# Sent from the inbox: the file we saved (private; opened with the message's permission).
+		values["attach"] = frappe.db.get_value("File", m.attachment_file, "file_url")
 	return values
 
 
@@ -134,7 +152,7 @@ def upsert(message: str) -> str | None:
 		if not available():
 			return None
 		m = frappe.db.get_value("Periskope Message", message, FIELDS, as_dict=True)
-		if not m or not m.chat_id:
+		if not m or not m.chat_id or m.send_status in UNSENT:
 			return None
 		reference = (
 			("CRM Deal", m.crm_deal) if m.crm_deal else ("CRM Lead", m.crm_lead) if m.crm_lead else None
@@ -146,7 +164,9 @@ def upsert(message: str) -> str | None:
 			m.message_id and frappe.db.get_value("WhatsApp Message", {"message_id": m.message_id})
 		)
 		if existing and frappe.db.exists("WhatsApp Message", existing):
-			keep = ("message", "status", "label", "reference_doctype", "reference_name")
+			keep = ("message", "status", "label", "reference_doctype", "reference_name") + (
+				("attach",) if values.get("attach") else ()
+			)
 			frappe.db.set_value(
 				"WhatsApp Message", existing, {k: values[k] for k in keep}, update_modified=False
 			)

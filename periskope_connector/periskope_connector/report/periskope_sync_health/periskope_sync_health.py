@@ -26,9 +26,8 @@ def execute(filters=None):
 	counts = phone_counts()
 	rows = []
 	for phone in frappe.get_all(
-		"Periskope Phone",
-		filters={"parent": "Periskope Settings"},
-		fields=["number", "phone_name", "rep", "wa_state"],
+		"WhatsApp Number",
+		fields=["number", "display_name as phone_name", "default_assignee as rep", "wa_state"],
 		order_by="number asc",
 	):
 		stats = counts.get(phone.number) or frappe._dict(today=0, baseline=0)

@@ -30,11 +30,9 @@ def _as_utc(value: str | None) -> datetime | None:
 
 
 def _linked_phones() -> list[str]:
-	return frappe.get_all(
-		"Periskope Phone",
-		filters={"parent": "Periskope Settings", "is_ready": 1},
-		pluck="number",
-	)
+	from periskope_connector import numbers
+
+	return numbers.ready()
 
 
 def _active_chats(phone: str, cutoff: datetime) -> list[str]:

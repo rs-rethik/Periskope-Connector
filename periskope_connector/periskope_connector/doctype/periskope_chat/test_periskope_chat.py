@@ -58,11 +58,13 @@ class ChatCase(FrappeTestCase):
 class TestChatRow(ChatCase):
 	def test_a_message_keeps_the_chat_row_and_its_crm_link(self):
 		self._msg(minutes_ago=5)
-		row = frappe.get_doc("Periskope Chat", CHAT)
+		row = frappe.get_doc("Periskope Chat", {"chat_id": CHAT})
 		self.assertEqual((row.crm_lead, row.contact_number), (self.lead, NUMBER))
 		first = get_datetime(row.last_message_at)
 		self._msg("older", minutes_ago=50)  # a recovered older message
-		self.assertEqual(get_datetime(frappe.db.get_value("Periskope Chat", CHAT, "last_message_at")), first)
+		self.assertEqual(
+			get_datetime(frappe.db.get_value("Periskope Chat", {"chat_id": CHAT}, "last_message_at")), first
+		)
 
 	def test_a_rep_reply_cancels_the_waiting_ai_reply(self):
 		settings(enabled=1, enable_auto_reply=1)

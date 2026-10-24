@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
-from periskope_connector.messages import MESSAGE_EVENTS
+from periskope_connector.messages import HANDLED_EVENTS
 from periskope_connector.system import insert_as_system
 
 # Far above what a few linked phones send, so it only stops floods.
@@ -84,7 +84,7 @@ def receive() -> dict:
 		payload = {}
 
 	log = _log(payload, raw)
-	if payload.get("event_type") in MESSAGE_EVENTS:
+	if payload.get("event_type") in HANDLED_EVENTS:
 		# Save in the background so Periskope gets its 200 straight away.
 		frappe.enqueue(
 			"periskope_connector.messages.process_webhook_log",

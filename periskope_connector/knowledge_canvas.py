@@ -1,4 +1,4 @@
-"""The Knowledge Base canvas (desk page "periskope-knowledge"): the knowledge base as a node graph.
+"""The Knowledge Base canvas (/whatsapp/knowledge): the knowledge base as a node graph.
 
 Admins draw the tree the auto reply answers from: Topic nodes (Delivery) branch into Condition nodes
 (Customer is in Chennai, Otherwise) and end in Answer nodes; see knowledge.find for how a customer's

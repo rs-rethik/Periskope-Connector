@@ -40,18 +40,28 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 	return response.json()
 
 
-def send_message(chat_id: str, text: str, phone: str) -> dict:
-	"""Send a WhatsApp text from one of the linked numbers (POST /message/send). The reply carries a
-	queue id, not the final delivery state: Periskope queues the message and sends it itself.
+def send_message(
+	chat_id: str, text: str, phone: str, media: dict | None = None, reply_to: str | None = None
+) -> dict:
+	"""Send a WhatsApp message from one of the linked numbers (POST /message/send). The reply carries
+	a queue id, not the final delivery state: Periskope queues the message and sends it itself.
+
+	`media` is Periskope's media object ({type, filedata (base64), mimetype, filename}); `text` is then
+	its caption and may be empty. `reply_to` is the message_id of the message being answered.
 
 	The test-mode check comes first and cannot be skipped: a chat that is not allowed raises
 	safety.SendNotAllowed before any request is made. Call it through outbound.send, which logs."""
 	from periskope_connector import safety
 
 	safety.check_send(chat_id)
-	if not chat_id or not text or not phone:
-		frappe.throw(_("A chat, a text and a sending number are needed to send a message"))
-	return request("POST", "message/send", phone=phone, json={"chat_id": chat_id, "message": text})
+	if not chat_id or not phone or not (text or media):
+		frappe.throw(_("A chat, a text or file and a sending number are needed to send a message"))
+	body = {"chat_id": chat_id, "message": text or ""}
+	if media:
+		body["media"] = media
+	if reply_to:
+		body["reply_to"] = reply_to
+	return request("POST", "message/send", phone=phone, json=body)
 
 
 def fetch_chat_name(chat_id: str, phone: str | None = None) -> str:

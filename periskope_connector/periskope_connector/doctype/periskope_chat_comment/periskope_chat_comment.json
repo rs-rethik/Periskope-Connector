@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "creation": "2026-10-23 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "chat",
+  "content",
+  "mentions"
+ ],
+ "fields": [
+  {
+   "fieldname": "chat",
+   "fieldtype": "Link",
+   "options": "Periskope Chat",
+   "label": "Chat",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mentions",
+   "fieldtype": "Small Text",
+   "label": "Mentioned Users",
+   "read_only": 1,
+   "description": "One user per line; each got a notification."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-23 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Chat Comment",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "WhatsApp Manager",
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "write": 1
+  },
+  {
+   "role": "Sales Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "description": "A private note on a chat for the team. Never sent to WhatsApp."
+}

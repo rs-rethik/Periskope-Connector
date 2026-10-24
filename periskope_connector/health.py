@@ -87,9 +87,9 @@ def sync_check() -> list[str]:
 	counts = phone_counts()
 	silent = []
 	for phone in frappe.get_all(
-		"Periskope Phone",
-		filters={"parent": "Periskope Settings"},
-		fields=["number", "phone_name", "rep"],
+		"WhatsApp Number",
+		filters={"is_active": 1},
+		fields=["number", "display_name as phone_name", "default_assignee as rep"],
 	):
 		stats = counts.get(phone.number)
 		if not stats or stats.today > 0:
@@ -190,7 +190,7 @@ def get_health() -> dict:
 
 
 def agent_health() -> dict:
-	"""The agent's part of the Health tab (the Flow dialog shows the same figures in more detail)."""
+	"""The agent's part of the Health tab (the Flow diagram shows the same figures in more detail)."""
 	from periskope_connector import flow
 
 	settings = frappe.get_doc("Periskope Settings")
@@ -225,9 +225,11 @@ def agent_health() -> dict:
 		if budget
 		else _("{0:,} tokens, no budget set").format(used),
 		"test_mode": _("on: only the allowed chats and emails") if agent["test_mode"] else _("off"),
+		"test_mode_on": bool(agent["test_mode"]),
 		"last_problem": f"{problem[0].method} ({frappe.utils.pretty_date(problem[0].creation)})"
 		if problem
 		else _("none"),
+		"has_problem": bool(problem),
 	}
 
 

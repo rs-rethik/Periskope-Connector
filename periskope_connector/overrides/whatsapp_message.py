@@ -13,7 +13,7 @@ import frappe
 from frappe import _
 from frappe_whatsapp.frappe_whatsapp.doctype.whatsapp_message.whatsapp_message import WhatsAppMessage
 
-from periskope_connector import chat, mirror, outbound, safety
+from periskope_connector import chat, mirror, numbers, outbound, safety
 
 
 class PeriskopeWhatsAppMessage(WhatsAppMessage):
@@ -77,7 +77,7 @@ class PeriskopeWhatsAppMessage(WhatsAppMessage):
 		# here lets mirror.upsert find this row instead of adding a second one.
 		self.message_id = f"true_{chat_id}_{unique_id}" if unique_id else None
 		self.status = "sent"
-		self.label = "Rep reply"
+		self.label = f"Rep reply · via {numbers.label(phone)}"
 		from periskope_connector.autoreply import cancel
 
 		cancel(chat_id, _("A rep replied"))
@@ -92,9 +92,7 @@ class PeriskopeWhatsAppMessage(WhatsAppMessage):
 			if not digits:
 				frappe.throw(_("This record has no WhatsApp number to send to."))
 			chat_id = f"{digits}@c.us"
-		phone = frappe.db.get_value("Periskope Chat", chat_id, "org_phone") or frappe.db.get_value(
-			"Periskope Phone", {"parent": "Periskope Settings", "is_ready": 1}, "number"
-		)
+		phone = chat.number_of(chat_id) or numbers.first_ready()
 		if not phone:
 			frappe.throw(_("No connected company number to send from."))
 		return chat_id, phone

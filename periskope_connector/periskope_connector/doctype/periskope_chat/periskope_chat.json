@@ -1,11 +1,16 @@
 {
  "actions": [],
- "autoname": "field:chat_id",
+ "autoname": "hash",
  "creation": "2026-10-14 15:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "chat_id",
+  "chat_key",
+  "whatsapp_number",
+  "status",
+  "team",
+  "labels",
   "chat_name",
   "is_group",
   "contact_number",
@@ -15,7 +20,26 @@
   "crm_deal",
   "crm_lead",
   "organization",
-  "summary_note"
+  "summary_note",
+  "linked_by_hand",
+  "linked_by",
+  "section_inbox",
+  "last_message_preview",
+  "last_message_direction",
+  "column_inbox",
+  "last_incoming_at",
+  "message_count",
+  "section_sla",
+  "sla_policy",
+  "waiting_since",
+  "response_due",
+  "first_responded_on",
+  "column_sla",
+  "opened_on",
+  "resolution_due",
+  "resolved_on",
+  "response_breached",
+  "breach_alerted"
  ],
  "fields": [
   {
@@ -23,8 +47,9 @@
    "fieldtype": "Data",
    "label": "Chat",
    "reqd": 1,
-   "unique": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "search_index": 1,
+   "description": "The contact's WhatsApp id (the same on every number); one chat row per number."
   },
   {
    "fieldname": "chat_name",
@@ -41,17 +66,20 @@
   {
    "fieldname": "contact_number",
    "fieldtype": "Data",
-   "label": "Customer Number"
+   "label": "Customer Number",
+   "search_index": 1
   },
   {
    "fieldname": "org_phone",
    "fieldtype": "Data",
-   "label": "Company Number"
+   "label": "Company Number (digits)",
+   "read_only": 1
   },
   {
    "fieldname": "last_message_at",
    "fieldtype": "Datetime",
-   "label": "Last Message"
+   "label": "Last Message",
+   "search_index": 1
   },
   {
    "fieldname": "column_crm",
@@ -83,15 +111,173 @@
    "options": "FCRM Note",
    "label": "Summary Note",
    "read_only": 1
+  },
+  {
+   "fieldname": "chat_key",
+   "fieldtype": "Data",
+   "label": "Key",
+   "unique": 1,
+   "hidden": 1,
+   "read_only": 1,
+   "description": "number|chat_id"
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "options": "WhatsApp Number",
+   "label": "WhatsApp Number",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "options": "Open\nPending\nResolved\nClosed",
+   "default": "Open",
+   "label": "Status",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "section_inbox",
+   "fieldtype": "Section Break",
+   "label": "Inbox"
+  },
+  {
+   "fieldname": "last_message_preview",
+   "fieldtype": "Small Text",
+   "label": "Last Message Preview",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_direction",
+   "fieldtype": "Select",
+   "options": "\nIncoming\nOutgoing",
+   "label": "Last Message From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_inbox",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_incoming_at",
+   "fieldtype": "Datetime",
+   "label": "Last Customer Message",
+   "read_only": 1,
+   "description": "Unread counts compare this with when each user last opened the chat."
+  },
+  {
+   "fieldname": "message_count",
+   "fieldtype": "Int",
+   "label": "Messages",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_by_hand",
+   "fieldtype": "Check",
+   "label": "Linked by Hand",
+   "read_only": 1,
+   "description": "Someone chose this lead or deal in the inbox; the automatic match by number no longer changes it."
+  },
+  {
+   "fieldname": "linked_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Linked By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "options": "Periskope Team",
+   "label": "Team",
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "labels",
+   "fieldtype": "Table MultiSelect",
+   "options": "Periskope Chat Label",
+   "label": "Labels"
+  },
+  {
+   "fieldname": "section_sla",
+   "fieldtype": "Section Break",
+   "label": "SLA",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "sla_policy",
+   "fieldtype": "Link",
+   "options": "Periskope SLA Policy",
+   "label": "SLA Policy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "waiting_since",
+   "fieldtype": "Datetime",
+   "label": "Customer Waiting Since",
+   "read_only": 1,
+   "description": "The customer's first unanswered message, while no reply has gone out."
+  },
+  {
+   "fieldname": "response_due",
+   "fieldtype": "Datetime",
+   "label": "Reply Due",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_responded_on",
+   "fieldtype": "Datetime",
+   "label": "First Reply",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_sla",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "opened_on",
+   "fieldtype": "Datetime",
+   "label": "Opened On",
+   "read_only": 1,
+   "description": "When this chat was last opened (new or reopened)."
+  },
+  {
+   "fieldname": "resolution_due",
+   "fieldtype": "Datetime",
+   "label": "Resolution Due",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolved_on",
+   "fieldtype": "Datetime",
+   "label": "Resolved On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "response_breached",
+   "fieldtype": "Check",
+   "label": "Reply Was Late",
+   "read_only": 1
+  },
+  {
+   "fieldname": "breach_alerted",
+   "fieldtype": "Check",
+   "label": "Breach Alert Sent",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-10-23 15:44:38.153562",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",
- "naming_rule": "By fieldname",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [
   {
@@ -113,10 +299,15 @@
    "role": "WhatsApp Manager"
   },
   {
+   "role": "Sales Manager",
    "read": 1,
+   "write": 1,
    "report": 1,
-   "export": 1,
-   "role": "Sales Manager"
+   "export": 1
+  },
+  {
+   "role": "Sales User",
+   "read": 1
   }
  ],
  "sort_field": "last_message_at",
