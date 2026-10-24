@@ -265,8 +265,19 @@
 					<div v-if="searching && !results.length" class="p-2 text-sm text-ink-gray-5">
 						Searching…
 					</div>
-					<div v-else-if="!results.length" class="p-2 text-sm text-ink-gray-5">
-						Nothing found.
+					<div v-else-if="!results.length" class="flex flex-col items-start gap-2 p-2">
+						<span class="text-sm text-ink-gray-5">
+							Nothing found. Try a name, company or the last digits of the number.
+						</span>
+						<Button
+							v-if="!record"
+							size="sm"
+							label="Create a new lead instead"
+							@click="
+								linkDialog = false;
+								openCreate();
+							"
+						/>
 					</div>
 				</div>
 				<ErrorMessage class="mt-2" :message="error" />

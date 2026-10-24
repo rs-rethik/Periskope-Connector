@@ -2,7 +2,7 @@
 	<!-- unsaved changes: Esc and outside clicks do not close it (Cancel or Save first) -->
 	<Dialog v-model="open" :options="{ size: '6xl' }" :dismissible="!dirty">
 		<template #body>
-			<div class="flex h-[80vh] overflow-hidden rounded-xl bg-surface-base">
+			<div class="flex h-[min(46rem,90vh)] overflow-hidden rounded-xl bg-surface-base">
 				<!-- Menu -->
 				<nav
 					class="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-outline-gray-1 bg-surface-gray-1 p-2"
@@ -17,7 +17,7 @@
 						<button
 							v-for="item in group.items"
 							:key="item.key"
-							class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+							class="flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
 							:class="
 								page === item.key
 									? 'bg-surface-base text-ink-gray-9 shadow-sm'

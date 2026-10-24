@@ -104,7 +104,7 @@
    "label": "Enable Periskope Integration"
   },
   {
-   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
+   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then click <b>Test Connection</b>.",
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "Periskope API Key"
@@ -147,7 +147,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions &gt; Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
+   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
    "fieldname": "webhook_signing_secret",
    "fieldtype": "Password",
    "label": "Webhook Signing Secret"
@@ -480,7 +480,7 @@
    "collapsible": 1
   },
   {
-   "description": "The events Periskope should send to this site. Only message.created is stored as a message; the others are logged. Test Connection or Create Webhook in Periskope registers them.",
+   "description": "The events Periskope sends to this site: new, edited and deleted messages, delivery ticks (message.ack.updated) and reactions are shown in the inbox; the others are only logged. Test Connection or Create Webhook in Periskope registers them.",
    "fieldname": "webhook_events",
    "fieldtype": "Table",
    "label": "Webhook Events",

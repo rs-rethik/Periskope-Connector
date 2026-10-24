@@ -1,19 +1,20 @@
 <template>
 	<div class="flex h-full min-h-0 flex-col">
-		<div class="flex items-center gap-2 border-b border-outline-gray-1 px-6 py-4">
-			<div class="min-w-0 flex-1">
-				<h2 class="text-lg font-semibold text-ink-gray-9">{{ title }}</h2>
-				<p class="text-sm text-ink-gray-5">{{ description }}</p>
+		<!-- title and its buttons on one line, the description below at full width -->
+		<div class="border-b border-outline-gray-1 px-6 py-4">
+			<div class="flex flex-wrap items-center gap-2">
+				<h2 class="mr-auto text-lg font-semibold text-ink-gray-9">{{ title }}</h2>
+				<slot name="actions" :reload="load" />
+				<Button
+					v-if="meta?.can_create && !editing"
+					variant="solid"
+					:label="`New ${singular}`"
+					@click="edit(null)"
+				>
+					<template #prefix><LucidePlus class="size-4" /></template>
+				</Button>
 			</div>
-			<slot name="actions" :reload="load" />
-			<Button
-				v-if="meta?.can_create && !editing"
-				variant="solid"
-				:label="`New ${singular}`"
-				@click="edit(null)"
-			>
-				<template #prefix><LucidePlus class="size-4" /></template>
-			</Button>
+			<p v-if="description" class="mt-1 text-sm text-ink-gray-5">{{ description }}</p>
 		</div>
 
 		<!-- One record -->
@@ -22,7 +23,7 @@
 				class="mb-3 flex items-center gap-1 text-sm text-ink-gray-6 hover:text-ink-gray-9"
 				@click="leave"
 			>
-				<LucideArrowLeft class="size-4" /> All {{ title.toLowerCase() }}
+				<LucideArrowLeft class="size-4" /> All {{ listName }}
 			</button>
 			<div class="grid max-w-2xl gap-4">
 				<FieldInput
@@ -32,20 +33,25 @@
 					:field="editing.name && f.fieldname === nameField ? { ...f, read_only: 1 } : f"
 				/>
 			</div>
-			<ErrorMessage class="mt-3" :message="error" />
-			<div class="mt-5 flex gap-2">
-				<Button variant="solid" label="Save" :loading="saving" @click="save" />
-				<Button label="Cancel" @click="leave" />
-				<Button
-					v-if="editing.name && meta.can_delete"
-					class="ml-auto"
-					theme="red"
-					variant="subtle"
-					label="Delete"
-					:loading="deleting"
-					@click="remove"
-				/>
-			</div>
+		</div>
+		<!-- always in view while a record is open -->
+		<div
+			v-if="editing"
+			class="flex items-center gap-2 border-t border-outline-gray-1 bg-surface-base px-6 py-3"
+		>
+			<Button variant="solid" label="Save" :loading="saving" @click="save" />
+			<Button label="Cancel" @click="leave" />
+			<span v-if="dirty" class="text-xs text-ink-gray-6">Unsaved changes</span>
+			<ErrorMessage class="ml-2 min-w-0 truncate" :message="error" />
+			<Button
+				v-if="editing.name && meta.can_delete"
+				class="ml-auto"
+				theme="red"
+				variant="subtle"
+				label="Delete"
+				:loading="deleting"
+				@click="remove"
+			/>
 		</div>
 
 		<!-- The list -->
@@ -130,6 +136,13 @@ const saving = ref(false);
 const deleting = ref(false);
 const loadError = ref(false);
 const original = ref(""); // the record as opened, to tell when it has unsaved changes
+
+// "WhatsApp numbers" stays as it is; "Teams" reads "teams" in "All teams".
+const listName = computed(() =>
+	/^[A-Z][a-z]/.test(props.title)
+		? props.title[0].toLowerCase() + props.title.slice(1)
+		: props.title
+);
 
 const dirty = computed(() => !!editing.value && JSON.stringify(form.value) !== original.value);
 watch(dirty, (d) => emit("dirty", d));

@@ -1,17 +1,19 @@
 <template>
 	<div class="flex h-full min-h-0 flex-col">
-		<div class="flex items-center gap-2 border-b border-outline-gray-1 px-6 py-4">
-			<div class="min-w-0 flex-1">
-				<h2 class="text-lg font-semibold text-ink-gray-9">{{ section?.title }}</h2>
-				<p v-if="hint" class="text-sm text-ink-gray-5">{{ hint }}</p>
+		<!-- title and its buttons on one line, the description below at full width -->
+		<div class="border-b border-outline-gray-1 px-6 py-4">
+			<div class="flex flex-wrap items-center gap-2">
+				<h2 class="mr-auto text-lg font-semibold text-ink-gray-9">{{ section?.title }}</h2>
+				<Button
+					v-for="a in actions"
+					:key="a.action"
+					:label="a.label"
+					:loading="running === a.action"
+					:disabled="!!running && running !== a.action"
+					@click="run(a)"
+				/>
 			</div>
-			<Button
-				v-for="a in actions"
-				:key="a.action"
-				:label="a.label"
-				:loading="running === a.action"
-				@click="run(a)"
-			/>
+			<p v-if="hint" class="mt-1 text-sm text-ink-gray-5">{{ hint }}</p>
 		</div>
 		<div class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
 			<!-- The setup steps, as on the Settings form -->
@@ -45,13 +47,23 @@
 					:field="f"
 				/>
 			</div>
-			<ErrorMessage class="mt-3" :message="error" />
-			<div class="mt-5 flex items-center gap-2">
-				<Button variant="solid" label="Save" :loading="saving" @click="ask" />
-				<span v-if="section?.confirm" class="text-xs text-ink-gray-5"
-					>You'll be asked to confirm: this changes the live setup.</span
-				>
-			</div>
+		</div>
+		<!-- always in view, however long the section -->
+		<div
+			class="flex items-center gap-3 border-t border-outline-gray-1 bg-surface-base px-6 py-3"
+		>
+			<Button
+				variant="solid"
+				label="Save"
+				:loading="saving"
+				:disabled="!dirty"
+				@click="ask"
+			/>
+			<span v-if="dirty" class="text-xs text-ink-gray-6">Unsaved changes</span>
+			<span v-else-if="section?.confirm" class="text-xs text-ink-gray-5"
+				>Saving asks you to confirm: this changes the live setup.</span
+			>
+			<ErrorMessage class="ml-auto" :message="error" />
 		</div>
 
 		<Dialog v-model="confirming" :options="{ title: 'Change the live setup?' }">

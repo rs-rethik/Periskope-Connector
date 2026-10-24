@@ -164,6 +164,19 @@ class TestLinking(PanelCase):
 		)
 
 
+class TestSearch(PanelCase):
+	def test_every_word_counts_and_a_number_matches_in_any_format(self):
+		lead = _lead("Zubairqx", mobile="919600044444")
+		frappe.db.set_value("CRM Lead", lead, "organization", None)
+		names = lambda q: [r["name"] for r in crm_panel.search_records(q)]  # noqa: E731
+		# the chat's full name finds the lead saved under the first name only
+		self.assertIn(lead, names("Zubairqx Maheswaranqx"))
+		# a number typed without "+" or with spaces still finds it
+		self.assertIn(lead, names("919600044444"))
+		self.assertIn(lead, names("96000 44444"))
+		self.assertNotIn(lead, names("Nobodyqx"))
+
+
 class TestCreateAndChange(PanelCase):
 	def test_a_rep_creates_the_lead_and_owns_it(self):
 		rep = "panel.rep@example.com"

@@ -99,7 +99,7 @@
 						</div>
 						<div>
 							<div class="mb-1 text-xs text-ink-gray-5">Group by</div>
-							<Select v-model="groupBy" :options="groupOptions" />
+							<Select v-model="groupBy" class="w-full" :options="groupOptions" />
 						</div>
 						<div>
 							<div class="mb-1 text-xs text-ink-gray-5">Columns</div>

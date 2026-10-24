@@ -12,12 +12,8 @@
 			<label class="mb-1 block text-xs text-ink-gray-5">
 				{{ field.label }}<span v-if="field.reqd" class="text-ink-red-8"> *</span>
 			</label>
-			<div
-				v-if="field.read_only"
-				class="min-h-[28px] rounded bg-surface-gray-1 px-2 py-1 text-sm text-ink-gray-7"
-			>
-				{{ shown }}
-			</div>
+			<!-- shown, not edited: plain text, so it does not look like a box to type in -->
+			<div v-if="field.read_only" class="text-sm text-ink-gray-8">{{ shown }}</div>
 			<Picker
 				v-else-if="field.fieldtype === 'Link'"
 				:doctype="field.options"
@@ -36,7 +32,7 @@
 			/>
 			<div
 				v-else-if="field.fieldtype === 'Table' && field.child?.fieldtype === 'Select'"
-				class="flex flex-wrap gap-x-4 gap-y-1"
+				class="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3"
 			>
 				<FormControl
 					v-for="o in selectOptions(field.child.options)"
@@ -83,7 +79,9 @@
 
 <script setup>
 import { computed } from "vue";
+import dayjs from "dayjs";
 import { FormControl } from "frappe-ui";
+import { fromNow } from "@/utils/format";
 import Picker from "@/components/settings/Picker.vue";
 
 const props = defineProps({
@@ -98,9 +96,15 @@ const inputType = computed(
 			props.field.fieldtype
 		] || "text")
 );
-const shown = computed(() =>
-	Array.isArray(props.modelValue) ? props.modelValue.join(", ") : props.modelValue ?? "—"
-);
+const shown = computed(() => {
+	const v = props.modelValue;
+	if (Array.isArray(v)) return v.length ? v.join(", ") : "—";
+	if (v == null || v === "") return "—";
+	// a stored date and time, written for people: "13 Oct 2026, 10:51 AM · 11 days ago"
+	if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(v))
+		return `${dayjs(v).format("D MMM YYYY, h:mm A")} · ${fromNow(v)}`;
+	return v;
+});
 
 function selectOptions(options) {
 	return (options || "").split("\n").filter((o) => o !== "");

@@ -174,35 +174,61 @@ def _other_chats(row) -> list[dict]:
 
 @frappe.whitelist()
 def search_records(query: str = "") -> list[dict]:
-	"""Leads and deals the user may see, by name, organization, number or email."""
+	"""Leads and deals the user may see, by name, organization, number or email. Every word must
+	appear somewhere ("Rethik Maheswaran" finds the lead "Rethik" at Aerele); a number also matches
+	through the normalised phone fields, whatever the format it was saved in. When no record has
+	all the words, the ones with the most of them come first."""
+	from periskope_connector.linking import number_key
+
 	access.require_inbox_user()
 	query = (query or "").strip()
-	out = []
+	words = [w.lower() for w in query.split() if w]
+	digits = re.sub(r"\D", "", query)
+	key = number_key(query) if len(digits) >= 6 else ""
+	scored = []
 	for doctype, fields in (
-		("CRM Deal", ["name", "organization", "lead_name", "status", "mobile_no"]),
-		("CRM Lead", ["name", "lead_name", "organization", "status", "mobile_no"]),
+		("CRM Deal", ["name", "organization", "lead_name", "status", "mobile_no", "email"]),
+		("CRM Lead", ["name", "lead_name", "organization", "status", "mobile_no", "email"]),
 	):
-		like = f"%{query}%"
-		or_filters = (
-			[[f, "like", like] for f in ("name", "lead_name", "organization", "mobile_no", "email")]
-			if query
-			else None
-		)
+		text_fields = fields[:]
+		fields = [*fields, "periskope_phone_key"]
+		or_filters = None
+		if words:
+			or_filters = [
+				[f, "like", f"%{w}%"]
+				for w in words
+				for f in ("name", "lead_name", "organization", "mobile_no", "email")
+			]
+			if key:
+				or_filters.append(["periskope_phone_key", "=", key])
 		filters = {"converted": 0} if doctype == "CRM Lead" else {}
 		for r in frappe.get_list(
-			doctype, fields=fields, filters=filters, or_filters=or_filters, order_by="modified desc", limit=8
+			doctype, fields=fields, filters=filters, or_filters=or_filters, order_by="modified desc", limit=50
 		):
-			out.append(
-				{
-					"doctype": doctype,
-					"name": r.name,
-					"title": r.get("organization") or r.get("lead_name") or r.name,
-					"subtitle": " · ".join(
-						p for p in (r.get("lead_name"), r.get("mobile_no"), r.status) if p
-					),
-				}
+			text = " ".join(str(r.get(f) or "") for f in text_fields).lower()
+			# the same number in another format counts as a full match
+			hits = (
+				len(words) if key and r.get("periskope_phone_key") == key else sum(w in text for w in words)
 			)
-	return out
+			scored.append(
+				(
+					-hits,
+					{
+						"doctype": doctype,
+						"name": r.name,
+						"title": r.get("organization") or r.get("lead_name") or r.name,
+						"subtitle": " · ".join(
+							p for p in (r.get("lead_name"), r.get("mobile_no"), r.status) if p
+						),
+					},
+				)
+			)
+	# most words matched first (a stable sort keeps deals before leads, newest first); when some
+	# records have every word, only those are shown
+	scored.sort(key=lambda x: x[0])
+	if words and scored and -scored[0][0] == len(words):
+		scored = [x for x in scored if -x[0] == len(words)]
+	return [row for _score, row in scored][:16]
 
 
 def _relink(row, lead: str | None, deal: str | None, by_hand: bool):

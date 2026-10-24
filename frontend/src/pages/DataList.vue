@@ -202,6 +202,9 @@
 						>
 							Searching…
 						</div>
+						<div v-else-if="!matches.length" class="p-2 text-sm text-ink-gray-5">
+							Nothing found. Try a name, company or the last digits of the number.
+						</div>
 						<button
 							v-for="m in matches"
 							:key="m.doctype + m.name"
