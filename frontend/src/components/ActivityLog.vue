@@ -39,7 +39,7 @@ import LucideTag from "~icons/lucide/tag";
 import LucideLink from "~icons/lucide/link";
 import LucideTimerOff from "~icons/lucide/timer-off";
 import LucideDot from "~icons/lucide/dot";
-import { inbox } from "@/stores/inbox";
+import { changed, inbox } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
 
 const props = defineProps({ chat: { type: String, required: true } });
@@ -62,7 +62,7 @@ async function load() {
 watch(() => props.chat, load);
 watch(
 	() => inbox.version,
-	() => inbox.changed.includes(props.chat) && load()
+	() => changed(props.chat) && load()
 );
 onMounted(load);
 defineExpose({ reload: load });

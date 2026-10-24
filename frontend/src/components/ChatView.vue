@@ -4,14 +4,16 @@
 			v-if="chat"
 			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-2.5"
 		>
+			<Button v-if="back" variant="ghost" title="Back to the chats" @click="emit('back')">
+				<template #icon><LucideArrowLeft class="size-5" /></template>
+			</Button>
 			<Avatar :label="chat.chat_name || chat.contact_number || chat.title" size="lg" />
-			<div class="min-w-[14rem] flex-1">
+			<div class="min-w-[10rem] flex-1 sm:min-w-[14rem]">
 				<div class="flex items-center gap-2">
 					<LucideUsers v-if="chat.is_group" class="size-4 shrink-0 text-ink-gray-5" />
 					<span class="truncate text-base font-medium text-ink-gray-9">{{
 						chat.title
 					}}</span>
-					<Badge :label="chat.status" variant="subtle" size="sm" />
 				</div>
 				<div class="truncate text-sm text-ink-gray-5">
 					<span v-if="chat.contact_number">+{{ chat.contact_number }} · </span>
@@ -22,59 +24,64 @@
 			<slot name="actions" />
 		</div>
 
-		<div ref="scroller" class="flex-1 overflow-y-auto py-3" @scroll="onScroll">
-			<div v-if="hasMore" class="flex justify-center pb-2">
-				<Button
-					size="sm"
-					variant="ghost"
-					:loading="loadingOlder"
-					label="Load earlier messages"
-					@click="loadOlder"
-				/>
-			</div>
-			<template v-for="(item, i) in timeline" :key="item.kind + item.name">
-				<div
-					v-if="i === 0 || !sameDay(timeline[i - 1].at, item.at)"
-					class="my-2 flex justify-center"
-				>
-					<span
-						class="rounded-full bg-surface-base px-3 py-0.5 text-xs text-ink-gray-6 shadow-sm"
-					>
-						{{ dayLabel(item.at) }}
-					</span>
+		<div ref="scroller" class="flex-1 overflow-y-auto" @scroll="onScroll">
+			<div ref="content" class="py-3">
+				<div v-if="hasMore" class="flex justify-center pb-2">
+					<Button
+						size="sm"
+						variant="ghost"
+						:loading="loadingOlder"
+						label="Load earlier messages"
+						@click="loadOlder"
+					/>
 				</div>
-				<div v-if="item.kind === 'note'" class="flex justify-center px-4 py-1">
+				<template v-for="(item, i) in timeline" :key="item.kind + item.name">
 					<div
-						class="w-full max-w-[80%] rounded-lg border border-outline-amber-2 bg-surface-amber-1 px-3 py-1.5"
+						v-if="i === 0 || !sameDay(timeline[i - 1].at, item.at)"
+						class="my-2 flex justify-center"
 					>
-						<div class="flex items-center gap-1 text-xs font-medium text-ink-gray-7">
-							<LucideLock class="size-3" /> Private note · {{ item.note.owner_name }}
-							<span class="ml-auto font-normal text-ink-gray-5">{{
-								messageTime(item.at)
-							}}</span>
-						</div>
-						<div class="whitespace-pre-wrap break-words text-sm text-ink-gray-8">
-							{{ item.note.content }}
+						<span
+							class="rounded-full bg-surface-base px-3 py-0.5 text-xs text-ink-gray-6 shadow-sm"
+						>
+							{{ dayLabel(item.at) }}
+						</span>
+					</div>
+					<div v-if="item.kind === 'note'" class="flex justify-center px-4 py-1">
+						<div
+							class="w-full max-w-[80%] rounded-lg border border-outline-amber-2 bg-surface-amber-1 px-3 py-1.5"
+						>
+							<div
+								class="flex items-center gap-1 text-xs font-medium text-ink-gray-7"
+							>
+								<LucideLock class="size-3" /> Private note ·
+								{{ item.note.owner_name }}
+								<span class="ml-auto font-normal text-ink-gray-5">{{
+									messageTime(item.at)
+								}}</span>
+							</div>
+							<div class="whitespace-pre-wrap break-words text-sm text-ink-gray-8">
+								{{ item.note.content }}
+							</div>
 						</div>
 					</div>
+					<MessageBubble
+						v-else
+						:message="item.message"
+						:is-group="!!chat?.is_group"
+						:show-sender-name="showName(i)"
+						@reply="replyTo = $event"
+						@updated="replace"
+					/>
+				</template>
+				<div v-if="loading" class="flex justify-center p-6">
+					<LoadingIndicator class="size-5" />
 				</div>
-				<MessageBubble
-					v-else
-					:message="item.message"
-					:is-group="!!chat?.is_group"
-					:show-sender-name="showName(i)"
-					@reply="replyTo = $event"
-					@updated="replace"
-				/>
-			</template>
-			<div v-if="loading" class="flex justify-center p-6">
-				<LoadingIndicator class="size-5" />
-			</div>
-			<div v-else-if="error" class="p-6 text-center text-sm text-ink-gray-6">
-				{{ error }}
-			</div>
-			<div v-else-if="!timeline.length" class="p-6 text-center text-sm text-ink-gray-5">
-				No messages yet.
+				<div v-else-if="error" class="p-6 text-center text-sm text-ink-gray-6">
+					{{ error }}
+				</div>
+				<div v-else-if="!timeline.length" class="p-6 text-center text-sm text-ink-gray-5">
+					No messages yet.
+				</div>
 			</div>
 		</div>
 
@@ -93,17 +100,47 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Avatar, Badge, Button, LoadingIndicator, call } from "frappe-ui";
+import { Avatar, Button, LoadingIndicator, call } from "frappe-ui";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import MessageBubble from "@/components/MessageBubble.vue";
 import Composer from "@/components/Composer.vue";
 import ChatActions from "@/components/ChatActions.vue";
-import { inbox } from "@/stores/inbox";
+import { changed, chatCache, inbox, loadCounts } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
-const props = defineProps({ name: { type: String, required: true } });
-const emit = defineEmits(["loaded"]);
+const props = defineProps({
+	name: { type: String, required: true },
+	back: { type: Boolean, default: false }, // a back arrow (phone: the chat fills the screen)
+});
+
+// The last chats opened, so going back to one shows it at once while it refreshes behind.
+const CACHE_SIZE = 20;
+function remember() {
+	if (!chat.value) return;
+	chatCache.delete(props.name);
+	chatCache.set(props.name, {
+		chat: chat.value,
+		messages: messages.value,
+		notes: notes.value,
+		hasMore: hasMore.value,
+	});
+	while (chatCache.size > CACHE_SIZE) chatCache.delete(chatCache.keys().next().value);
+}
+function restore() {
+	const hit = chatCache.get(props.name);
+	if (!hit) return false;
+	chat.value = hit.chat;
+	messages.value = hit.messages;
+	notes.value = hit.notes;
+	hasMore.value = hit.hasMore;
+	emit("loaded", hit.chat);
+	stuck.value = true;
+	scrollToBottom();
+	return true;
+}
+const emit = defineEmits(["loaded", "back"]);
 
 const chat = ref(null);
 const messages = ref([]);
@@ -116,6 +153,10 @@ const scroller = ref(null);
 const composer = ref(null);
 const replyTo = ref(null);
 const actions = ref(null);
+const content = ref(null);
+// Whether the view follows the newest message: true until the reader scrolls up, so images and files
+// that finish loading after the jump to the bottom do not push the latest messages out of view.
+const stuck = ref(true);
 
 // Messages and the team's private notes, in time order.
 const timeline = computed(() =>
@@ -147,9 +188,15 @@ function nearBottom() {
 }
 
 function scrollToBottom() {
+	stuck.value = true;
 	nextTick(() => {
 		if (scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 	});
+}
+
+let resizer;
+function follow() {
+	if (stuck.value && scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 }
 
 function mergeNotes(list) {
@@ -161,11 +208,13 @@ function mergeNotes(list) {
 async function load({ keepPosition = false } = {}) {
 	const stick = !keepPosition || nearBottom();
 	loading.value = !messages.value.length;
+	const name = props.name;
 	try {
 		const [c, r] = await Promise.all([
-			call("periskope_connector.api.inbox.get_chat", { chat: props.name }),
-			call("periskope_connector.api.inbox.get_messages", { chat: props.name }),
+			call("periskope_connector.api.inbox.get_chat", { chat: name }),
+			call("periskope_connector.api.inbox.get_messages", { chat: name }),
 		]);
+		if (name !== props.name) return; // the reader moved on to another chat meanwhile
 		chat.value = c;
 		emit("loaded", c);
 		// Keep the older pages already loaded; the newest page replaces the tail.
@@ -177,7 +226,8 @@ async function load({ keepPosition = false } = {}) {
 		if (!older.length) hasMore.value = r.has_more;
 		if (stick) scrollToBottom();
 		error.value = "";
-		call("periskope_connector.api.inbox.mark_seen", { chat: props.name });
+		remember();
+		call("periskope_connector.api.inbox.mark_seen", { chat: name }).then(loadCounts);
 		if (!keepPosition && hasPendingTicks()) refreshTicks();
 	} catch (e) {
 		error.value =
@@ -211,6 +261,7 @@ async function loadOlder() {
 }
 
 function onScroll() {
+	stuck.value = nearBottom();
 	if (scroller.value?.scrollTop < 60 && hasMore.value && !loadingOlder.value) loadOlder();
 }
 
@@ -287,20 +338,26 @@ watch(
 		notes.value = [];
 		chat.value = null;
 		replyTo.value = null;
+		restore();
 		load();
 	}
 );
 watch(
 	() => inbox.version,
 	() => {
-		if (inbox.changed.includes(props.name)) load({ keepPosition: true });
+		if (changed(props.name)) load({ keepPosition: true });
 	}
 );
 onMounted(() => {
+	restore();
 	load();
 	window.addEventListener("keydown", onKey);
+	resizer = new ResizeObserver(follow);
+	resizer.observe(content.value);
 });
 onBeforeUnmount(() => {
+	remember();
+	resizer?.disconnect();
 	window.removeEventListener("keydown", onKey);
 	timers.forEach(clearTimeout);
 });

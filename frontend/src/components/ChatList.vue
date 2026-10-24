@@ -22,10 +22,11 @@
 			>
 				<template #prefix><LucideSearch class="size-4 text-ink-gray-5" /></template>
 			</TextInput>
-			<div class="flex flex-wrap gap-1">
+			<div class="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
 				<Button
 					v-for="t in tabs"
 					:key="t.key"
+					class="shrink-0"
 					size="sm"
 					:variant="tab === t.key ? 'subtle' : 'ghost'"
 					:label="t.label"
@@ -34,13 +35,18 @@
 			</div>
 		</div>
 
-		<div ref="scroller" class="flex-1 overflow-y-auto" @scroll="onScroll">
+		<div
+			ref="scroller"
+			class="flex-1 overflow-y-auto transition-opacity"
+			:class="switching ? 'opacity-60' : ''"
+			@scroll="onScroll"
+		>
 			<button
 				v-for="c in chats"
 				:key="c.name"
 				class="flex w-full gap-3 border-b border-outline-gray-1 px-3 py-2.5 text-left hover:bg-surface-gray-1"
 				:class="c.name === selected ? 'bg-surface-gray-2 hover:bg-surface-gray-2' : ''"
-				@click="$emit('select', c.name)"
+				@click="select(c)"
 			>
 				<Avatar
 					:label="c.chat_name || c.contact_number || c.title"
@@ -128,10 +134,13 @@
 				</div>
 			</button>
 
-			<div v-if="loading" class="flex justify-center p-4">
+			<div v-if="loading && (!chats.length || appending)" class="flex justify-center p-4">
 				<LoadingIndicator class="size-5" />
 			</div>
-			<div v-else-if="!chats.length" class="p-6 text-center text-sm text-ink-gray-5">
+			<div
+				v-else-if="!chats.length && !loading"
+				class="p-6 text-center text-sm text-ink-gray-5"
+			>
 				No chats here.
 			</div>
 		</div>
@@ -152,7 +161,14 @@ import { boot, numberLabel } from "@/boot";
 import { listTime } from "@/utils/format";
 
 defineProps({ selected: { type: String, default: "" } });
-defineEmits(["select"]);
+const emit = defineEmits(["select"]);
+
+// Opening a chat reads it: show that at once rather than after the next live update.
+function select(c) {
+	if (c.unread)
+		chats.value = chats.value.map((x) => (x.name === c.name ? { ...x, unread: 0 } : x));
+	emit("select", c.name);
+}
 
 const newChat = ref(false);
 const tabs = [
@@ -169,6 +185,9 @@ const total = ref(0);
 const loading = ref(false);
 const scroller = ref(null);
 const PAGE = 50;
+const appending = ref(false);
+const switching = ref(false); // a filter changed: dim the old rows until the new ones come
+let latest = 0; // only the newest request may fill the list (fast typing, quick filter changes)
 
 const title = computed(() => {
 	const quick = QUICK_FILTERS.find((f) => f.key === inbox.quick)?.label || "Chats";
@@ -185,20 +204,23 @@ function filters() {
 }
 
 async function load(append = false) {
+	const ticket = ++latest;
 	loading.value = true;
+	appending.value = append;
 	try {
 		const start = append ? chats.value.length : 0;
 		// A live update reloads everything shown so far, so nobody loses their scroll position.
-		const length = append ? PAGE : Math.max(PAGE, chats.value.length);
+		const length = append || switching.value ? PAGE : Math.max(PAGE, chats.value.length);
 		const r = await call("periskope_connector.api.inbox.get_chats", {
 			filters: filters(),
 			start,
 			page_length: length,
 		});
+		if (ticket !== latest) return;
 		chats.value = append ? [...chats.value, ...r.chats] : r.chats;
 		total.value = r.total;
 	} finally {
-		loading.value = false;
+		if (ticket === latest) loading.value = appending.value = switching.value = false;
 	}
 }
 
@@ -211,7 +233,9 @@ function onScroll() {
 watch(
 	() => [inbox.quick, inbox.number, tab.value, search.value],
 	() => {
-		chats.value = [];
+		// the current rows stay (dimmed) until the new ones arrive, so the list does not flash empty
+		scroller.value?.scrollTo({ top: 0 });
+		switching.value = true;
 		load();
 	}
 );

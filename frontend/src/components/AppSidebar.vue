@@ -150,7 +150,7 @@
 							><LucideExternalLink class="size-4 text-ink-gray-6"
 						/></template>
 					</SidebarItem>
-					<SidebarCollapseToggle />
+					<SidebarCollapseToggle v-if="!mobile" />
 				</div>
 			</div>
 		</Sidebar>
@@ -190,6 +190,7 @@ import { boot } from "@/boot";
 import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
+defineProps({ mobile: { type: Boolean, default: false } });
 const collapsed = ref(false);
 const settingsOpen = ref(false);
 const manage = [

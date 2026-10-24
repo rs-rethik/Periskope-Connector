@@ -25,6 +25,9 @@ export const inbox = reactive({
 	teams: [],
 });
 
+// Chats opened recently (ChatView), kept for the session so reopening one is instant.
+export const chatCache = new Map();
+
 export async function loadViews() {
 	inbox.views = await call("periskope_connector.api.views.list_views");
 }
@@ -50,9 +53,14 @@ export async function loadCounts() {
 
 let timer;
 let pending = new Set();
+// Whether a live update touched this chat; after a reconnect every chat counts as changed.
+export function changed(chat) {
+	return inbox.changed.includes(chat) || inbox.changed.includes("*");
+}
+
 onInboxUpdate((data) => {
 	// Several messages can land at once (a forwarded batch): reload once, for every chat that changed.
-	pending.add(data.chat);
+	pending.add(data.reconnected ? "*" : data.chat);
 	clearTimeout(timer);
 	timer = setTimeout(() => {
 		inbox.changed = [...pending];

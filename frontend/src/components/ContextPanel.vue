@@ -377,7 +377,7 @@ import {
 } from "frappe-ui";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
-import { inbox } from "@/stores/inbox";
+import { changed, inbox } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
 
 const props = defineProps({ chat: { type: Object, default: null } });
@@ -543,7 +543,7 @@ watch(() => props.chat?.name, load, { immediate: true });
 watch(
 	() => inbox.version,
 	() => {
-		if (props.chat && inbox.changed.includes(props.chat.name)) load();
+		if (props.chat && changed(props.chat.name)) load();
 	}
 );
 </script>
