@@ -79,7 +79,7 @@
 						}}</span>
 						<span
 							v-if="c.unread"
-							class="ml-auto size-2.5 shrink-0 rounded-full bg-surface-green-3"
+							class="ml-auto size-2.5 shrink-0 rounded-full bg-surface-green-6"
 						/>
 					</div>
 					<div class="mt-1 flex flex-wrap items-center gap-1">

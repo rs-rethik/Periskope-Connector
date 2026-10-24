@@ -87,6 +87,7 @@
 
 		<Composer
 			v-if="chat && !error"
+			:key="chat.name"
 			ref="composer"
 			:chat="chat"
 			:reply-to="replyTo"

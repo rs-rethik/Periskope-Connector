@@ -121,7 +121,7 @@
 							>
 								<span
 									class="size-2 rounded-full"
-									:class="n.is_ready ? 'bg-surface-green-3' : 'bg-surface-red-5'"
+									:class="n.is_ready ? 'bg-surface-green-6' : 'bg-surface-red-6'"
 								/>
 							</span>
 						</template>

@@ -85,6 +85,12 @@ class TestLists(DeskPagesCase):
 		)
 		self.assertEqual(relink.call_count, 0)  # no messages in that group yet
 
+		# saving only the type keeps the customer; marking it internal clears it
+		desk_pages.map_group(group.name, group_type="Customer")
+		self.assertEqual(frappe.db.get_value("Periskope Group", group.name, "crm_lead"), lead.name)
+		desk_pages.map_group(group.name, group_type="Internal")
+		self.assertIsNone(frappe.db.get_value("Periskope Group", group.name, "crm_lead"))
+
 	def test_a_suggestion_is_decided_once(self):
 		doc = frappe.get_doc(
 			{

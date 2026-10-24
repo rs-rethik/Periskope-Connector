@@ -18,16 +18,40 @@
 					{{ p.label }}
 				</button>
 			</div>
-			<div class="w-36">
-				<FormControl v-model="from" type="date" @update:model-value="preset = 0" />
-			</div>
-			<span class="text-ink-gray-5">–</span>
-			<div class="w-36">
-				<FormControl v-model="to" type="date" @update:model-value="preset = 0" />
-			</div>
+			<!-- a custom range sits behind one button, so the filters fit on one line -->
+			<Popover placement="bottom-start">
+				<template #target="{ togglePopover }">
+					<Button
+						:variant="preset ? 'subtle' : 'solid'"
+						:label="preset ? 'Custom' : rangeLabel"
+						@click="togglePopover()"
+					>
+						<template #prefix><LucideCalendar class="size-4" /></template>
+					</Button>
+				</template>
+				<template #body>
+					<div
+						class="mt-1 flex items-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
+					>
+						<FormControl
+							v-model="from"
+							class="w-36"
+							type="date"
+							@update:model-value="preset = 0"
+						/>
+						<span class="text-ink-gray-5">–</span>
+						<FormControl
+							v-model="to"
+							class="w-36"
+							type="date"
+							@update:model-value="preset = 0"
+						/>
+					</div>
+				</template>
+			</Popover>
 			<Select
 				v-model="number"
-				class="w-40"
+				class="w-36"
 				:options="[
 					{ label: 'All numbers', value: '' },
 					...boot.numbers.map((n) => ({ label: n.label, value: n.name })),
@@ -35,14 +59,21 @@
 			/>
 			<Select
 				v-model="team"
-				class="w-40"
+				class="w-36"
 				:options="[
 					{ label: 'All teams', value: '' },
 					...inbox.teams.map((t) => ({ label: t.name, value: t.name })),
 				]"
 			/>
-			<Select v-model="rep" class="w-44" :options="repOptions" />
+			<Select v-model="rep" class="w-40" :options="repOptions" />
 			<LoadingIndicator v-if="loading" class="ml-auto size-4" />
+		</div>
+		<div
+			v-if="error && d"
+			class="flex items-center gap-2 border-b border-outline-red-2 bg-surface-red-1 px-5 py-2 text-sm text-ink-red-8"
+		>
+			{{ error }} The figures below are from the last successful load.
+			<Button size="sm" label="Retry" @click="load" />
 		</div>
 
 		<div v-if="d" class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -294,7 +325,14 @@
 				</section>
 			</div>
 		</div>
-		<div v-else-if="error" class="p-10 text-center text-sm text-ink-gray-6">{{ error }}</div>
+		<div
+			v-else-if="error"
+			class="flex items-center justify-center gap-2 p-10 text-sm text-ink-gray-6"
+		>
+			{{ error }}
+			<Button size="sm" label="Retry" @click="load" />
+		</div>
+		<div v-else-if="loading" class="p-10 text-center text-sm text-ink-gray-5">Loading…</div>
 	</div>
 </template>
 
@@ -302,7 +340,8 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import dayjs from "dayjs";
-import { FormControl, LoadingIndicator, Select, call, debounce } from "frappe-ui";
+import { Button, FormControl, LoadingIndicator, Popover, Select, call, debounce } from "frappe-ui";
+import LucideCalendar from "~icons/lucide/calendar";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideUserX from "~icons/lucide/user-x";
 import LucideHourglass from "~icons/lucide/hourglass";
@@ -341,6 +380,11 @@ const loading = ref(false);
 const error = ref("");
 const reps = ref([]);
 
+const rangeLabel = computed(
+	() => `${dayjs(from.value).format("D MMM")} – ${dayjs(to.value).format("D MMM")}`
+);
+let latest = 0; // only the newest load fills the dashboard
+
 const repOptions = computed(() => [
 	{ label: "All reps", value: "" },
 	...reps.value.map((r) => ({ label: r.label || r.value, value: r.value })),
@@ -364,31 +408,40 @@ function duration(seconds) {
 
 function late(due) {
 	if (!due) return "late";
-	const mins = Math.round((dayjs() - dayjs(due)) / 60000);
+	const mins = Math.max(1, Math.round((dayjs() - dayjs(due)) / 60000));
 	return mins >= 60 ? `${Math.round(mins / 60)}h late` : `${mins}m late`;
 }
 
+// A tile opens the chat list with the same number, team and rep as the dashboard shows.
 function go({ quick }) {
 	inbox.quick = quick;
 	inbox.number = number.value;
-	router.push({ name: "Conversations" });
+	const query = {};
+	if (team.value) query.team = team.value;
+	if (rep.value) query.assigned_to = rep.value;
+	router.push({ name: "Conversations", query });
 }
 
 const load = debounce(async () => {
+	const ticket = ++latest;
 	loading.value = true;
 	error.value = "";
 	try {
-		d.value = await call("periskope_connector.api.dashboard.get_dashboard", {
+		const out = await call("periskope_connector.api.dashboard.get_dashboard", {
 			from_date: from.value,
 			to_date: to.value,
 			number: number.value || null,
 			team: team.value || null,
 			rep: rep.value || null,
 		});
+		if (ticket !== latest) return;
+		d.value = out;
+		reps.value = out.reps || [];
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "The dashboard could not be loaded.";
+		if (ticket === latest)
+			error.value = e?.messages?.[0] || e?.message || "The dashboard could not be loaded.";
 	} finally {
-		loading.value = false;
+		if (ticket === latest) loading.value = false;
 	}
 }, 200);
 
@@ -396,7 +449,6 @@ watch([from, to, number, team, rep], load);
 onMounted(async () => {
 	if (!inbox.teams.length) loadTeams();
 	load();
-	reps.value = await call("periskope_connector.api.admin.pick", { doctype: "User", query: "" });
 });
 </script>
 

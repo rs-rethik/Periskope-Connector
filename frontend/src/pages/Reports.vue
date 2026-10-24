@@ -24,19 +24,31 @@
 				class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3"
 			>
 				<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">{{ current.label }}</h1>
-				<div v-for="f in current.filters" :key="f.fieldname" class="w-40">
-					<FormControl
-						v-model="values[f.fieldname]"
-						type="date"
-						:placeholder="f.label"
-					/>
-				</div>
-				<Button label="Refresh" :loading="loading" @click="run" />
-				<span class="ml-auto text-sm text-ink-gray-5"
-					>{{ result?.data?.length || 0 }} rows</span
+				<!-- the field name stays beside each date, so a filled From and To can be told apart -->
+				<label
+					v-for="f in current.filters"
+					:key="f.fieldname"
+					class="flex items-center gap-1.5 text-sm text-ink-gray-6"
 				>
+					{{ f.label }}
+					<FormControl v-model="values[f.fieldname]" class="w-36" type="date" />
+				</label>
+				<Button label="Refresh" :loading="loading" @click="run" />
+				<span class="ml-auto whitespace-nowrap text-sm text-ink-gray-5">{{
+					loading && !result
+						? "Loading…"
+						: result?.data?.length === 1
+						? "1 row"
+						: `${result?.data?.length || 0} rows`
+				}}</span>
 			</div>
-			<div class="min-h-0 flex-1 overflow-auto">
+			<div
+				class="min-h-0 flex-1 overflow-auto transition-opacity"
+				:class="loading && result ? 'opacity-60' : ''"
+			>
+				<div v-if="loading && !result" class="p-10 text-center text-sm text-ink-gray-5">
+					Loading…
+				</div>
 				<table v-if="result" class="w-full min-w-max text-sm">
 					<thead
 						class="sticky top-0 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
@@ -100,6 +112,9 @@ const loading = ref(false);
 const error = ref("");
 const values = reactive({});
 const current = computed(() => list.value.find((r) => r.name === route.params.report) || null);
+let latest = 0; // only the newest run fills the table (quick report or date changes)
+let timer;
+let ranWith = ""; // the filters of the last run, so the date watcher does not run them twice
 
 function cell(row, c) {
 	const v = Array.isArray(row) ? row[result.value.columns.indexOf(c)] : row[c.fieldname];
@@ -111,23 +126,39 @@ function cell(row, c) {
 
 async function run() {
 	if (!current.value) return;
+	const ticket = ++latest;
+	ranWith = JSON.stringify(values);
+	clearTimeout(timer);
 	loading.value = true;
 	error.value = "";
 	try {
-		result.value = await call("periskope_connector.api.desk_pages.run_report", {
+		const out = await call("periskope_connector.api.desk_pages.run_report", {
 			name: current.value.name,
 			filters: { ...values },
 		});
+		if (ticket === latest) result.value = out;
 	} catch (e) {
+		if (ticket !== latest) return;
 		result.value = null;
 		error.value = e?.messages?.[0] || e?.message || "The report could not run.";
 	} finally {
-		loading.value = false;
+		if (ticket === latest) loading.value = false;
 	}
 }
 
+// Changing a date runs the report again (after a short pause, so typing a date runs it once).
+watch(
+	() => JSON.stringify(values),
+	(now) => {
+		if (now === ranWith) return;
+		clearTimeout(timer);
+		timer = setTimeout(run, 400);
+	}
+);
+
 watch(current, (r) => {
 	if (!r) return;
+	result.value = null; // never show the previous report's table under this one's title
 	for (const k of Object.keys(values)) delete values[k];
 	for (const f of r.filters)
 		values[f.fieldname] = dayjs()
@@ -136,7 +167,12 @@ watch(current, (r) => {
 	run();
 });
 onMounted(async () => {
-	list.value = await call("periskope_connector.api.desk_pages.reports");
+	try {
+		list.value = await call("periskope_connector.api.desk_pages.reports");
+	} catch (e) {
+		error.value = e?.messages?.[0] || e?.message || "The reports could not be loaded.";
+		return;
+	}
 	if (!route.params.report && list.value.length)
 		router.replace({ name: "Reports", params: { report: list.value[0].name } });
 });

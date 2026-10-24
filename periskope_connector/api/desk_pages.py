@@ -168,7 +168,10 @@ def list_meta(kind: str) -> dict:
 
 
 @frappe.whitelist()
-def list_rows(kind: str, filters: str | dict | None = None, search: str = "", start: int = 0) -> dict:
+def list_rows(
+	kind: str, filters: str | dict | None = None, search: str = "", start: int = 0, page_length: int = 0
+) -> dict:
+	"""A page of a list; page_length (at most 500) lets the page reload the rows it already shows."""
 	access.require_inbox_user()
 	_manager()
 	cfg = _list(kind)
@@ -184,7 +187,7 @@ def list_rows(kind: str, filters: str | dict | None = None, search: str = "", st
 		fields=cfg["fields"],
 		order_by=cfg["order_by"],
 		start=cint(start),
-		page_length=PAGE,
+		page_length=min(cint(page_length) or PAGE, 500),
 	)
 	total = len(
 		frappe.get_all(cfg["doctype"], filters=where, or_filters=or_filters, pluck="name", limit=5000)
@@ -224,15 +227,17 @@ def map_group(
 	organization: str | None = None,
 ) -> dict:
 	"""Map a WhatsApp group to its customer (a lead, a deal or an organization), or mark it internal.
-	Its messages are linked again."""
+	A new customer replaces the old one; an internal group has none; saving only the type keeps the
+	customer it has. Its messages are linked again."""
 	access.require_inbox_user()
 	_manager()
 	doc = frappe.get_doc("Periskope Group", group)
 	if group_type:
 		doc.group_type = group_type
-	doc.crm_lead = crm_lead or None
-	doc.crm_deal = crm_deal or None
-	doc.organization = organization or None
+	if crm_lead or crm_deal or organization or doc.group_type == "Internal":
+		doc.crm_lead = crm_lead or None
+		doc.crm_deal = crm_deal or None
+		doc.organization = organization or None
 	doc.flags.ignore_permissions = True
 	doc.save()
 	from periskope_connector.linking import link_message

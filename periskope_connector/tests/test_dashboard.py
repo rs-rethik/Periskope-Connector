@@ -142,3 +142,15 @@ class TestWaits(DashboardCase):
 		d = dashboard.get_dashboard()
 		self.assertIn(c, [b["name"] for b in d["breaches"]])
 		self.assertGreaterEqual(d["tiles"]["breached"], 1)
+
+	def test_the_rep_filter_lists_the_agents(self):
+		frappe.get_doc(
+			{
+				"doctype": "Periskope Agent",
+				"user": self.rep,
+				"is_active": 1,
+				"numbers": [{"whatsapp_number": A}],
+			}
+		).insert(ignore_permissions=True)
+		reps = self._board()["reps"]
+		self.assertIn({"value": self.rep, "label": "Dash"}, reps)

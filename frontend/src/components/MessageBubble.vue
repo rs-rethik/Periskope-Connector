@@ -171,6 +171,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideReply from "~icons/lucide/reply";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { messageTime } from "@/utils/format";
+import { showError } from "@/utils/errors";
 
 const props = defineProps({
 	message: { type: Object, required: true },
@@ -233,12 +234,17 @@ const reactionTitle = computed(() =>
 
 const retrying = ref(false);
 async function retry() {
+	if (retrying.value) return;
 	retrying.value = true;
 	try {
-		emit(
-			"updated",
-			await call("periskope_connector.api.compose.retry", { message: props.message.name })
-		);
+		const m = await call("periskope_connector.api.compose.retry", {
+			message: props.message.name,
+		});
+		emit("updated", m);
+		if (["Failed", "Not Sent"].includes(m.send_status))
+			showError(null, m.send_error || "Still not sent.");
+	} catch (e) {
+		showError(e, "The message could not be sent again.");
 	} finally {
 		retrying.value = false;
 	}

@@ -27,6 +27,13 @@
 					/>
 				</div>
 				<div v-if="loading && !ctx" class="py-2"><LoadingIndicator class="size-4" /></div>
+				<div
+					v-else-if="loadError && !ctx"
+					class="flex items-center gap-2 text-sm text-ink-gray-6"
+				>
+					Could not load the CRM record.
+					<Button size="sm" label="Retry" @click="load" />
+				</div>
 				<template v-else-if="record && record.hidden">
 					<div class="text-sm text-ink-gray-6">
 						Linked to a {{ kind }} you cannot open.
@@ -118,7 +125,15 @@
 				<div class="mb-1 text-xs font-medium uppercase text-ink-gray-5">
 					WhatsApp summary
 				</div>
-				<div class="whitespace-pre-line text-sm text-ink-gray-7">{{ record.summary }}</div>
+				<div class="text-sm text-ink-gray-7">
+					<div
+						v-for="(line, i) in summaryLines"
+						:key="i"
+						:class="line.heading ? 'mt-2 font-medium text-ink-gray-8 first:mt-0' : ''"
+					>
+						{{ line.text }}
+					</div>
+				</div>
 			</section>
 
 			<section v-if="record && !record.hidden">
@@ -129,7 +144,10 @@
 						size="sm"
 						variant="ghost"
 						label="Add"
-						@click="taskDialog = true"
+						@click="
+							error = '';
+							taskDialog = true;
+						"
 					>
 						<template #prefix><LucidePlus class="size-3.5" /></template>
 					</Button>
@@ -140,7 +158,8 @@
 						type="checkbox"
 						class="mt-0.5 rounded border-outline-gray-3"
 						:title="'Mark done'"
-						@change="completeTask(t)"
+						:disabled="busy"
+						@change="completeTask(t, $event)"
 					/>
 					<div class="min-w-0 flex-1">
 						<div class="text-sm text-ink-gray-8">{{ t.title }}</div>
@@ -161,7 +180,10 @@
 						size="sm"
 						variant="ghost"
 						label="Add"
-						@click="noteDialog = true"
+						@click="
+							error = '';
+							noteDialog = true;
+						"
 					>
 						<template #prefix><LucidePlus class="size-3.5" /></template>
 					</Button>
@@ -229,6 +251,7 @@
 						v-for="r in results"
 						:key="r.doctype + r.name"
 						class="flex w-full flex-col rounded px-2 py-1.5 text-left hover:bg-surface-gray-2"
+						:disabled="busy"
 						@click="link(r)"
 					>
 						<span class="text-sm text-ink-gray-8">
@@ -239,7 +262,10 @@
 						</span>
 						<span class="truncate text-xs text-ink-gray-5">{{ r.subtitle }}</span>
 					</button>
-					<div v-if="!results.length" class="p-2 text-sm text-ink-gray-5">
+					<div v-if="searching && !results.length" class="p-2 text-sm text-ink-gray-5">
+						Searching…
+					</div>
+					<div v-else-if="!results.length" class="p-2 text-sm text-ink-gray-5">
 						Nothing found.
 					</div>
 				</div>
@@ -250,9 +276,9 @@
 		<!-- Create a lead -->
 		<Dialog v-model="createDialog" :options="{ title: 'Create lead' }">
 			<template #body-content>
-				<div class="flex flex-col gap-3">
+				<form class="flex flex-col gap-3" @submit.prevent="create">
 					<div class="grid grid-cols-2 gap-3">
-						<FormControl v-model="lead.first_name" label="First name" />
+						<FormControl v-model="lead.first_name" label="First name" autofocus />
 						<FormControl v-model="lead.last_name" label="Last name" />
 					</div>
 					<FormControl v-model="lead.organization" label="Company" />
@@ -261,7 +287,8 @@
 						Mobile: +{{ chat.contact_number }} · Source: WhatsApp · Owner: you
 					</div>
 					<ErrorMessage :message="error" />
-				</div>
+					<button type="submit" class="hidden" />
+				</form>
 			</template>
 			<template #actions>
 				<Button
@@ -312,7 +339,13 @@
 						label="Title"
 						placeholder="Note from WhatsApp"
 					/>
-					<FormControl v-model="note.content" type="textarea" label="Note" :rows="5" />
+					<FormControl
+						v-model="note.content"
+						type="textarea"
+						label="Note"
+						:rows="5"
+						autofocus
+					/>
 					<ErrorMessage :message="error" />
 				</div>
 			</template>
@@ -329,8 +362,8 @@
 
 		<Dialog v-model="taskDialog" :options="{ title: 'Add a task' }">
 			<template #body-content>
-				<div class="flex flex-col gap-3">
-					<FormControl v-model="task.title" label="Title" />
+				<form class="flex flex-col gap-3" @submit.prevent="addTask">
+					<FormControl v-model="task.title" label="Title" autofocus />
 					<FormControl
 						v-model="task.description"
 						type="textarea"
@@ -347,7 +380,8 @@
 						/>
 					</div>
 					<ErrorMessage :message="error" />
-				</div>
+					<button type="submit" class="hidden" />
+				</form>
 			</template>
 			<template #actions>
 				<Button
@@ -384,6 +418,10 @@ const props = defineProps({ chat: { type: Object, default: null } });
 
 const ctx = ref(null);
 const loading = ref(false);
+const loadError = ref(false);
+const searching = ref(false);
+let loadSeq = 0;
+let searchSeq = 0;
 const busy = ref(false);
 const error = ref("");
 const linkDialog = ref(false);
@@ -400,6 +438,14 @@ const note = ref({ title: "", content: "" });
 const task = ref({ title: "", description: "", due_date: "", priority: "Medium" });
 
 const record = computed(() => ctx.value?.record || null);
+// The summary's section titles (writeback.summary) shown as headings.
+const SUMMARY_HEADINGS = ["What the customer wants", "What we answered", "Still pending"];
+const summaryLines = computed(() =>
+	(record.value?.summary || "")
+		.split("\n")
+		.filter((l) => l.trim())
+		.map((l) => ({ text: l, heading: SUMMARY_HEADINGS.includes(l.trim()) }))
+);
 const kind = computed(() => (record.value?.doctype === "CRM Deal" ? "deal" : "lead"));
 const kindLabel = computed(() => (record.value?.doctype === "CRM Deal" ? "Deal" : "Lead"));
 const statusColor = computed(
@@ -435,21 +481,29 @@ function message(e) {
 	return e?.messages?.[0] || e?.message || "That did not work.";
 }
 
+// Only the newest load fills the panel, so a slow answer for the previous chat never shows here.
 async function load() {
 	if (!props.chat?.name) return;
+	const seq = ++loadSeq;
 	loading.value = true;
 	try {
-		ctx.value = await call("periskope_connector.api.crm_panel.get_context", {
+		const out = await call("periskope_connector.api.crm_panel.get_context", {
 			chat_name: props.chat.name,
 		});
+		if (seq !== loadSeq) return;
+		ctx.value = out;
+		loadError.value = false;
 	} catch (e) {
-		ctx.value = null;
+		// a failed refresh keeps what is shown; a failed first load says so (not "not linked")
+		if (seq === loadSeq) loadError.value = true;
 	} finally {
-		loading.value = false;
+		if (seq === loadSeq) loading.value = false;
 	}
 }
 
+// One change at a time, so two quick clicks cannot undo each other.
 async function run(method, args = {}) {
+	if (busy.value) return false;
 	busy.value = true;
 	error.value = "";
 	try {
@@ -474,9 +528,18 @@ async function openLink() {
 }
 
 async function search() {
-	results.value = await call("periskope_connector.api.crm_panel.search_records", {
-		query: query.value,
-	});
+	const seq = ++searchSeq;
+	searching.value = true;
+	try {
+		const out = await call("periskope_connector.api.crm_panel.search_records", {
+			query: query.value,
+		});
+		if (seq === searchSeq) results.value = out;
+	} catch (e) {
+		if (seq === searchSeq) error.value = message(e);
+	} finally {
+		if (seq === searchSeq) searching.value = false;
+	}
 }
 
 async function link(r) {
@@ -496,6 +559,7 @@ function openCreate() {
 }
 
 async function create() {
+	if (!lead.value.first_name) return; // Enter in the form skips the button's own check
 	if (await run("create_lead", lead.value)) createDialog.value = false;
 }
 
@@ -507,6 +571,7 @@ async function addNote() {
 }
 
 async function addTask() {
+	if (!task.value.title) return;
 	if (await run("add_task", task.value)) {
 		taskDialog.value = false;
 		task.value = { title: "", description: "", due_date: "", priority: "Medium" };
@@ -516,8 +581,12 @@ async function addTask() {
 async function askLost(status) {
 	error.value = "";
 	lost.value = { status, reason: "", notes: "" };
-	if (!reasons.value.length)
-		reasons.value = await call("periskope_connector.api.crm_panel.lost_reasons");
+	try {
+		if (!reasons.value.length)
+			reasons.value = await call("periskope_connector.api.crm_panel.lost_reasons");
+	} catch (e) {
+		// the reason list stays empty; the dialog still opens and the server says what is missing
+	}
 	lostDialog.value = true;
 }
 
@@ -530,8 +599,9 @@ async function markLost() {
 	if (ok) lostDialog.value = false;
 }
 
-function completeTask(t) {
-	run("complete_task", { task: t.name });
+async function completeTask(t, event) {
+	// untick again if it did not work, so the box never claims a task is done when it is not
+	if (!(await run("complete_task", { task: t.name }))) event.target.checked = false;
 }
 
 function unlink() {
@@ -539,7 +609,15 @@ function unlink() {
 }
 
 watch(query, () => linkDialog.value && search());
-watch(() => props.chat?.name, load, { immediate: true });
+watch(
+	() => props.chat?.name,
+	() => {
+		ctx.value = null; // never show the previous chat's record while this one loads
+		loadError.value = false;
+		load();
+	},
+	{ immediate: true }
+);
 watch(
 	() => inbox.version,
 	() => {

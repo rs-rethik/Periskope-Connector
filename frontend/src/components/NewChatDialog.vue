@@ -11,6 +11,7 @@
 				<FormControl
 					v-model="phone"
 					label="Customer's WhatsApp number"
+					autofocus
 					placeholder="919876543210"
 					description="With the country code. A 10-digit number is taken as Indian (+91)."
 				/>
@@ -33,7 +34,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { Button, Dialog, ErrorMessage, FormControl, call } from "frappe-ui";
+import { Button, Dialog, ErrorMessage, FormControl, call, toast } from "frappe-ui";
 import { boot } from "@/boot";
 import { inbox } from "@/stores/inbox";
 
@@ -58,6 +59,7 @@ watch(open, (v) => {
 });
 
 async function send() {
+	if (sending.value) return;
 	sending.value = true;
 	error.value = "";
 	try {
@@ -66,13 +68,13 @@ async function send() {
 			phone: phone.value,
 			text: text.value,
 		});
+		// The chat exists now either way: open it. A message that did not go out shows there with
+		// its reason and a Retry button, so it is never sent twice from this dialog.
 		if (["Failed", "Not Sent"].includes(r.message.send_status))
-			error.value = r.message.send_error;
-		else {
-			open.value = false;
-			phone.value = "";
-			text.value = "";
-		}
+			toast.error(r.message.send_error || "The message was not sent.");
+		open.value = false;
+		phone.value = "";
+		text.value = "";
 		router.push({ name: "Inbox", params: { chat: r.chat } });
 	} catch (e) {
 		error.value = e?.messages?.[0] || e?.message || "Not sent.";

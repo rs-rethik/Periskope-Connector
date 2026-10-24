@@ -304,7 +304,8 @@ def pick(doctype: str, query: str = "") -> list[dict]:
 			or_filters=[["name", "like", like], ["full_name", "like", like]],
 			fields=["name as value", "full_name as label"],
 			order_by="full_name asc",
-			limit=50,
+			# a search shows the best 50; the full list (up to 500) names the users already chosen
+			limit=50 if (query or "").strip() else 500,
 		)
 	title = {"WhatsApp Number": "display_name"}.get(doctype)
 	fields = ["name as value", f"{title} as label"] if title else ["name as value", "name as label"]

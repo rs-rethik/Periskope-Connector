@@ -28,6 +28,9 @@ export const inbox = reactive({
 // Chats opened recently (ChatView), kept for the session so reopening one is instant.
 export const chatCache = new Map();
 
+// Unsent text and files per chat (Composer), so a draft stays with its own chat.
+export const drafts = new Map();
+
 export async function loadViews() {
 	inbox.views = await call("periskope_connector.api.views.list_views");
 }

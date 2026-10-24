@@ -75,6 +75,7 @@ def get_dashboard(
 		"tags": _tags(where, values),
 		"leads": _leads(start, end, number, team, rep),
 		"leaderboard": _leaderboard(where, values, waits),
+		"reps": _reps(),
 		"breaches": _breaches(where, values),
 		"numbers": [
 			{
@@ -361,6 +362,23 @@ def _by_number(where, values, waits) -> list[dict]:
 			}
 		)
 	return out
+
+
+def _reps() -> list[dict]:
+	"""Everyone who works the WhatsApp chats (active agents and team members), for the rep filter."""
+	users = set(frappe.get_all("Periskope Agent", filters={"is_active": 1}, pluck="user"))
+	users |= set(
+		frappe.get_all("Periskope Team Member", filters={"parenttype": "Periskope Team"}, pluck="user")
+	)
+	users.discard(None)
+	if not users:
+		return []
+	rows = frappe.get_all(
+		"User", filters={"name": ["in", list(users)], "enabled": 1}, fields=["name", "full_name"]
+	)
+	return sorted(
+		({"value": r.name, "label": r.full_name or r.name} for r in rows), key=lambda r: r["label"].lower()
+	)
 
 
 def _leaderboard(where, values, waits) -> list[dict]:

@@ -1,5 +1,6 @@
 <template>
-	<Dialog v-model="open" :options="{ size: '6xl' }">
+	<!-- unsaved changes: Esc and outside clicks do not close it (Cancel or Save first) -->
+	<Dialog v-model="open" :options="{ size: '6xl' }" :dismissible="!dirty">
 		<template #body>
 			<div class="flex h-[80vh] overflow-hidden rounded-xl bg-surface-base">
 				<!-- Menu -->
@@ -22,7 +23,7 @@
 									? 'bg-surface-base text-ink-gray-9 shadow-sm'
 									: 'text-ink-gray-7 hover:bg-surface-gray-2'
 							"
-							@click="page = item.key"
+							@click="go(item.key)"
 						>
 							<component :is="item.icon" class="size-4 text-ink-gray-6" />
 							{{ item.label }}
@@ -34,6 +35,7 @@
 				<div class="min-w-0 flex-1">
 					<RecordsPage
 						v-if="page === 'teams'"
+						@dirty="dirty = $event"
 						kind="teams"
 						title="Teams"
 						singular="Team"
@@ -44,6 +46,7 @@
 					/>
 					<RecordsPage
 						v-else-if="page === 'numbers'"
+						@dirty="dirty = $event"
 						kind="numbers"
 						title="WhatsApp numbers"
 						singular="Number"
@@ -65,8 +68,8 @@
 										class="size-2 rounded-full"
 										:class="
 											row.is_ready
-												? 'bg-surface-green-3'
-												: 'bg-surface-red-5'
+												? 'bg-surface-green-6'
+												: 'bg-surface-red-6'
 										"
 									/>
 									{{ row.wa_state || (row.is_ready ? "CONNECTED" : "Unknown") }}
@@ -83,6 +86,7 @@
 					</RecordsPage>
 					<RecordsPage
 						v-else-if="page === 'agents'"
+						@dirty="dirty = $event"
 						kind="agents"
 						title="Agents"
 						singular="Agent"
@@ -97,6 +101,7 @@
 					</RecordsPage>
 					<RecordsPage
 						v-else-if="page === 'sla'"
+						@dirty="dirty = $event"
 						kind="sla"
 						title="SLA policies"
 						singular="Policy"
@@ -106,6 +111,7 @@
 					/>
 					<RecordsPage
 						v-else-if="page === 'quick_replies'"
+						@dirty="dirty = $event"
 						kind="quick_replies"
 						title="Quick replies"
 						singular="Quick reply"
@@ -113,6 +119,7 @@
 					/>
 					<RecordsPage
 						v-else-if="page === 'labels'"
+						@dirty="dirty = $event"
 						kind="labels"
 						title="Labels and AI tags"
 						singular="Label"
@@ -122,6 +129,7 @@
 					/>
 					<SettingsSection
 						v-else-if="sectionKeys.includes(page)"
+						@dirty="dirty = $event"
 						:section-key="page"
 						:data="settings"
 						@saved="settingsSaved"
@@ -134,7 +142,7 @@
 	<Dialog v-model="inviteOpen" :options="{ title: 'Invite a new user' }">
 		<template #body-content>
 			<div class="flex flex-col gap-3">
-				<FormControl v-model="invite.email" label="Email" />
+				<FormControl v-model="invite.email" label="Email" autofocus />
 				<FormControl v-model="invite.first_name" label="Name" />
 				<div>
 					<label class="mb-1 block text-xs text-ink-gray-5">WhatsApp numbers</label>
@@ -152,7 +160,13 @@
 			</div>
 		</template>
 		<template #actions>
-			<Button variant="solid" label="Invite" :disabled="!invite.email" @click="sendInvite" />
+			<Button
+				variant="solid"
+				label="Invite"
+				:loading="inviting"
+				:disabled="!invite.email"
+				@click="sendInvite"
+			/>
 		</template>
 	</Dialog>
 </template>
@@ -181,6 +195,14 @@ import { fromNow } from "@/utils/format";
 
 const open = defineModel({ type: Boolean, default: false });
 const page = ref("teams");
+const dirty = ref(false); // the open record or section has unsaved changes
+
+function go(key) {
+	if (key === page.value) return;
+	if (dirty.value && !window.confirm("Discard your changes?")) return;
+	dirty.value = false;
+	page.value = key;
+}
 const my = ref({ manager: boot.is_manager, admin: boot.is_admin });
 const settings = ref(null);
 const syncing = ref(false);
@@ -260,7 +282,10 @@ function openInvite(reload) {
 	inviteOpen.value = true;
 }
 
+const inviting = ref(false);
 async function sendInvite() {
+	if (inviting.value) return;
+	inviting.value = true;
 	inviteError.value = "";
 	try {
 		await call("periskope_connector.api.admin.invite_agent", {
@@ -272,6 +297,8 @@ async function sendInvite() {
 		reloadAgents?.();
 	} catch (e) {
 		inviteError.value = e?.messages?.[0] || e?.message || "Not added.";
+	} finally {
+		inviting.value = false;
 	}
 }
 

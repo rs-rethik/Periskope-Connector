@@ -36,10 +36,15 @@
 				class="w-44"
 				:options="filterOptions(f)"
 			/>
-			<span class="ml-auto text-sm text-ink-gray-5">{{ total }} rows</span>
+			<span class="ml-auto whitespace-nowrap text-sm text-ink-gray-5">{{
+				total === 1 ? "1 row" : `${total} rows`
+			}}</span>
 		</div>
 
-		<div class="min-h-0 flex-1 overflow-auto">
+		<div
+			class="min-h-0 flex-1 overflow-auto transition-opacity"
+			:class="switching ? 'opacity-60' : ''"
+		>
 			<table class="w-full min-w-max text-sm">
 				<thead
 					class="sticky top-0 z-10 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
@@ -59,7 +64,7 @@
 					<tr
 						v-for="r in rows"
 						:key="r.name"
-						class="border-b border-outline-gray-1 hover:bg-surface-gray-1"
+						class="h-11 border-b border-outline-gray-1 hover:bg-surface-gray-1"
 					>
 						<td
 							v-for="c in shownColumns"
@@ -83,9 +88,17 @@
 								<Button
 									size="sm"
 									label="Create lead"
+									:loading="busyRow === r.name"
+									:disabled="!!busyRow"
 									@click="contact(r, 'create_lead')"
 								/>
-								<Button size="sm" class="ml-1" label="Link" @click="openLink(r)" />
+								<Button
+									size="sm"
+									class="ml-1"
+									label="Link"
+									:disabled="!!busyRow"
+									@click="openLink(r)"
+								/>
 								<Dropdown
 									:options="
 										['Personal', 'Vendor', 'Spam', 'Internal'].map((x) => ({
@@ -95,7 +108,12 @@
 										}))
 									"
 								>
-									<Button size="sm" class="ml-1" label="Ignore" />
+									<Button
+										size="sm"
+										class="ml-1"
+										label="Ignore"
+										:disabled="!!busyRow"
+									/>
 								</Dropdown>
 							</template>
 							<Button
@@ -109,12 +127,15 @@
 									size="sm"
 									variant="solid"
 									label="Approve"
+									:loading="busyRow === r.name"
+									:disabled="!!busyRow"
 									@click="decide(r, 'approve')"
 								/>
 								<Button
 									size="sm"
 									class="ml-1"
 									label="Reject"
+									:disabled="!!busyRow"
 									@click="decide(r, 'reject')"
 								/>
 							</template>
@@ -122,7 +143,14 @@
 					</tr>
 				</tbody>
 			</table>
-			<div v-if="!rows.length" class="p-10 text-center text-sm text-ink-gray-5">
+			<div
+				v-if="loadError && !rows.length"
+				class="flex items-center justify-center gap-2 p-10 text-sm text-ink-gray-6"
+			>
+				This list could not be loaded.
+				<Button size="sm" label="Retry" @click="load()" />
+			</div>
+			<div v-else-if="!rows.length" class="p-10 text-center text-sm text-ink-gray-5">
 				{{ loading ? "Loading…" : "Nothing here." }}
 			</div>
 		</div>
@@ -134,6 +162,7 @@
 				class="ml-auto"
 				label="Load more"
 				:loading="loading"
+				:disabled="loading"
 				@click="load(true)"
 			/>
 		</div>
@@ -147,6 +176,13 @@
 		>
 			<template #body-content>
 				<div class="flex flex-col gap-3">
+					<div v-if="target?.kind === 'group'" class="text-sm text-ink-gray-6">
+						{{
+							currentMapping
+								? `Now mapped to ${currentMapping}. Pick another to change it, or save the type only.`
+								: "Not mapped to a customer yet."
+						}}
+					</div>
 					<FormControl
 						v-if="target?.kind === 'group'"
 						v-model="groupType"
@@ -160,6 +196,12 @@
 						:debounce="300"
 					/>
 					<div class="max-h-60 overflow-y-auto">
+						<div
+							v-if="searching && !matches.length"
+							class="p-2 text-sm text-ink-gray-5"
+						>
+							Searching…
+						</div>
 						<button
 							v-for="m in matches"
 							:key="m.doctype + m.name"
@@ -183,6 +225,7 @@
 				<Button
 					variant="solid"
 					:label="target?.kind === 'group' ? 'Save' : 'Link'"
+					:loading="saving"
 					:disabled="target?.kind !== 'group' && !picked"
 					@click="saveLink"
 				/>
@@ -231,6 +274,22 @@ const matches = ref([]);
 const picked = ref(null);
 const groupType = ref("Customer");
 const error = ref("");
+const loadError = ref(false);
+const switching = ref(false); // filters changed: dim the old rows until the new ones come
+const busyRow = ref(""); // the row whose action is running (one at a time, no double clicks)
+const saving = ref(false);
+const searching = ref(false);
+let latest = 0;
+let searchSeq = 0;
+
+const currentMapping = computed(() => {
+	const r = target.value?.kind === "group" ? target.value.row : null;
+	if (!r) return "";
+	if (r.crm_deal) return `deal ${r.crm_deal}`;
+	if (r.crm_lead) return `lead ${r.crm_lead}`;
+	if (r.organization) return r.organization;
+	return "";
+});
 
 const shownColumns = computed(() =>
 	(meta.value?.columns || []).filter((c) => c.fieldname !== "name" || kind.value === "groups")
@@ -254,7 +313,9 @@ function filterOptions(f) {
 	return all;
 }
 
+// A reload after an action keeps every row already loaded, so the list does not jump to the top.
 async function load(append = false) {
+	const ticket = ++latest;
 	loading.value = true;
 	try {
 		if (!meta.value) {
@@ -269,11 +330,18 @@ async function load(append = false) {
 			filters: { ...filters },
 			search: search.value,
 			start: append ? rows.value.length : 0,
+			page_length: append || switching.value ? 0 : rows.value.length,
 		});
+		if (ticket !== latest) return;
 		rows.value = append ? [...rows.value, ...r.rows] : r.rows;
 		total.value = r.total;
+		loadError.value = false;
+	} catch (e) {
+		if (ticket !== latest) return;
+		if (rows.value.length) fail(e);
+		else loadError.value = true;
 	} finally {
-		loading.value = false;
+		if (ticket === latest) loading.value = switching.value = false;
 	}
 }
 
@@ -281,37 +349,56 @@ function fail(e) {
 	toast.error(e?.messages?.[0] || e?.message || "That did not work.");
 }
 
+const DONE = { create_lead: "Lead created", ignore: "Ignored", link: "Linked" };
+
 async function contact(r, action, extra = {}) {
+	if (busyRow.value) return;
+	busyRow.value = r.name;
 	try {
 		await call("periskope_connector.api.desk_pages.contact_action", {
 			contact: r.name,
 			action,
 			...extra,
 		});
-		toast.success("Done");
-		load();
+		toast.success(DONE[action] || "Saved");
+		await load();
 	} catch (e) {
 		fail(e);
+	} finally {
+		busyRow.value = "";
 	}
 }
 
 async function decide(r, decision) {
+	if (busyRow.value) return;
+	busyRow.value = r.name;
 	try {
 		await call("periskope_connector.api.desk_pages.decide_suggestion", {
 			name: r.name,
 			decision,
 		});
 		toast.success(decision === "approve" ? "Approved" : "Rejected");
-		load();
+		await load();
 	} catch (e) {
 		fail(e);
+	} finally {
+		busyRow.value = "";
 	}
 }
 
 async function findMatches() {
-	matches.value = await call("periskope_connector.api.crm_panel.search_records", {
-		query: query.value,
-	});
+	const seq = ++searchSeq;
+	searching.value = true;
+	try {
+		const out = await call("periskope_connector.api.crm_panel.search_records", {
+			query: query.value,
+		});
+		if (seq === searchSeq) matches.value = out;
+	} catch (e) {
+		if (seq === searchSeq) error.value = e?.messages?.[0] || e?.message || "Search failed.";
+	} finally {
+		if (seq === searchSeq) searching.value = false;
+	}
 }
 
 function openLink(r) {
@@ -334,6 +421,8 @@ function openGroup(r) {
 }
 
 async function saveLink() {
+	if (saving.value) return;
+	saving.value = true;
 	error.value = "";
 	const lead = picked.value?.doctype === "CRM Lead" ? picked.value.name : null;
 	const deal = picked.value?.doctype === "CRM Deal" ? picked.value.name : null;
@@ -354,20 +443,27 @@ async function saveLink() {
 			});
 		}
 		linkOpen.value = false;
-		toast.success("Saved");
+		toast.success(target.value.kind === "group" ? "Group saved" : "Linked");
 		load();
 	} catch (e) {
 		error.value = e?.messages?.[0] || e?.message || "Not saved.";
+	} finally {
+		saving.value = false;
 	}
 }
 
 watch(query, () => linkOpen.value && findMatches());
-watch([search, () => JSON.stringify(filters)], () => meta.value && load());
+watch([search, () => JSON.stringify(filters)], () => {
+	if (!meta.value) return;
+	switching.value = true;
+	load();
+});
 watch(
 	kind,
 	() => {
 		meta.value = null;
 		rows.value = [];
+		loadError.value = false;
 		for (const k of Object.keys(filters)) delete filters[k];
 		search.value = "";
 		load();

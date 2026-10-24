@@ -20,7 +20,7 @@
 		<div v-if="editing" class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
 			<button
 				class="mb-3 flex items-center gap-1 text-sm text-ink-gray-6 hover:text-ink-gray-9"
-				@click="editing = null"
+				@click="leave"
 			>
 				<LucideArrowLeft class="size-4" /> All {{ title.toLowerCase() }}
 			</button>
@@ -35,13 +35,14 @@
 			<ErrorMessage class="mt-3" :message="error" />
 			<div class="mt-5 flex gap-2">
 				<Button variant="solid" label="Save" :loading="saving" @click="save" />
-				<Button label="Cancel" @click="editing = null" />
+				<Button label="Cancel" @click="leave" />
 				<Button
 					v-if="editing.name && meta.can_delete"
 					class="ml-auto"
 					theme="red"
 					variant="subtle"
 					label="Delete"
+					:loading="deleting"
 					@click="remove"
 				/>
 			</div>
@@ -86,6 +87,13 @@
 					</tr>
 				</tbody>
 			</table>
+			<div
+				v-else-if="loadError"
+				class="flex items-center justify-center gap-2 py-10 text-sm text-ink-gray-6"
+			>
+				This list could not be loaded.
+				<Button size="sm" label="Retry" @click="load" />
+			</div>
 			<div v-else-if="!loading" class="py-10 text-center text-sm text-ink-gray-5">
 				{{ empty }}
 			</div>
@@ -94,7 +102,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Button, ErrorMessage, call, toast } from "frappe-ui";
 import LucidePlus from "~icons/lucide/plus";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
@@ -110,7 +118,7 @@ const props = defineProps({
 	empty: { type: String, default: "Nothing here yet." },
 	nameField: { type: String, default: "" },
 });
-const emit = defineEmits(["saved"]);
+const emit = defineEmits(["saved", "dirty"]);
 
 const meta = ref(null);
 const rows = ref([]);
@@ -119,6 +127,19 @@ const editing = ref(null);
 const form = ref({});
 const error = ref("");
 const saving = ref(false);
+const deleting = ref(false);
+const loadError = ref(false);
+const original = ref(""); // the record as opened, to tell when it has unsaved changes
+
+const dirty = computed(() => !!editing.value && JSON.stringify(form.value) !== original.value);
+watch(dirty, (d) => emit("dirty", d));
+onBeforeUnmount(() => emit("dirty", false));
+
+// Back to the list; unsaved changes are only dropped when the user says so.
+function leave() {
+	if (dirty.value && !window.confirm("Discard your changes?")) return;
+	editing.value = null;
+}
 
 function show(v) {
 	if (Array.isArray(v)) return v.join(", ");
@@ -136,6 +157,9 @@ async function load() {
 		rows.value = await call("periskope_connector.api.admin.list_records", {
 			kind: props.kind,
 		});
+		loadError.value = false;
+	} catch (e) {
+		loadError.value = true;
 	} finally {
 		loading.value = false;
 	}
@@ -155,9 +179,11 @@ function edit(row) {
 			: f.default ?? null;
 	}
 	form.value = values;
+	original.value = JSON.stringify(values);
 }
 
 async function save() {
+	if (saving.value) return;
 	saving.value = true;
 	error.value = "";
 	try {
@@ -178,17 +204,21 @@ async function save() {
 }
 
 async function remove() {
-	if (!window.confirm(`Delete this ${props.singular.toLowerCase()}?`)) return;
+	if (deleting.value || !window.confirm(`Delete this ${props.singular.toLowerCase()}?`)) return;
+	deleting.value = true;
 	try {
 		await call("periskope_connector.api.admin.delete_record", {
 			kind: props.kind,
 			name: editing.value.name,
 		});
 		editing.value = null;
+		toast.success("Deleted");
 		await load();
 		emit("saved");
 	} catch (e) {
 		error.value = e?.messages?.[0] || e?.message || "Not deleted.";
+	} finally {
+		deleting.value = false;
 	}
 }
 

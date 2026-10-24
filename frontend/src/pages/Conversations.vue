@@ -3,10 +3,15 @@
 		<!-- Toolbar -->
 		<div class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3">
 			<h1 class="mr-1 truncate text-lg font-semibold text-ink-gray-9">{{ title }}</h1>
-			<TextInput v-model="search" class="w-56" placeholder="Search" :debounce="300">
+			<TextInput
+				v-model="search"
+				class="min-w-[10rem] max-w-56 flex-1"
+				placeholder="Search"
+				:debounce="300"
+			>
 				<template #prefix><LucideSearch class="size-4 text-ink-gray-5" /></template>
 			</TextInput>
-			<Select v-model="status" class="w-40" :options="statusOptions" />
+			<Select v-model="status" class="w-44" :options="statusOptions" />
 			<Popover placement="bottom-start">
 				<template #target="{ togglePopover }">
 					<Button
@@ -27,6 +32,7 @@
 								:options="
 									filterFields.map((x) => ({ label: x.label, value: x.key }))
 								"
+								@update:model-value="f.value = ''"
 							/>
 							<Select
 								v-if="fieldOf(f.field)?.options"
@@ -39,6 +45,7 @@
 								v-model="f.value"
 								class="flex-1"
 								placeholder="value"
+								:debounce="400"
 							/>
 							<Button variant="ghost" @click="extra.splice(i, 1)"
 								><template #icon><LucideX class="size-4" /></template
@@ -61,33 +68,73 @@
 					</div>
 				</template>
 			</Popover>
-			<Select v-model="groupBy" class="w-40" :options="groupOptions" />
-			<Select v-model="sortKey" class="w-40" :options="sortOptions" />
-			<Button
-				variant="ghost"
-				:title="order === 'desc' ? 'Newest first' : 'Oldest first'"
-				@click="order = order === 'desc' ? 'asc' : 'desc'"
-			>
-				<template #icon>
-					<LucideArrowDownWideNarrow v-if="order === 'desc'" class="size-4" />
-					<LucideArrowUpNarrowWide v-else class="size-4" />
+			<!-- sort, grouping and columns in one place, so the toolbar fits on one line -->
+			<Popover placement="bottom-start">
+				<template #target="{ togglePopover }">
+					<Button label="Display" @click="togglePopover()">
+						<template #prefix><LucideSlidersHorizontal class="size-4" /></template>
+					</Button>
 				</template>
-			</Button>
-			<Dropdown :options="columnOptions" placement="right">
-				<Button label="Columns"
-					><template #prefix><LucideColumns3 class="size-4" /></template
-				></Button>
-			</Dropdown>
+				<template #body>
+					<div
+						class="mt-1 flex w-72 flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
+					>
+						<div>
+							<div class="mb-1 text-xs text-ink-gray-5">Sort by</div>
+							<div class="flex gap-1">
+								<Select v-model="sortKey" class="flex-1" :options="sortOptions" />
+								<Button
+									:title="order === 'desc' ? 'Newest first' : 'Oldest first'"
+									@click="order = order === 'desc' ? 'asc' : 'desc'"
+								>
+									<template #icon>
+										<LucideArrowDownWideNarrow
+											v-if="order === 'desc'"
+											class="size-4"
+										/>
+										<LucideArrowUpNarrowWide v-else class="size-4" />
+									</template>
+								</Button>
+							</div>
+						</div>
+						<div>
+							<div class="mb-1 text-xs text-ink-gray-5">Group by</div>
+							<Select v-model="groupBy" :options="groupOptions" />
+						</div>
+						<div>
+							<div class="mb-1 text-xs text-ink-gray-5">Columns</div>
+							<label
+								v-for="c in COLUMNS"
+								:key="c.key"
+								class="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm text-ink-gray-8 hover:bg-surface-gray-2"
+							>
+								<input
+									type="checkbox"
+									class="rounded border-outline-gray-3"
+									:checked="visible.includes(c.key)"
+									@change="toggleColumn(c.key)"
+								/>
+								{{ c.label }}
+							</label>
+						</div>
+					</div>
+				</template>
+			</Popover>
 			<Dropdown :options="viewOptions" placement="right">
 				<Button :label="view ? view.label : 'Save view'"
 					><template #prefix><LucideBookmark class="size-4" /></template
 				></Button>
 			</Dropdown>
-			<span class="ml-auto text-sm text-ink-gray-5">{{ total }} chats</span>
+			<span class="ml-auto whitespace-nowrap text-sm text-ink-gray-5">{{
+				plural(total, "chat")
+			}}</span>
 		</div>
 
 		<!-- Table -->
-		<div class="min-h-0 flex-1 overflow-auto">
+		<div
+			class="min-h-0 flex-1 overflow-auto transition-opacity"
+			:class="switching ? 'opacity-60' : ''"
+		>
 			<table class="w-full min-w-max border-collapse text-sm">
 				<thead
 					class="sticky top-0 z-10 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
@@ -128,7 +175,10 @@
 										:class="collapsed.has(g.key) ? '' : 'rotate-90'"
 									/>
 									{{ g.label }}
-									<span class="text-ink-gray-5">· {{ g.rows.length }}</span>
+									<span class="text-ink-gray-5"
+										>· {{ g.rows.length
+										}}{{ rows.length < total ? " loaded" : "" }}</span
+									>
 								</button>
 							</td>
 						</tr>
@@ -156,7 +206,7 @@
 									<div v-if="c.key === 'title'" class="flex items-center gap-2">
 										<span
 											v-if="row.unread"
-											class="size-2 shrink-0 rounded-full bg-surface-green-3"
+											class="size-2 shrink-0 rounded-full bg-surface-green-6"
 										/>
 										<span
 											class="truncate"
@@ -220,7 +270,14 @@
 					</template>
 				</tbody>
 			</table>
-			<div v-if="!rows.length" class="p-10 text-center text-sm text-ink-gray-5">
+			<div
+				v-if="loadError"
+				class="flex items-center justify-center gap-2 p-10 text-sm text-ink-gray-6"
+			>
+				The chats could not be loaded.
+				<Button size="sm" label="Retry" @click="load()" />
+			</div>
+			<div v-else-if="!rows.length" class="p-10 text-center text-sm text-ink-gray-5">
 				{{ loading ? "Loading…" : "No chats" }}
 			</div>
 		</div>
@@ -238,6 +295,7 @@
 				class="ml-auto"
 				label="Load more"
 				:loading="loading"
+				:disabled="loading"
 				@click="load(true)"
 			/>
 		</div>
@@ -248,7 +306,13 @@
 			class="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-surface-base px-4 py-2 shadow-2xl ring-1 ring-outline-gray-2"
 		>
 			<span class="mr-2 text-sm text-ink-gray-8">{{ selected.size }} selected</span>
-			<Button size="sm" label="Assign to me" @click="bulk('assign_to_me')" />
+			<LoadingIndicator v-if="bulkBusy" class="size-4" />
+			<Button
+				size="sm"
+				label="Assign to me"
+				:disabled="bulkBusy"
+				@click="bulk('assign_to_me')"
+			/>
 			<Dropdown
 				:options="
 					statusOptions
@@ -259,7 +323,7 @@
 						}))
 				"
 			>
-				<Button size="sm" label="Status" />
+				<Button size="sm" label="Status" :disabled="bulkBusy" />
 			</Dropdown>
 			<Dropdown
 				v-if="boot.is_manager"
@@ -271,7 +335,7 @@
 					{ label: 'No team', onClick: () => bulk('set_team', { team: '' }) },
 				]"
 			>
-				<Button size="sm" label="Team" />
+				<Button size="sm" label="Team" :disabled="bulkBusy" />
 			</Dropdown>
 			<Dropdown
 				:options="
@@ -281,9 +345,9 @@
 					}))
 				"
 			>
-				<Button size="sm" label="Add label" />
+				<Button size="sm" label="Add label" :disabled="bulkBusy" />
 			</Dropdown>
-			<Button size="sm" label="Mark read" @click="bulk('mark_read')" />
+			<Button size="sm" label="Mark read" :disabled="bulkBusy" @click="bulk('mark_read')" />
 			<Button size="sm" variant="ghost" @click="selected.clear()"
 				><template #icon><LucideX class="size-4" /></template
 			></Button>
@@ -294,8 +358,8 @@
 			:options="{ title: view?.mine ? 'Update view' : 'Save view' }"
 		>
 			<template #body-content>
-				<div class="flex flex-col gap-3">
-					<FormControl v-model="viewLabel" label="Name" />
+				<form class="flex flex-col gap-3" @submit.prevent="saveView">
+					<FormControl v-model="viewLabel" label="Name" autofocus />
 					<FormControl
 						v-if="boot.is_manager"
 						v-model="viewShared"
@@ -305,10 +369,36 @@
 					<div class="text-xs text-ink-gray-5">
 						Saves the filters, columns, sort and grouping you see now.
 					</div>
-				</div>
+					<button type="submit" class="hidden" />
+				</form>
 			</template>
 			<template #actions>
-				<Button variant="solid" label="Save" :disabled="!viewLabel" @click="saveView" />
+				<Button
+					variant="solid"
+					label="Save"
+					:loading="viewBusy"
+					:disabled="!viewLabel"
+					@click="saveView"
+				/>
+			</template>
+		</Dialog>
+
+		<Dialog v-model="deleteDialog" :options="{ title: 'Delete this view?' }">
+			<template #body-content>
+				<p class="text-sm text-ink-gray-7">
+					“{{ view?.label }}” will be removed{{
+						view?.is_shared ? " for everyone" : ""
+					}}.
+				</p>
+			</template>
+			<template #actions>
+				<Button
+					variant="solid"
+					theme="red"
+					label="Delete"
+					:loading="viewBusy"
+					@click="deleteView"
+				/>
 			</template>
 		</Dialog>
 	</div>
@@ -323,6 +413,7 @@ import {
 	Dialog,
 	Dropdown,
 	FormControl,
+	LoadingIndicator,
 	Popover,
 	Select,
 	TextInput,
@@ -330,7 +421,7 @@ import {
 	toast,
 } from "frappe-ui";
 import LucideSearch from "~icons/lucide/search";
-import LucideColumns3 from "~icons/lucide/columns-3";
+import LucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
 import LucideListFilter from "~icons/lucide/list-filter";
 import LucideBookmark from "~icons/lucide/bookmark";
 import LucideX from "~icons/lucide/x";
@@ -341,6 +432,9 @@ import SlaBadge from "@/components/SlaBadge.vue";
 import { boot } from "@/boot";
 import { currentFilters, inbox, loadCounts, loadTeams, loadViews } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
+import { showError } from "@/utils/errors";
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const route = useRoute();
 const router = useRouter();
@@ -377,22 +471,18 @@ function storedColumns() {
 
 const visible = ref(storedColumns());
 const shownColumns = computed(() => COLUMNS.filter((c) => visible.value.includes(c.key)));
-const columnOptions = computed(() =>
-	COLUMNS.map((c) => ({
-		label: (visible.value.includes(c.key) ? "✓ " : "   ") + c.label,
-		onClick: () => {
-			const keys = visible.value.includes(c.key)
-				? visible.value.filter((k) => k !== c.key)
-				: [...visible.value, c.key];
-			visible.value = COLUMNS.map((x) => x.key).filter((k) => keys.includes(k));
-			try {
-				localStorage.setItem(STORE, JSON.stringify(visible.value));
-			} catch (e) {
-				// private window: the choice lasts for this visit
-			}
-		},
-	}))
-);
+function toggleColumn(key) {
+	const keys = visible.value.includes(key)
+		? visible.value.filter((k) => k !== key)
+		: [...visible.value, key];
+	if (!keys.length) return; // keep at least one column
+	visible.value = COLUMNS.map((x) => x.key).filter((k) => keys.includes(k));
+	try {
+		localStorage.setItem(STORE, JSON.stringify(visible.value));
+	} catch (e) {
+		// private window: the choice lasts for this visit
+	}
+}
 
 const statusTheme = { Open: "green", Pending: "orange", Resolved: "blue", Closed: "gray" };
 const statusOptions = [
@@ -464,6 +554,12 @@ const extra = reactive([]);
 const rows = ref([]);
 const total = ref(0);
 const loading = ref(false);
+const loadError = ref(false);
+const switching = ref(false); // the filters changed: dim the old rows until the new ones arrive
+const bulkBusy = ref(false);
+const viewBusy = ref(false);
+const deleteDialog = ref(false);
+let latest = 0; // only the newest request may fill the table
 const selected = reactive(new Set());
 const collapsed = reactive(new Set());
 const view = ref(null);
@@ -483,6 +579,7 @@ function filters() {
 }
 
 async function load(append = false) {
+	const ticket = ++latest;
 	loading.value = true;
 	try {
 		const r = await call("periskope_connector.api.inbox.get_chats", {
@@ -490,14 +587,23 @@ async function load(append = false) {
 			order_by: sortKey.value,
 			order: order.value,
 			start: append ? rows.value.length : 0,
-			page_length: append ? pageLength.value : Math.max(pageLength.value, rows.value.length),
+			page_length:
+				append || switching.value
+					? pageLength.value
+					: Math.max(pageLength.value, rows.value.length),
 		});
+		if (ticket !== latest) return;
 		rows.value = append ? [...rows.value, ...r.chats] : r.chats;
 		total.value = r.total;
+		loadError.value = false;
 		for (const name of [...selected])
 			if (!rows.value.some((x) => x.name === name)) selected.delete(name);
+	} catch (e) {
+		if (ticket !== latest) return;
+		if (rows.value.length) showError(e, "The chats could not be refreshed.");
+		else loadError.value = true;
 	} finally {
-		loading.value = false;
+		if (ticket === latest) loading.value = switching.value = false;
 	}
 }
 
@@ -544,17 +650,21 @@ function openRow(row) {
 }
 
 async function bulk(method, args = {}) {
+	if (bulkBusy.value) return;
+	bulkBusy.value = true;
 	try {
 		const r = await call(`periskope_connector.api.chat_actions.${method}`, {
 			chats: [...selected],
 			...args,
 		});
-		toast.success(`${r.updated} chat(s) updated`);
+		toast.success(`${plural(r.updated, "chat")} updated`);
 		selected.clear();
 		load();
 		loadCounts();
 	} catch (e) {
-		toast.error(e?.messages?.[0] || e?.message || "That did not work.");
+		showError(e);
+	} finally {
+		bulkBusy.value = false;
 	}
 }
 
@@ -565,7 +675,9 @@ const viewOptions = computed(() => [
 		label: view.value?.mine ? "Update this view" : "Save as new view",
 		onClick: () => openSave(),
 	},
-	...(view.value?.mine ? [{ label: "Delete this view", onClick: () => deleteView() }] : []),
+	...(view.value?.mine
+		? [{ label: "Delete this view", onClick: () => (deleteDialog.value = true) }]
+		: []),
 	...(view.value
 		? [
 				{
@@ -583,36 +695,67 @@ function openSave() {
 }
 
 async function saveView() {
+	if (viewBusy.value || !viewLabel.value) return;
+	viewBusy.value = true;
 	const f = { ...filters(), quick: inbox.quick };
 	delete f.search;
-	const saved = await call("periskope_connector.api.views.save_view", {
-		name: view.value?.mine ? view.value.name : null,
-		label: viewLabel.value,
-		filters: {
-			...f,
-			status: status.value,
-			extra: extra.filter((x) => x.field && x.value !== ""),
-		},
-		columns: visible.value,
-		sort_by: sortKey.value,
-		sort_order: order.value,
-		group_by: groupBy.value,
-		is_shared: viewShared.value ? 1 : 0,
-	});
-	saveDialog.value = false;
-	await loadViews();
-	router.push({ name: "Conversations", query: { view: saved.name } });
+	try {
+		const saved = await call("periskope_connector.api.views.save_view", {
+			name: view.value?.mine ? view.value.name : null,
+			label: viewLabel.value,
+			filters: {
+				...f,
+				status: status.value,
+				extra: extra.filter((x) => x.field && x.value !== ""),
+			},
+			columns: visible.value,
+			sort_by: sortKey.value,
+			sort_order: order.value,
+			group_by: groupBy.value,
+			is_shared: viewShared.value ? 1 : 0,
+		});
+		saveDialog.value = false;
+		toast.success("View saved");
+		await loadViews();
+		router.push({ name: "Conversations", query: { view: saved.name } });
+	} catch (e) {
+		showError(e, "The view was not saved.");
+	} finally {
+		viewBusy.value = false;
+	}
 }
 
 async function deleteView() {
-	await call("periskope_connector.api.views.delete_view", { name: view.value.name });
-	await loadViews();
-	router.push({ name: "Conversations" });
+	if (viewBusy.value) return;
+	viewBusy.value = true;
+	try {
+		await call("periskope_connector.api.views.delete_view", { name: view.value.name });
+		deleteDialog.value = false;
+		toast.success("View deleted");
+		await loadViews();
+		router.push({ name: "Conversations" });
+	} catch (e) {
+		showError(e, "The view was not deleted.");
+	} finally {
+		viewBusy.value = false;
+	}
 }
 
+// Leaving a view goes back to the plain list, not the last view's filters under a new title.
 function applyView(v) {
+	const was = view.value;
 	view.value = v;
-	if (!v) return;
+	if (!v) {
+		if (was) {
+			status.value = "active";
+			extra.splice(0);
+			visible.value = storedColumns();
+			sortKey.value = "last_message_at";
+			order.value = "desc";
+			groupBy.value = "";
+		}
+		return;
+	}
 	const f = v.filters || {};
 	status.value = f.status || "active";
 	if (f.quick) inbox.quick = f.quick;
@@ -639,10 +782,11 @@ watch(
 		sortKey.value,
 		order.value,
 		pageLength.value,
-		JSON.stringify(extra),
+		// only complete filter rows change the result; a half-filled row does not reload
+		JSON.stringify(extra.filter((x) => x.field && x.value !== "")),
 	],
 	() => {
-		rows.value = [];
+		switching.value = true;
 		load();
 	}
 );
@@ -659,6 +803,9 @@ watch(
 );
 onMounted(async () => {
 	if (!inbox.teams.length) loadTeams();
+	// the dashboard's tiles pass their team and rep along
+	for (const field of ["team", "assigned_to"])
+		if (route.query[field]) extra.push({ field, value: String(route.query[field]) });
 	await syncView();
 	load();
 });

@@ -49,7 +49,7 @@
 		</div>
 
 		<div
-			v-if="file"
+			v-if="file && mode === 'reply'"
 			class="mx-3 mt-2 flex items-center gap-2 rounded bg-surface-gray-1 px-2 py-1 text-sm"
 		>
 			<LucidePaperclip class="size-4 text-ink-gray-6" />
@@ -58,7 +58,7 @@
 			<button
 				class="ml-auto text-ink-gray-5 hover:text-ink-gray-8"
 				title="Remove file"
-				@click="file = null"
+				@click="removeFile"
 			>
 				<LucideX class="size-4" />
 			</button>
@@ -138,10 +138,9 @@
 				<Button
 					class="ml-auto"
 					variant="solid"
-					:theme="mode === 'note' ? 'orange' : 'gray'"
 					:label="mode === 'note' ? 'Add note' : 'Send'"
 					:loading="sending"
-					:disabled="uploading || (!text.trim() && !file)"
+					:disabled="!canSubmit"
 					@click="submit"
 				>
 					<template #suffix><LucideSendHorizontal class="size-4" /></template>
@@ -151,8 +150,8 @@
 
 		<Dialog v-model="saveDialog" :options="{ title: 'Save as quick reply' }">
 			<template #body-content>
-				<div class="flex flex-col gap-3">
-					<FormControl v-model="newQuick.title" label="Title" />
+				<form class="flex flex-col gap-3" @submit.prevent="saveQuick">
+					<FormControl v-model="newQuick.title" label="Title" autofocus />
 					<FormControl v-model="newQuick.body" type="textarea" label="Message" />
 					<FormControl
 						v-if="boot.is_manager"
@@ -160,12 +159,14 @@
 						type="checkbox"
 						label="Share with everyone"
 					/>
-				</div>
+					<button type="submit" class="hidden" />
+				</form>
 			</template>
 			<template #actions>
 				<Button
 					variant="solid"
 					label="Save"
+					:loading="savingQuick"
 					:disabled="!newQuick.title || !newQuick.body"
 					@click="saveQuick"
 				/>
@@ -183,6 +184,8 @@ import LucideSmile from "~icons/lucide/smile";
 import LucideZap from "~icons/lucide/zap";
 import LucideSendHorizontal from "~icons/lucide/send-horizontal";
 import { boot } from "@/boot";
+import { drafts } from "@/stores/inbox";
+import { errorText, showError } from "@/utils/errors";
 
 const props = defineProps({
 	chat: { type: Object, required: true },
@@ -239,6 +242,46 @@ const suggestions = ref([]);
 const active = ref(0);
 const saveDialog = ref(false);
 const newQuick = ref({ title: "", body: "", is_shared: false });
+const savingQuick = ref(false);
+let uploadId = 0; // a file removed while it uploads must not come back when the upload ends
+
+// A note needs text (a file cannot go in a note); a reply needs text or a file.
+const canSubmit = computed(
+	() =>
+		!uploading.value &&
+		!sending.value &&
+		(mode.value === "note" ? !!text.value.trim() : !!text.value.trim() || !!file.value)
+);
+
+// Each chat keeps its own unsent text, file and mode, so switching chats neither loses a draft nor
+// carries it into the other chat.
+const saved = drafts.get(props.chat.name);
+if (saved) {
+	mode.value = saved.mode;
+	text.value = saved.text;
+	file.value = saved.file;
+	mentions.value = saved.mentions;
+}
+watch(
+	[mode, text, file, mentions],
+	() => {
+		if (text.value || file.value)
+			drafts.set(props.chat.name, {
+				mode: mode.value,
+				text: text.value,
+				file: file.value?.name ? file.value : null,
+				mentions: [...mentions.value],
+			});
+		else drafts.delete(props.chat.name);
+	},
+	{ deep: true }
+);
+
+function removeFile() {
+	uploadId++;
+	file.value = null;
+	uploading.value = false;
+}
 let trigger = null; // { kind: 'quick' | 'mention', start }
 
 const quickOptions = computed(() => [
@@ -261,15 +304,24 @@ function autosize() {
 	el.style.height = Math.min(el.scrollHeight, 192) + "px";
 }
 
+// Put text where the cursor is (a quick reply replaces an empty box or a "/" search).
 function insert(value, replace = false) {
-	if (replace && (!text.value.trim() || text.value.trim().startsWith("/"))) text.value = value;
-	else
-		text.value = text.value
-			? `${text.value}${text.value.endsWith(" ") ? "" : " "}${value}`
-			: value;
+	const el = box.value;
+	let caret;
+	if (replace && (!text.value.trim() || text.value.trim().startsWith("/"))) {
+		text.value = value;
+		caret = value.length;
+	} else {
+		const at = el && document.activeElement === el ? el.selectionStart : text.value.length;
+		const before = text.value.slice(0, at);
+		const pad = before && !before.endsWith(" ") ? " " : "";
+		text.value = before + pad + value + text.value.slice(at);
+		caret = at + pad.length + value.length;
+	}
 	nextTick(() => {
 		autosize();
 		box.value?.focus();
+		box.value?.setSelectionRange(caret, caret);
 	});
 }
 
@@ -315,7 +367,8 @@ function pick(s) {
 		const label = `@${s.label} `;
 		text.value =
 			text.value.slice(0, trigger.start) + label + text.value.slice(el.selectionStart);
-		if (!mentions.value.includes(s.value.name)) mentions.value.push(s.value.name);
+		if (!mentions.value.some((m) => m.name === s.value.name))
+			mentions.value.push({ name: s.value.name, label: s.label });
 	}
 	suggestions.value = [];
 	nextTick(() => {
@@ -355,6 +408,7 @@ async function onFile(e) {
 		error.value = "The file is larger than 15 MB.";
 		return;
 	}
+	const id = ++uploadId;
 	uploading.value = true;
 	file.value = { file_name: picked.name };
 	try {
@@ -369,19 +423,20 @@ async function onFile(e) {
 		});
 		const data = await r.json();
 		if (!r.ok || !data.message) throw new Error("upload failed");
+		if (id !== uploadId) return;
 		file.value = { name: data.message.name, file_name: data.message.file_name };
 	} catch (err) {
+		if (id !== uploadId) return;
 		file.value = null;
 		error.value = "The file could not be uploaded.";
 	} finally {
-		uploading.value = false;
+		if (id === uploadId) uploading.value = false;
 	}
 }
 
 async function submit() {
-	if (sending.value || uploading.value) return;
+	if (!canSubmit.value) return;
 	const body = text.value.trim();
-	if (!body && !file.value) return;
 	sending.value = true;
 	error.value = "";
 	try {
@@ -389,7 +444,10 @@ async function submit() {
 			const note = await call("periskope_connector.api.compose.add_comment", {
 				chat: props.chat.name,
 				content: body,
-				mentions: mentions.value.filter((m) => body.includes("@")),
+				// only those still named in the text
+				mentions: mentions.value
+					.filter((m) => body.includes("@" + m.label))
+					.map((m) => m.name),
 			});
 			emit("noted", note);
 		} else {
@@ -409,7 +467,7 @@ async function submit() {
 		emit("clear-reply");
 		nextTick(autosize);
 	} catch (err) {
-		error.value = err?.messages?.[0] || err?.message || "Not sent.";
+		error.value = errorText(err, "Not sent.");
 	} finally {
 		sending.value = false;
 	}
@@ -421,27 +479,41 @@ function openSave() {
 }
 
 async function saveQuick() {
-	const saved = await call("periskope_connector.api.compose.save_canned_response", {
-		title: newQuick.value.title,
-		body: newQuick.value.body,
-		is_shared: newQuick.value.is_shared ? 1 : 0,
-	});
-	quick.value = [...quick.value, saved].sort((a, b) => a.title.localeCompare(b.title));
-	saveDialog.value = false;
+	if (savingQuick.value || !newQuick.value.title || !newQuick.value.body) return;
+	savingQuick.value = true;
+	try {
+		const row = await call("periskope_connector.api.compose.save_canned_response", {
+			title: newQuick.value.title,
+			body: newQuick.value.body,
+			is_shared: newQuick.value.is_shared ? 1 : 0,
+		});
+		quick.value = [...quick.value, row].sort((a, b) => a.title.localeCompare(b.title));
+		saveDialog.value = false;
+	} catch (e) {
+		showError(e, "The quick reply was not saved.");
+	} finally {
+		savingQuick.value = false;
+	}
 }
 
+// Quick replies and the people a note can mention; either may fail without blocking the other.
 async function loadLists() {
-	quick.value = await call("periskope_connector.api.compose.canned_responses");
-	people.value = await call("periskope_connector.api.compose.mentionable", {
-		chat: props.chat.name,
-	});
+	const [q, p] = await Promise.allSettled([
+		call("periskope_connector.api.compose.canned_responses"),
+		call("periskope_connector.api.compose.mentionable", { chat: props.chat.name }),
+	]);
+	if (q.status === "fulfilled") quick.value = q.value;
+	if (p.status === "fulfilled") people.value = p.value;
 }
 
 watch(
 	() => props.replyTo,
 	(r) => r && nextTick(() => box.value?.focus())
 );
-onMounted(loadLists);
+onMounted(() => {
+	loadLists();
+	nextTick(autosize);
+});
 
 defineExpose({ focus: () => box.value?.focus() });
 </script>

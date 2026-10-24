@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Button, Dialog, ErrorMessage, call, toast } from "frappe-ui";
 import FieldInput from "@/components/settings/FieldInput.vue";
 
@@ -81,7 +81,7 @@ const props = defineProps({
 	sectionKey: { type: String, required: true },
 	data: { type: Object, default: null },
 });
-const emit = defineEmits(["saved"]);
+const emit = defineEmits(["saved", "dirty"]);
 
 const form = ref({});
 const error = ref("");
@@ -133,17 +133,33 @@ const hint = computed(
 		}[props.sectionKey] || "")
 );
 
+// The values as the server has them; a field differs from it once the user edits it.
+function stored(s) {
+	const values = {};
+	for (const f of s?.fields || [])
+		values[f.fieldname] = f.fieldtype === "Password" ? "" : f.value;
+	return values;
+}
+
+// New settings from the server (after a save, a test or a sync) refresh the fields the user has not
+// touched; what they typed and have not saved yet stays.
 watch(
 	section,
-	(s) => {
-		const values = {};
-		for (const f of s?.fields || [])
-			values[f.fieldname] = f.fieldtype === "Password" ? "" : f.value;
-		form.value = values;
-		error.value = "";
+	(s, old) => {
+		const next = stored(s);
+		const before = old && old.key === s?.key ? stored(old) : null;
+		if (before)
+			for (const k of Object.keys(next))
+				if (form.value[k] !== before[k]) next[k] = form.value[k];
+		form.value = next;
+		if (!before) error.value = "";
 	},
 	{ immediate: true }
 );
+
+const dirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(stored(section.value)));
+watch(dirty, (d) => emit("dirty", d));
+onBeforeUnmount(() => emit("dirty", false));
 
 function ask() {
 	if (section.value?.confirm) confirming.value = true;
@@ -151,6 +167,7 @@ function ask() {
 }
 
 async function save() {
+	if (saving.value) return;
 	confirming.value = false;
 	saving.value = true;
 	error.value = "";
@@ -172,7 +189,7 @@ async function save() {
 }
 
 async function run(a) {
-	if (a.confirm && !window.confirm(a.confirm)) return;
+	if (running.value || (a.confirm && !window.confirm(a.confirm))) return;
 	running.value = a.action;
 	error.value = "";
 	try {
