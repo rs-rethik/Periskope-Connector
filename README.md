@@ -275,7 +275,7 @@ Reps and managers work WhatsApp at **`/whatsapp`** (also in the Frappe apps swit
 - A **note** is internal: only your team sees it and it is never sent to the customer. Type @ to mention a colleague and notify them.
 - Set the **status** (Open, Pending, Resolved, Closed; a customer's new message reopens the chat), **assign** it, move it to a **team**, and add **labels**. The activity log keeps each change. The SLA badge shows when the next SLA deadline is due, or how late it is.
 - The **CRM panel** shows the linked lead or deal (owner, status, value, AI summary, notes, open tasks). From it you can link the chat to another record, create a lead, add a note or task, change the status, or open the record in Frappe CRM. A lead or deal in Frappe CRM has an *Open WhatsApp inbox* button.
-- Keys in a conversation: **r** reply, **a** assign to me, **e** resolve.
+- Keys in a conversation: **r** reply, **a** assign to me, **e** resolve, **Esc** close the chat (it first leaves the typing box, cancels a reply or closes an open menu).
 
 New messages, ticks and changes arrive live. The AI still replies to an assigned chat when its rep has not answered within the set time.
 

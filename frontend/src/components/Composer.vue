@@ -338,9 +338,9 @@ function onKey(e) {
 			);
 		if (e.key === "Enter" || e.key === "Tab")
 			return e.preventDefault(), pick(suggestions.value[active.value]);
-		if (e.key === "Escape") return (suggestions.value = []);
+		if (e.key === "Escape") return e.preventDefault(), (suggestions.value = []);
 	}
-	if (e.key === "Escape" && props.replyTo) emit("clear-reply");
+	if (e.key === "Escape" && props.replyTo) return e.preventDefault(), emit("clear-reply");
 	if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
 		e.preventDefault();
 		submit();

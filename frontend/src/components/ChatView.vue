@@ -92,6 +92,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { Avatar, Badge, Button, LoadingIndicator, call } from "frappe-ui";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
@@ -250,9 +251,10 @@ function replace(m) {
 	messages.value = messages.value.map((x) => (x.name === m.name ? { ...x, ...m } : x));
 }
 
-// Keyboard: r reply, a assign to me, e resolve.
+// Keyboard: r reply, a assign to me, e resolve, Esc close.
 function onKey(e) {
 	if (e.metaKey || e.ctrlKey || e.altKey) return;
+	if (e.key === "Escape") return onEscape(e);
 	if (e.target.closest("input, textarea, [contenteditable]")) return;
 	const keys = {
 		r: () => composer.value?.focus(),
@@ -262,6 +264,20 @@ function onKey(e) {
 	if (!keys[e.key]) return;
 	e.preventDefault();
 	keys[e.key]();
+}
+
+// Esc closes the chat, unless it first has something smaller to close: a dialog or menu (they handle
+// their own Esc), the composer's mention list or reply (handled there), or the typing box, which it
+// leaves first so a draft is not lost by one key.
+const route = useRoute();
+const router = useRouter();
+function onEscape(e) {
+	if (e.defaultPrevented || document.querySelector('[role="dialog"], [role="menu"]')) return;
+	if (e.target.closest("input, textarea, [contenteditable]")) return e.target.blur();
+	if (replyTo.value) return (replyTo.value = null);
+	router.push(
+		route.name === "Conversation" ? { name: "Conversations" } : { name: "Inbox", params: {} }
+	);
 }
 
 watch(
