@@ -5,3 +5,8 @@
 tags
 node_modules
 __pycache__
+# Built by `bench build` (frontend/)
+periskope_connector/public/inbox
+periskope_connector/www/whatsapp.html
+frontend/components.d.ts
+frontend/auto-imports.d.ts

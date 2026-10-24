@@ -8,7 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
 from periskope_connector import contacts, leads, messages
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, without_site_teams
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -56,6 +56,7 @@ class TestQueue(FrappeTestCase):
 			self.addCleanup(target.stop)
 		frappe.db.savepoint("periskope_queue_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_queue_test")
+		without_site_teams(self, "periskope_queue_test")
 		# the site carries real queue rows from the upgrade; keep them out of the assertions
 		frappe.db.delete("Periskope Contact")
 

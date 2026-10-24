@@ -9,7 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 from periskope_connector import leads, messages, reminders
 from periskope_connector.ai import classifier
 from periskope_connector.system import insert_as_system, save_as_system
-from periskope_connector.tests.utils import settings
+from periskope_connector.tests.utils import settings, without_site_teams
 
 MACHINE_WRITTEN = [
 	"Periskope Message",
@@ -29,6 +29,7 @@ class TestTranslatableMessages(FrappeTestCase):
 
 		frappe.db.savepoint("periskope_webhook_text_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_webhook_text_test")
+		without_site_teams(self, "periskope_webhook_text_test")
 		settings(enabled=1)  # switched off, the call is refused before the signature is checked
 		frappe.local.request = MagicMock()
 		frappe.local.request.get_data.return_value = b"{}"
@@ -64,6 +65,7 @@ class TestSystemWrites(FrappeTestCase):
 		self.addCleanup(p.stop)
 		frappe.db.savepoint("periskope_system_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_system_test")
+		without_site_teams(self, "periskope_system_test")
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def _need_system_manager(self):
@@ -147,7 +149,10 @@ class TestSystemWrites(FrappeTestCase):
 			else:
 				# every other endpoint gates the caller (api/permission.py)
 				self.assertTrue(
-					any(check in source for check in ("require_admin(", "require_manager(")),
+					any(
+						check in source
+						for check in ("require_admin(", "require_manager(", "require_inbox_user(")
+					),
 					fn.__name__,
 				)
 

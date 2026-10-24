@@ -35,8 +35,6 @@
   "escalation_emails",
   "column_team",
   "default_rep",
-  "section_phones",
-  "phones",
   "section_agent",
   "enable_auto_reply",
   "reply_delay_minutes",
@@ -106,7 +104,7 @@
    "label": "Enable Periskope Integration"
   },
   {
-   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then use <b>Actions &gt; Test Connection</b>.",
+   "description": "Paste the API key from Periskope (console.periskope.app &gt; Settings &gt; Integrations &gt; API). It is shown only once, so keep a copy. Then click <b>Test Connection</b>.",
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "Periskope API Key"
@@ -149,7 +147,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Actions &gt; Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
+   "description": "Paste the signing secret from Periskope (Settings &gt; Webhooks). The webhook itself is created for you by <b>Test Connection</b> or <b>Create Webhook in Periskope</b>; the secret is the one part Periskope does not return through its API.",
    "fieldname": "webhook_signing_secret",
    "fieldtype": "Password",
    "label": "Webhook Signing Secret"
@@ -254,17 +252,6 @@
    "options": "User",
    "label": "Default Sales Rep",
    "description": "Gets the follow-ups of chats on a number that has no rep below."
-  },
-  {
-   "fieldname": "section_phones",
-   "fieldtype": "Section Break",
-   "label": ""
-  },
-  {
-   "fieldname": "phones",
-   "fieldtype": "Table",
-   "label": "Company Numbers and Sales Reps",
-   "options": "Periskope Phone"
   },
   {
    "fieldname": "section_agent",
@@ -493,7 +480,7 @@
    "collapsible": 1
   },
   {
-   "description": "The events Periskope should send to this site. Only message.created is stored as a message; the others are logged. Test Connection or Create Webhook in Periskope registers them.",
+   "description": "The events Periskope sends to this site: new, edited and deleted messages, delivery ticks (message.ack.updated) and reactions are shown in the inbox; the others are only logged. Test Connection or Create Webhook in Periskope registers them.",
    "fieldname": "webhook_events",
    "fieldtype": "Table",
    "label": "Webhook Events",
@@ -504,7 +491,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-20 12:00:00.000000",
+ "modified": "2026-10-23 13:38:57.775670",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

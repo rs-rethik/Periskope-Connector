@@ -8,7 +8,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import messages, reminders
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, at, cfg, msg
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, at, cfg, msg, without_site_teams
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -79,6 +79,7 @@ class TestRun(FrappeTestCase):
 		self.addCleanup(self.mail.stop)
 		frappe.db.savepoint("periskope_reminder_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_reminder_test")
+		without_site_teams(self, "periskope_reminder_test")
 
 		self.config = cfg()
 		p = patch.object(reminders, "get_config", lambda *a, **k: self.config)

@@ -107,7 +107,8 @@ def _holiday_dates(list_name: str | None) -> set:
 			pluck="holiday_date",
 			limit=370,
 		)
-		return {r if isinstance(r, datetime) else datetime.combine(r, datetime.min.time()) for r in rows}
+		# Dates, as is_working_time compares moment.date(): a datetime never equals a date.
+		return {r.date() if isinstance(r, datetime) else r for r in rows}
 	except Exception:
 		return set()
 

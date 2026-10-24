@@ -16,7 +16,7 @@
 </div>
 
 <div align="center">
-	<a target="_blank" href="#license" title="License: MIT"><img src="https://img.shields.io/badge/License-MIT-success.svg"></a>
+	<a target="_blank" href="#license" title="License: AGPL-3.0"><img src="https://img.shields.io/badge/License-AGPL--3.0-success.svg"></a>
 	<a target="_blank" href="https://www.python.org/downloads/" title="Python version"><img src="https://img.shields.io/badge/python-%3E=_3.10-success.svg"></a>
 	<a target="_blank" href="https://frappeframework.com" title="Frappe version"><img src="https://img.shields.io/badge/frappe-v15%20%7C%20v16-success.svg"></a>
 	<a target="_blank" href="https://docs.periskope.app" title="Periskope docs"><img src="https://img.shields.io/badge/docs-Periskope-success.svg"></a>
@@ -34,8 +34,9 @@ Sales conversations usually live on each rep's phone, so management cannot see t
   * [Before you start](#before-you-start)
   * [Set it up](#set-it-up)
   * [Daily use](#daily-use)
+  * [The WhatsApp inbox](#the-whatsapp-inbox)
   * [Customise it](#customise-it)
-  * [The Flow dialog](#the-flow-dialog)
+  * [The Flow diagram](#the-flow-diagram)
   * [The AI agent](#the-ai-agent)
   * [Reports and dashboard](#reports-and-dashboard)
   * [Keeping it healthy](#keeping-it-healthy)
@@ -57,7 +58,8 @@ Sales conversations usually live on each rep's phone, so management cannot see t
 - **Lead capture:** the AI creates a lead for a new business enquiry from an unknown number. Other unknown 1-to-1 numbers land in the **Periskope Contact** queue; supplier and employee numbers (ERPNext) are ignored on their own.
 - **Auto reply:** when no rep has answered a customer within the set time, the AI answers from the knowledge base and ERPNext data, or tells the customer a rep will reply and gives the rep a task.
 - **Learning:** the knowledge base grows from the reps' answers on its own; changes to the configuration (tags, group mappings, ignored numbers, a few settings) are suggested and wait for an approver.
-- **Visibility:** a Periskope workspace with dashboards and reports (Tagging Review, Response Time, Open Escalations, Lead Source, AI Usage, Sync Health, Unmatched Numbers), a Health tab with live figures, and a log of everything the agent did (**Periskope Agent Action**).
+- **WhatsApp inbox:** every rep works the company numbers from one inbox at `/whatsapp` (a Frappe UI app, no Desk and no Periskope seat needed): chats per number, replies, private notes, status, assignment, teams, SLA and the CRM record beside the chat. Each rep sees only the numbers and chats given to them.
+- **Visibility:** in the same app, managers get a dashboard, the reports (Tagging Review, Response Time, Open Escalations, Lead Source, AI Usage, Sync Health, Unmatched Numbers), Health with live figures, the Flow diagram, and a log of everything the agent did (**Periskope Agent Action**).
 
 ## How it works
 
@@ -103,7 +105,7 @@ bench --site $SITE_NAME migrate
 
 ## Setup
 
-Open **Periskope Settings**. The **Setup** tab has four steps (connect Periskope, AI key and budget, the team, auto reply) with a status panel that shows what is still missing; **Health** shows live figures; **Advanced** holds the Periskope address, the voice-note key and the webhook events. The **Flow** button next to Save opens the whole pipeline as a diagram. Step-by-step instructions are in the [User Manual](#user-manual).
+Open `/whatsapp` and click **Settings** at the bottom of the sidebar (managers and admins), or open **Periskope Settings** in Desk (System Managers). The Desk form's **Setup** tab has four steps (connect Periskope, AI key and budget, the team, auto reply) with a status panel that shows what is still missing; **Advanced** holds the Periskope address, the voice-note key and the webhook events. **Health and flow** in the `/whatsapp` sidebar shows live figures and the whole pipeline as a diagram. Step-by-step instructions are in the [User Manual](#user-manual).
 
 ## User Manual
 
@@ -146,7 +148,7 @@ Have these ready. Setup takes about fifteen minutes.
 
 ### Set it up
 
-Everything is configured on **Periskope Settings** (open it from the **Periskope** workspace). The **Setup** tab has four steps, and the panel at the top shows which are done and what is still missing. The AI agent starts on its own once steps 1 to 3 are done; there is no switch for it.
+Everything is configured on **Periskope Settings** (in Desk, or **Settings** in the `/whatsapp` sidebar, where each section of the form is a tab under *System*). The **Setup** tab has four steps, and the panel at the top shows which are done and what is still missing. The AI agent starts on its own once steps 1 to 3 are done; there is no switch for it.
 
 | Step | What you enter | Check |
 |---|---|---|
@@ -187,7 +189,7 @@ Everything that was sent, blocked or only simulated is a row in **Periskope Agen
 
 #### Messages
 
-Open **Messages** from the workspace. Each message shows who sent it, the rep, the number, the text, and once tagged: the tag, severity, sentiment, a summary, and a link to the CRM lead or deal.
+Read a conversation in the [WhatsApp inbox](#the-whatsapp-inbox). System Managers can also open **Periskope Message** in Desk: each message shows who sent it, the rep, the number, the text, and once tagged: the tag, severity, sentiment, a summary, and a link to the CRM lead or deal.
 
 ![A message as soon as it arrives, before the AI has read it.](docs/manual/11-a-message-as-soon-as-it-arrives-the-ai-t.jpg)
 *A message as soon as it arrives, before the AI has read it.*
@@ -260,13 +262,32 @@ When any rep replies in the chat, the reminder closes, its task is closed and th
 ![A closed reminder with the first-response time.](docs/manual/20-a-closed-reminder-with-the-first-respons.jpg)
 *A closed reminder with the first-response time.*
 
+### The WhatsApp inbox
+
+Reps and managers work WhatsApp at **`/whatsapp`** (also in the Frappe apps switcher as *Periskope Connector*). It needs no Desk access and no Periskope seat: the one Periskope account stays the connection for all company numbers.
+
+**Who sees what.** Managers (Sales Manager, WhatsApp Manager, System Manager) see every number. A Sales User sees a chat only when its number is one of theirs (their **Agent** numbers or their team's numbers) and the chat is assigned to them, assigned to their team with team visibility on, or linked to a lead or deal they own. Admins set agents, teams and numbers in **Settings**.
+
+**The inbox** has three panes: the chat list, the conversation, and the CRM record.
+
+- The sidebar filters the list: *All open*, *My chats*, *Unassigned*, *Unanswered*, *Unread*, *SLA breached*, *My team*, one company number, or a saved view. Badges count each. **Conversations** shows the same chats as a table with bulk actions.
+- **Reply** goes out from the chat's own number. Add a file, reply to a message, or insert a quick reply. Ticks show sent, delivered and read; a failed send says why and can be retried (connection errors are retried on their own). **New chat** starts one from a number you may use.
+- A **note** is internal: only your team sees it and it is never sent to the customer. Type @ to mention a colleague and notify them.
+- Set the **status** (Open, Pending, Resolved, Closed; a customer's new message reopens the chat), **assign** it, move it to a **team**, and add **labels**. The activity log keeps each change. The SLA badge shows when the next SLA deadline is due, or how late it is.
+- The **CRM panel** shows the linked lead or deal (owner, status, value, AI summary, notes, open tasks). From it you can link the chat to another record, create a lead, add a note or task, change the status, or open the record in Frappe CRM. A lead or deal in Frappe CRM has an *Open WhatsApp inbox* button.
+- Keys in a conversation: **r** reply, **a** assign to me, **e** resolve, **Esc** close the chat (it first leaves the typing box, cancels a reply or closes an open menu).
+
+New messages, ticks and changes arrive live. The AI still replies to an assigned chat when its rep has not answered within the set time.
+
+**Manage** (managers): Contact queue, Groups, Suggestions, Knowledge base (admins), Reports, Health and flow, and Logs. **Settings** holds teams, agents, WhatsApp numbers, SLA policies, quick replies, labels and AI tags, and (admins) every section of Periskope Settings. Keys are write-only, and connection and test-mode changes ask for confirmation.
+
 ### Customise it
 
 What happens to a message is the AI's decision. What you can still shape is how messages are grouped in reports (tags) and how the AI is corrected.
 
 #### Tags
 
-Open **Tags** from the workspace. A tag is a category for reports and the dashboard: a name and a description that is given to the AI, so the description decides what the AI puts under it. A tag does not decide what happens to a message. You can add tags, edit descriptions, switch tags off, and choose which tag is the **Default Tag** (used when the AI cannot place a message and for skipped messages). A tag name is lowercase letters, numbers and underscores and cannot be changed once saved. At least one tag must stay active.
+Open **Settings → Labels and AI tags** in `/whatsapp` (admins), or **Periskope Tag** in Desk. A tag is a category for reports and the dashboard: a name and a description that is given to the AI, so the description decides what the AI puts under it. A tag does not decide what happens to a message. You can add tags, edit descriptions, switch tags off, and choose which tag is the **Default Tag** (used when the AI cannot place a message and for skipped messages). A tag name is lowercase letters, numbers and underscores and cannot be changed once saved. At least one tag must stay active.
 
 ![The starting tags.](docs/manual/21-the-starting-tags.jpg)
 *The starting tags.*
@@ -283,11 +304,11 @@ Open **Tags** from the workspace. A tag is a category for reports and the dashbo
 ![Correct Category on a message.](docs/manual/25-correct-category-on-a-message.jpg)
 *Correct Category on a message.*
 
-### The Flow dialog
+### The Flow diagram
 
-The **Flow** button next to **Save** on Periskope Settings opens a dialog that draws the whole pipeline: capture, linking, attachments, what the AI reads and decides, tags, the reminder ladder, who is told, and the AI agent (auto reply, CRM updates, learning agent). Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel on the right of the diagram (under it on a narrow screen).
+Open **Health and flow** in the `/whatsapp` sidebar (managers) and click **Flow diagram**. It draws the whole pipeline: capture, linking, attachments, what the AI reads and decides, tags, the reminder ladder, who is told, and the AI agent (auto reply, CRM updates, learning agent). Each step is a card with a coloured bar for its health (green working, orange needs a look, red not working, grey off) and a live figure. Click a step to open its panel on the right of the diagram (under it on a narrow screen).
 
-Drag the diagram to move it, Ctrl + scroll (or the + and − buttons) to zoom, and ⤢ to fit it to the dialog again. There is little to change, because the AI decides: each change in the dialog is saved as you make it.
+Drag the diagram to move it, Ctrl + scroll (or the + and − buttons) to zoom, and ⤢ to fit it to the page again. There is little to change, because the AI decides: admins can make the changes below in the panel, and each one is saved as it is made.
 
 | Step | Edit in the panel |
 |---|---|
@@ -297,7 +318,7 @@ Drag the diagram to move it, Ctrl + scroll (or the + and − buttons) to zoom, a
 | Customer waiting, People told | Working hours, Manager and MD emails |
 | Auto reply | Reply to Customers, and the minutes a rep has to answer first |
 
-The default tag and the last active tag cannot be switched off. The buttons that open other pages (a tab, a list or a report) close the dialog first.
+The default tag and the last active tag cannot be switched off.
 
 ### The AI agent
 
@@ -371,11 +392,11 @@ Each attempt is a **Periskope Auto Reply** row; each action the agent took is a 
 
 Every 15 minutes the agent reads the conversations that have been quiet for an hour. It updates the knowledge base from answers the reps gave, with no approval needed: a new answer, a changed answer and the retiring of an answer nobody used for 90 days apply at once, each recorded as an *Applied* **Periskope Suggestion** (*Decision Via: Automatic*). It suggests changes to tags, a few settings (working hours and days, the reply time, *About Your Business*), **group to customer mappings** and **numbers to ignore**. A suggestion needs evidence from three conversations, and its target must exist.
 
-One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Periskope Suggestion** in Desk. These configuration changes wait until someone approves; a rejected suggestion is not proposed again for 30 days.
+One email to the approvers lists the suggestions with *Approve* and *Reject* buttons. Each button opens a page that asks for one confirming click, each link works once, and links expire. Approvers can also decide from **Suggestions** in the `/whatsapp` sidebar, or from **Periskope Suggestion** in Desk. These configuration changes wait until someone approves; a rejected suggestion is not proposed again for 30 days.
 
 #### Knowledge Base canvas
 
-Admins (System Manager, WhatsApp Manager) open **Knowledge Base** from the workspace, or from the *Learning agent* step of the Flow dialog. It opens as a dialog over the page you are on (*Open full page* gives it the whole screen, at `/app/periskope-knowledge`). It shows the knowledge base as a node graph, like a workflow builder:
+Admins (System Manager, WhatsApp Manager) open **Knowledge base** in the `/whatsapp` sidebar (`/whatsapp/knowledge`). It shows the knowledge base as a node graph, like a workflow builder:
 
 - **Customer asks** starts the tree. **Topic** nodes (Delivery, Pricing) branch into **Condition** nodes (*Customer is in Chennai*, *Otherwise*) and end in **Answer** nodes (*Delivery to Chennai takes 2 days*). An answer can also hang straight under a topic or under Customer asks.
 - Click **+** after a node to add the next one, or drag from a node's right dot onto another node to connect them; drop it on empty canvas to add a node there. Hover a wire to remove it. Drag nodes to arrange them; scroll to move, Ctrl + scroll to zoom, and **Tidy up** lays the tree out again.
@@ -388,18 +409,14 @@ How a reply uses it: a customer's message matches an answer by its own words, or
 
 ### Reports and dashboard
 
-The **Periskope** workspace opens on a dashboard, most urgent first:
+Managers open **Dashboard** in the `/whatsapp` sidebar. Filter it by period (today, 7, 30 or 90 days), number, team and rep:
 
-- **Today:** messages, tasks the AI created, escalations, and AI replies.
-- **Needs attention:** customers waiting for a reply, new numbers in the contact queue, suggestions waiting for approval, and messages the AI could not read.
-- **Last 7 days:** enquiries and issues, then messages per day, **Messages by Tag** (every tag with its count for the last 30 days; click one to open its messages) and messages by severity.
-- **Go to:** **Flow** (opens the settings with the Flow dialog already open), Settings, Messages, **What the AI Did**, Customers Waiting, Contact Queue, Suggestions and the Knowledge Base. The badge on a shortcut counts what needs a look (today's messages and actions, waiting customers, new contacts, pending suggestions), and the list opens filtered the same way.
-- **Reports**, and **All pages** grouped as Setup, Conversations and AI Agent.
+- **Now:** open chats, unassigned chats, customers waiting longer than the SLA allows, and chats past their SLA.
+- **Speed:** the median time to the first reply and the share answered within the SLA.
+- **Volume:** pending and resolved chats, messages received and sent, leads from WhatsApp and how many became deals; messages per day and per AI tag.
+- **People:** a leaderboard per rep, and the list of SLA breaches (click one to open the chat).
 
-The *Enquiries* and *Issues* cards follow your tags, not fixed tag names. Each tag has a **Dashboard Group** field (Enquiry, Issue, or empty): a card counts the incoming messages of the last 7 days whose tag is in its group. A new site starts with `order_or_enquiry` as Enquiry and `quality_complaint` and `payment_issue` as Issue.
-
-![The workspace with live counts and charts.](docs/manual/26-the-workspace-with-live-counts-and-chart.jpg)
-*The workspace with live counts and charts.*
+**Reports** in the sidebar runs each report below with its filters. **Logs** opens the lists of what the agent did (Agent Actions, Agent Runs, AI Usage, Webhook Log, Auto Replies, Reply Reminders).
 
 | Report | What it answers |
 |---|---|
@@ -459,7 +476,7 @@ The text of customer messages, and their images and PDFs, are sent to your AI pr
 | A problem was not escalated | The AI judged it normal work. Check the message's *AI Escalation* and correct its tag; set *About Your Business* so the AI knows what matters. No Manager Emails means nobody can be emailed. |
 | Customers wait but nothing escalates | The time is outside working hours, or the message was skipped as needing no reply. |
 | A file is not on the lead | It is over 15 MB, the message is not linked yet (it is attached once linked), or Frappe refused it (a PDF with scripts). See the Error Log. |
-| A report or workspace link shows an error | Run `bench migrate` so the reports install. |
+| A report shows an error | Run `bench migrate` so the reports install. |
 | The AI stopped and admins got a budget email | The monthly token budget was reached. Raise it in Setup, step 2. |
 
 ### Reference
@@ -538,4 +555,4 @@ bench --site $SITE_NAME execute periskope_connector.contacts.backfill_contacts
 
 ## License
 
-This repository has been released under the [MIT License](license.txt).
+This repository has been released under the [GNU Affero General Public License v3.0](license.txt). It includes code adapted from Frappe Helpdesk and Frappe CRM, which are licensed under AGPL-3.0.

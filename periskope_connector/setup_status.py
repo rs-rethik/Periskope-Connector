@@ -33,7 +33,7 @@ def _periskope(s) -> dict:
 		return _step("periskope", title, False, _("Enter the Periskope API key."))
 	if not (s.connection_status or "").startswith("Connected"):
 		return _step("periskope", title, False, _("Click Test Connection."))
-	if not s.phones:
+	if not frappe.db.count("WhatsApp Number", {"is_active": 1}):
 		return _step("periskope", title, False, _("No WhatsApp number is linked in Periskope yet."))
 	return _step("periskope", title, True, s.connection_status)
 
@@ -75,7 +75,7 @@ def _team(s) -> dict:
 	problems = approver_problems(s.approver_emails)
 	if problems:
 		return _step("team", title, False, "; ".join(problems))
-	if not (s.default_rep or any(p.rep for p in s.phones)):
+	if not (s.default_rep or frappe.db.exists("WhatsApp Number", {"default_assignee": ["is", "set"]})):
 		return _step("team", title, False, _("Choose a default sales rep or a rep for a number."))
 	return _step("team", title, True, _("{0} approver(s)").format(len(emails(s.approver_emails))))
 

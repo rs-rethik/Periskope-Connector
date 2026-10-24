@@ -23,7 +23,13 @@ def _plain(html: str | None, limit: int = 300) -> str:
 
 
 def record_of(chat_id: str) -> tuple[str, str] | None:
-	row = frappe.db.get_value("Periskope Chat", chat_id, ["crm_deal", "crm_lead"], as_dict=True)
+	row = frappe.db.get_value(
+		"Periskope Chat",
+		{"chat_id": chat_id},
+		["crm_deal", "crm_lead"],
+		as_dict=True,
+		order_by="last_message_at desc",
+	)
 	if not row:
 		return None
 	if row.crm_deal and frappe.db.exists("CRM Deal", row.crm_deal):

@@ -11,7 +11,12 @@ from periskope_connector import reminders
 # not make these: on Frappe v16 with ERPNext that walks User > Email Account > Company > ... into
 # doctypes of apps that may not be installed (Payment Gateway). Doctype test modules set this as
 # IGNORE_TEST_RECORD_DEPENDENCIES (v16) and test_ignore (v15).
+# Our own inbox doctypes that link out (Periskope Team to users and an Assignment Rule) are listed too:
+# they have no test records of their own, so the walk must stop at them.
 OTHER_APP_DOCTYPES = [
+	"Assignment Rule",
+	"Periskope SLA Policy",
+	"Periskope Team",
 	"CRM Deal",
 	"CRM Lead",
 	"CRM Organization",
@@ -94,7 +99,26 @@ def isolate(case, name: str = "periskope_test"):
 	case.addCleanup(mail.stop)
 	frappe.db.savepoint(name)
 	case.addCleanup(frappe.db.rollback, save_point=name)
+	without_site_teams(case, name)
 	return sent
+
+
+def without_site_teams(case, savepoint: str):
+	"""The site's own teams (and their assignment rules) must not assign the tests' chats: switched
+	off inside the test's savepoint. The clean-up rolls back to it and only then clears Frappe's cached
+	list of rules, so the site's rules work again afterwards (the dev server shares that cache). Tests
+	that need a team make their own."""
+	from frappe.cache_manager import clear_doctype_map
+
+	def restore():
+		frappe.db.rollback(save_point=savepoint)
+		clear_doctype_map("Assignment Rule", "Periskope Chat")
+
+	case.addCleanup(restore)
+	frappe.db.sql("update `tabAssignment Rule` set disabled = 1 where document_type = 'Periskope Chat'")
+	frappe.db.sql("delete from `tabPeriskope Agent Number` where parenttype = 'Periskope Team'")
+	frappe.db.sql("update `tabWhatsApp Number` set default_team = null")
+	clear_doctype_map("Assignment Rule", "Periskope Chat")
 
 
 def settings(**values):

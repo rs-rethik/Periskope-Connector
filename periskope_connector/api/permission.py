@@ -24,7 +24,8 @@ def require_manager():
 
 
 def has_app_permission() -> bool:
-	"""Show Periskope Connector in the app list only to users who can open its pages."""
-	if frappe.session.user == "Guest":
-		return False
-	return bool(set(MANAGER_ROLES) & set(frappe.get_roles()))
+	"""Show the WhatsApp inbox in the app list (and CRM's app switcher) to the users who can open
+	it: sales users, sales managers and the admins."""
+	from periskope_connector.access import can_use_inbox
+
+	return can_use_inbox()

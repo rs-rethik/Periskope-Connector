@@ -1,0 +1,256 @@
+<template>
+	<div
+		class="group flex items-center gap-1 px-4 py-0.5"
+		:class="outgoing ? 'justify-end' : 'justify-start'"
+	>
+		<button
+			v-if="outgoing && canReply"
+			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+			title="Reply to this message"
+			@click="$emit('reply', message)"
+		>
+			<LucideReply class="size-4" />
+		</button>
+		<div
+			class="relative max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm"
+			:class="[
+				outgoing ? 'bg-surface-green-1' : 'border border-outline-gray-1 bg-surface-base',
+				unsent ? 'ring-1 ring-outline-red-2' : '',
+				hasReactions ? 'mb-3' : '',
+			]"
+		>
+			<div v-if="showSender" class="mb-0.5 text-xs font-medium text-ink-blue-6">
+				{{
+					message.sender_label ||
+					(message.sender_phone ? "+" + message.sender_phone : "")
+				}}
+			</div>
+			<div
+				v-else-if="message.agent_reply"
+				class="mb-0.5 flex items-center gap-1 text-xs font-medium text-ink-violet-6"
+			>
+				<LucideBot class="size-3" /> AI
+				{{ message.agent_reply === "Holding" ? "holding reply" : "reply" }}
+			</div>
+			<div
+				v-else-if="outgoing && message.sender_label"
+				class="mb-0.5 text-xs font-medium text-ink-gray-6"
+			>
+				{{ message.sender_label }}
+			</div>
+
+			<div
+				v-if="message.quoted"
+				class="mb-1 rounded border-l-4 border-outline-gray-3 bg-surface-gray-1 px-2 py-1 text-xs text-ink-gray-6"
+			>
+				<div class="font-medium">
+					{{ message.quoted.direction === "Outgoing" ? "You" : "Customer" }}
+				</div>
+				<div class="line-clamp-2">
+					{{ message.quoted.body || "[" + message.quoted.message_type + "]" }}
+				</div>
+			</div>
+
+			<div
+				v-if="message.is_deleted"
+				class="flex items-center gap-1 text-sm italic text-ink-gray-5"
+			>
+				<LucideBan class="size-3.5" /> This message was deleted
+			</div>
+			<template v-else>
+				<template v-if="message.has_media">
+					<img
+						v-if="message.message_type === 'image'"
+						:src="mediaUrl"
+						class="mb-1 max-h-72 cursor-zoom-in rounded"
+						loading="lazy"
+						alt=""
+						@click="open"
+					/>
+					<audio
+						v-else-if="message.message_type === 'audio'"
+						:src="mediaUrl"
+						controls
+						preload="none"
+						class="mb-1 w-64"
+					/>
+					<video
+						v-else-if="message.message_type === 'video'"
+						:src="mediaUrl"
+						controls
+						preload="none"
+						class="mb-1 max-h-72 rounded"
+					/>
+					<a
+						v-else
+						:href="mediaUrl"
+						target="_blank"
+						class="mb-1 flex items-center gap-2 rounded bg-surface-gray-1 px-2 py-1.5 text-sm text-ink-gray-8 hover:bg-surface-gray-2"
+					>
+						<LucideFileText class="size-4 shrink-0" />
+						<span class="truncate">{{ message.media_filename || "Document" }}</span>
+						<span v-if="message.media_size" class="shrink-0 text-xs text-ink-gray-5">{{
+							size
+						}}</span>
+					</a>
+				</template>
+				<div
+					v-if="message.body"
+					class="whitespace-pre-wrap break-words text-base text-ink-gray-9"
+				>
+					{{ message.body }}
+				</div>
+				<div v-if="message.transcript" class="mt-1 text-sm italic text-ink-gray-6">
+					“{{ message.transcript }}”
+				</div>
+				<div
+					v-if="!message.body && !message.has_media && message.message_type !== 'text'"
+					class="text-sm text-ink-gray-5"
+				>
+					[{{ message.message_type }}]
+				</div>
+			</template>
+
+			<div class="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-ink-gray-5">
+				<span v-if="message.edited_on && !message.is_deleted">Edited</span>
+				<span>{{ messageTime(message.message_timestamp) }}</span>
+				<component
+					:is="tick.icon"
+					v-if="outgoing && tick"
+					class="size-3.5"
+					:class="tick.class"
+					:title="tick.title"
+				/>
+			</div>
+			<div v-if="unsent" class="mt-1 flex items-center gap-2 text-xs text-ink-red-8">
+				<LucideCircleAlert class="size-3.5 shrink-0" />
+				<span class="min-w-0 flex-1">
+					{{ message.send_status === "Not Sent" ? "Not sent" : "Failed" }}:
+					{{ message.send_error || "Periskope did not take it." }}
+				</span>
+				<Button
+					v-if="message.send_status === 'Failed'"
+					size="sm"
+					variant="subtle"
+					label="Retry"
+					:loading="retrying"
+					@click="retry"
+				/>
+			</div>
+			<div
+				v-if="hasReactions"
+				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-base px-1.5 py-0.5 text-sm shadow-sm"
+				:class="outgoing ? 'right-2' : 'left-2'"
+				:title="reactionTitle"
+			>
+				<span v-for="(n, e) in reactionCounts" :key="e"
+					>{{ e }}<span v-if="n > 1" class="text-xs text-ink-gray-5">{{ n }}</span></span
+				>
+			</div>
+		</div>
+		<button
+			v-if="!outgoing && canReply"
+			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+			title="Reply to this message"
+			@click="$emit('reply', message)"
+		>
+			<LucideReply class="size-4" />
+		</button>
+	</div>
+</template>
+
+<script setup>
+import { computed, ref } from "vue";
+import { Button, call } from "frappe-ui";
+import LucideBot from "~icons/lucide/bot";
+import LucideBan from "~icons/lucide/ban";
+import LucideFileText from "~icons/lucide/file-text";
+import LucideCheck from "~icons/lucide/check";
+import LucideCheckCheck from "~icons/lucide/check-check";
+import LucideClock from "~icons/lucide/clock";
+import LucideReply from "~icons/lucide/reply";
+import LucideCircleAlert from "~icons/lucide/circle-alert";
+import { messageTime } from "@/utils/format";
+import { showError } from "@/utils/errors";
+
+const props = defineProps({
+	message: { type: Object, required: true },
+	isGroup: { type: Boolean, default: false },
+	showSenderName: { type: Boolean, default: true },
+});
+const emit = defineEmits(["reply", "updated"]);
+
+const outgoing = computed(() => props.message.direction === "Outgoing");
+const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);
+const mediaUrl = computed(
+	() =>
+		`/api/method/periskope_connector.api.inbox.media?message=${encodeURIComponent(
+			props.message.name
+		)}`
+);
+const size = computed(() => {
+	const b = props.message.media_size || 0;
+	return b > 1048576
+		? `${(b / 1048576).toFixed(1)} MB`
+		: `${Math.max(1, Math.round(b / 1024))} KB`;
+});
+
+const unsent = computed(() => ["Failed", "Not Sent"].includes(props.message.send_status));
+// A reply quotes a message WhatsApp knows: not one still being sent or that never went.
+const canReply = computed(
+	() =>
+		!props.message.is_deleted &&
+		!(props.message.message_id || "").startsWith("local_") &&
+		!unsent.value
+);
+
+// Periskope's delivery state ("ack"): -1 failed, 0 waiting, 1-2 sent, 3 delivered, 4-5 read.
+const tick = computed(() => {
+	if (props.message.send_status === "Sending")
+		return { icon: LucideClock, class: "", title: "Sending" };
+	if (unsent.value) return null;
+	const ack = String(props.message.ack ?? "").toLowerCase();
+	if (["4", "5", "read", "played"].includes(ack))
+		return { icon: LucideCheckCheck, class: "text-ink-blue-6", title: "Read" };
+	if (["3", "delivered"].includes(ack))
+		return { icon: LucideCheckCheck, class: "", title: "Delivered" };
+	if (["0", "pending"].includes(ack))
+		return { icon: LucideClock, class: "", title: "Waiting to send" };
+	return { icon: LucideCheck, class: "", title: "Sent" };
+});
+
+const reactions = computed(() => props.message.reactions || {});
+const hasReactions = computed(() => Object.keys(reactions.value).length > 0);
+const reactionCounts = computed(() => {
+	const out = {};
+	for (const e of Object.values(reactions.value)) out[e] = (out[e] || 0) + 1;
+	return out;
+});
+const reactionTitle = computed(() =>
+	Object.entries(reactions.value)
+		.map(([who, e]) => `${e} +${who}`)
+		.join(", ")
+);
+
+const retrying = ref(false);
+async function retry() {
+	if (retrying.value) return;
+	retrying.value = true;
+	try {
+		const m = await call("periskope_connector.api.compose.retry", {
+			message: props.message.name,
+		});
+		emit("updated", m);
+		if (["Failed", "Not Sent"].includes(m.send_status))
+			showError(null, m.send_error || "Still not sent.");
+	} catch (e) {
+		showError(e, "The message could not be sent again.");
+	} finally {
+		retrying.value = false;
+	}
+}
+
+function open() {
+	window.open(mediaUrl.value, "_blank");
+}
+</script>
