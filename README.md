@@ -101,7 +101,10 @@ cd $PATH_TO_YOUR_BENCH
 bench get-app https://github.com/rs-rethik/Periskope-Connector --branch develop
 bench --site $SITE_NAME install-app periskope_connector
 bench --site $SITE_NAME migrate
+bench build --app periskope_connector
 ```
+
+`bench build` builds the WhatsApp inbox at `/whatsapp`. After an update, run `bench --site $SITE_NAME migrate` and `bench build --app periskope_connector` again.
 
 ## Setup
 
@@ -274,7 +277,10 @@ Reps and managers work WhatsApp at **`/whatsapp`** (also in the Frappe apps swit
 - **Reply** goes out from the chat's own number. Add a file, reply to a message, or insert a quick reply. Ticks show sent, delivered and read; a failed send says why and can be retried (connection errors are retried on their own). **New chat** starts one from a number you may use.
 - A **note** is internal: only your team sees it and it is never sent to the customer. Type @ to mention a colleague and notify them.
 - Set the **status** (Open, Pending, Resolved, Closed; a customer's new message reopens the chat), **assign** it, move it to a **team**, and add **labels**. The activity log keeps each change. The SLA badge shows when the next SLA deadline is due, or how late it is.
-- The **CRM panel** shows the linked lead or deal (owner, status, value, AI summary, notes, open tasks). From it you can link the chat to another record, create a lead, add a note or task, change the status, or open the record in Frappe CRM. A lead or deal in Frappe CRM has an *Open WhatsApp inbox* button.
+- The **CRM panel** shows the linked lead or deal (owner, status, value, AI summary, notes, open tasks). From it you can link the chat to another record (search by name, company or number in any format), create a lead, add a note or task, change the status, or open the record in Frappe CRM. On screens narrower than 1280 px it opens from the **CRM** button in the chat header. A lead or deal in Frappe CRM has an *Open WhatsApp inbox* button.
+- An unsent reply stays with its own chat: switch chats and come back, and the draft is still there.
+- **Conversations** filters by status, search and **Filters**; **Display** sets the sort, grouping and columns, and **Save view** keeps the set-up for later (shared with everyone if a manager ticks it).
+- **On a phone** the inbox shows the chat list or one chat at a time (the back arrow returns to the list), and the sidebar opens from the ☰ button.
 - Keys in a conversation: **r** reply, **a** assign to me, **e** resolve, **Esc** close the chat (it first leaves the typing box, cancels a reply or closes an open menu).
 
 New messages, ticks and changes arrive live. The AI still replies to an assigned chat when its rep has not answered within the set time.
@@ -438,7 +444,7 @@ Managers open **Dashboard** in the `/whatsapp` sidebar. Filter it by period (tod
 
 #### The Health tab
 
-The **Health** tab in the settings shows live figures: when the last webhook arrived, when the AI last ran, how many messages wait to be tagged, how many failed, unprocessed webhook logs, tokens used this month, and messages per phone in the last 24 hours.
+**Health and flow** in the `/whatsapp` sidebar (and the **Health** tab of Periskope Settings in Desk) shows live figures: when the last webhook arrived, when the AI last ran, how many messages wait to be tagged, how many failed, unprocessed webhook logs, tokens used this month, and messages per phone in the last 24 hours.
 
 ![The Health tab.](docs/manual/29-the-health-tab.jpg)
 *The Health tab.*
