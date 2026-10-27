@@ -7,9 +7,11 @@
    when the AI cannot be asked.
 2. The welcome is not an answer (text_rules.NOT_ANSWERS): the customer's question still waits for a
    rep, and the auto reply and the reply reminders run as usual.
-3. Each later customer message in that chat (for CAPTURE_DAYS) has the chat read for those details. The lead
-   is created when there is none yet, and only its empty fields are filled: name (while it is still
-   the phone number), email and organization; the city or address becomes a note on the lead.
+3. Each later customer message in that chat (for CAPTURE_DAYS) has the chat read for those details. The
+   customer's first reply to the welcome creates the lead when there is none yet, even when the AI
+   cannot be asked (the details are then read by from_text's simple rules). Only empty fields are
+   filled: name (while it is still the phone number or the name the app set), email and organization;
+   the city or address becomes a note on the lead.
 
 Nothing is sent unless "Reply to Customers" and "Welcome New Numbers" are on, and test mode applies
 to the send and to every CRM write (safety.py). The welcome is a Periskope Auto Reply row of kind
@@ -17,6 +19,7 @@ Welcome, so it is logged with the other replies and its WhatsApp copy is told fr
 """
 
 import json
+import re
 from datetime import timedelta
 
 import frappe
@@ -73,6 +76,7 @@ CAPTURE_SCHEMA = {
 
 MESSAGE_FIELDS = [
 	"name",
+	"contact_name",
 	"chat_id",
 	"direction",
 	"is_group",
@@ -292,26 +296,22 @@ def capture(chat_id: str) -> dict:
 	"""Read the customer's messages since the welcome and put what is new on the lead (a background
 	job). Returns what was written."""
 	row = welcome_row(chat_id)
-	if not row or not _capturing(chat_id) or not assistant.is_ready():
+	if not row or not _capturing(chat_id):
 		return {}
 	# All the customer wrote, before the welcome too: a name given in the first message counts.
 	customer_text, messages = _customer_text(chat_id)
-	if not customer_text:
+	if not messages:
 		return {}
-	got = _captured(row)
-	try:
-		found = extract(row.reply_text or "", customer_text)
-	except Exception:
-		frappe.log_error(title="Periskope: could not read the customer's details")
-		return {}
-	new = {k: v for k, v in found.items() if v and not got.get(k)}
-	if not new:
-		return {}
-
+	# The customer answered the welcome: they get a lead, whether or not they gave any detail.
 	record = crm_context.record_of(chat_id) or _new_lead(messages[-1].name)
 	if not record:
 		return {}  # the number may not get a lead (ignored, a known contact)
-	written = _fill(chat_id, record, messages[-1].contact_number, new)
+	got = _captured(row)
+	found = details(row.reply_text or "", customer_text)
+	new = {k: v for k, v in found.items() if v and not got.get(k)}
+	if not new:
+		return {}
+	written = _fill(chat_id, record, messages[-1], new)
 	if written:
 		frappe.db.set_value(
 			"Periskope Auto Reply",
@@ -323,19 +323,71 @@ def capture(chat_id: str) -> dict:
 	return written
 
 
+def details(welcome_text: str, customer_text: str) -> dict:
+	"""What the customer gave: read by the AI, or by from_text when the AI cannot be asked or fails."""
+	if customer_text and assistant.is_ready():
+		try:
+			return extract(welcome_text, customer_text)
+		except Exception:
+			frappe.log_error(title="Periskope: could not read the customer's details")
+	return from_text(customer_text)
+
+
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+NAME = re.compile(
+	r"\b(?:my name is|this is|i am|i'm|myself)\s+(?!from\b)([a-z][a-z.' ]{0,40}?)(?=\s+(?:from|of|here)\b|[,.\n]|$)",
+	re.I | re.M,
+)
+COMPANY = re.compile(
+	r"(?:\b(?:my name is|this is|i am|i'm|myself)\s+[a-z.' ]{1,40}?\s+from|\bcompany(?: name)?(?: is)?\s*:?)\s+([a-z0-9&][\w&.'() -]{1,60}?)\s*(?:,\s*([^,\n]{2,60}))?\s*$",
+	re.I | re.M,
+)
+CITY = re.compile(
+	r"\b(?:city|address|located in|based in|i am from|i'm from)\s*(?:is|:)?\s+([^\n]{2,140})", re.I
+)
+
+
+def from_text(text: str) -> dict:
+	"""The details a customer writes the usual ways ("This is Priya from Agam Technologies,
+	Coimbatore", an email address), for when the AI cannot be asked. Misses more than the AI, never
+	guesses."""
+	found = dict.fromkeys(DETAILS, "")
+	text = text or ""
+	email = EMAIL.search(text)
+	if email:
+		found["email"] = (validate_email_address(email.group(0).rstrip(".")) or "").strip()
+	name = NAME.search(text)
+	if name:
+		found["name"] = (
+			name.group(1).strip(" .").title() if name.group(1).islower() else name.group(1).strip(" .")
+		)
+	company = COMPANY.search(text)
+	if company:
+		found["company"] = company.group(1).strip(" .")
+		found["city_address"] = (company.group(2) or "").strip(" .")
+	city = CITY.search(text)
+	if city:
+		found["city_address"] = city.group(1).strip(" .")
+	return {key: " ".join(value.split())[:140] for key, value in found.items()}
+
+
 def _new_lead(message: str) -> tuple[str, str] | None:
 	lead = leads.create_lead_for_message(message)
 	return ("CRM Lead", lead) if lead else None
 
 
-def _fill(chat_id: str, record: tuple[str, str], number: str, new: dict) -> dict:
+def _fill(chat_id: str, record: tuple[str, str], message, new: dict) -> dict:
 	"""Write what the record does not have yet; a value a person entered is never replaced."""
 	doctype, name = record
+	number = message.contact_number
 	written = {}
 	if doctype == "CRM Lead":
 		lead = frappe.get_doc(doctype, name)
 		values, keys = {}, []
-		if new.get("name") and (lead.first_name or "").lstrip("+") in ("", number):
+		# The lead is made with the number, or a name the app read from their messages: both give way.
+		placeholders = {"", number, " ".join(leads.split_name(leads.contact_name(message), number)).strip()}
+		current = " ".join(filter(None, (lead.first_name, lead.last_name))).lstrip("+")
+		if new.get("name") and current in placeholders:
 			first, last = leads.split_name(new["name"], number)
 			values.update(first_name=first, last_name=last)
 			keys.append("name")

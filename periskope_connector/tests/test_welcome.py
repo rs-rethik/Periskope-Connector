@@ -261,3 +261,55 @@ class TestDetails(WelcomeCase):
 		self.assertNotIn("company", written)
 		self.assertFalse(frappe.parse_json(self._welcome().captured or "{}").get("email"))
 		self.assertTrue(lead is None or not lead.email)
+
+	def test_without_the_ai_the_reply_still_makes_the_lead_and_simple_details_are_read(self):
+		with patch.object(welcome.assistant, "is_ready", return_value=False):
+			self._incoming("Hi, This is Priya from Agam Technologies, Coimbatore\npriya@gmail.com")
+			written = welcome.capture(CHAT)
+		self.assertEqual(
+			written,
+			{
+				"name": "Priya",
+				"company": "Agam Technologies",
+				"city_address": "Coimbatore",
+				"email": "priya@gmail.com",
+			},
+		)
+		lead = self._lead()
+		self.assertEqual(
+			(lead.first_name, lead.email, lead.organization),
+			("Priya", "priya@gmail.com", "Agam Technologies"),
+		)
+
+	def test_a_failing_ai_falls_back_to_the_simple_rules(self):
+		welcome.assistant.complete_json.side_effect = RuntimeError("overloaded")
+		self._incoming("my mail is ravi@ganeshmills.example.com")
+		self.assertEqual(welcome.capture(CHAT), {"email": "ravi@ganeshmills.example.com"})
+		self.assertEqual(self._lead().email, "ravi@ganeshmills.example.com")
+
+	def test_a_reply_with_no_details_still_gets_a_lead(self):
+		self.ai["details"] = {}
+		self._incoming("Need 500 kg of 30s cotton yarn")
+		self.assertEqual(welcome.capture(CHAT), {})
+		self.assertTrue(self._lead())
+
+	def test_a_name_the_app_set_on_the_lead_gives_way_to_the_one_they_tell_us(self):
+		message = self._incoming("Ravi here")
+		frappe.db.set_value("Periskope Message", message, "contact_name", "Ravi")
+		self.ai["details"] = {"name": "Ravi Kumar"}
+		welcome.capture(CHAT)
+		lead = self._lead()
+		self.assertEqual((lead.first_name, lead.last_name), ("Ravi", "Kumar"))
+
+
+class TestFromText(FrappeTestCase):
+	def test_the_usual_ways_customers_write_their_details(self):
+		self.assertEqual(
+			welcome.from_text("my name is ravi kumar\ncompany: Sri Ganesh Mills\ncity is Tiruppur"),
+			{"name": "Ravi Kumar", "company": "Sri Ganesh Mills", "city_address": "Tiruppur", "email": ""},
+		)
+		self.assertEqual(welcome.from_text("I am from Tiruppur")["name"], "")
+		self.assertEqual(welcome.from_text("I am from Tiruppur")["city_address"], "Tiruppur")
+		self.assertEqual(
+			welcome.from_text("price of 30s yarn from your mill?"), dict.fromkeys(welcome.DETAILS, "")
+		)
