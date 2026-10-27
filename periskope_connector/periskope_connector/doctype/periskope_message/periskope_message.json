@@ -583,7 +583,7 @@
    "fieldname": "agent_reply",
    "fieldtype": "Select",
    "label": "Agent Reply",
-   "options": "\nAnswer\nHolding",
+   "options": "\nAnswer\nHolding\nWelcome",
    "read_only": 1,
    "description": "Set when the AI assistant sent this message"
   },
@@ -705,7 +705,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-27 12:30:00.000000",
+ "modified": "2026-10-27 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

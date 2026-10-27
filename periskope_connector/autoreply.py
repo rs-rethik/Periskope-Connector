@@ -52,6 +52,8 @@ MESSAGE_FIELDS = [
 	"transcript",
 	"is_deleted",
 ]
+# What a sent row makes of its WhatsApp copy (Periskope Message.agent_reply).
+AGENT_REPLY = {"Sent": "Answer", "Holding Sent": "Holding", "Welcome Sent": "Welcome"}
 DEFAULT_HOLDING = "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
 
 
@@ -120,14 +122,14 @@ def cancel(chat_id: str, reason: str) -> int:
 
 
 def match_sent(chat_id: str, body: str) -> str:
-	"""For a message from our own number: "Answer" or "Holding" when it is what the assistant just
-	sent, so it is not taken for a rep's reply. "" for a human's message."""
+	"""For a message from our own number: "Answer", "Holding" or "Welcome" when it is what the
+	assistant just sent, so it is not taken for a rep's reply. "" for a human's message."""
 	since = now_datetime() - timedelta(minutes=MATCH_MINUTES)
 	row = frappe.db.get_value(
 		"Periskope Auto Reply",
 		{
 			"chat_id": chat_id,
-			"status": ["in", ["Sent", "Holding Sent"]],
+			"status": ["in", list(AGENT_REPLY)],
 			"sent_on": [">=", since],
 			"reply_text": (body or "").strip(),
 		},
@@ -136,7 +138,7 @@ def match_sent(chat_id: str, body: str) -> str:
 	)
 	if not row:
 		return ""
-	return "Answer" if row.status == "Sent" else "Holding"
+	return AGENT_REPLY[row.status]
 
 
 # --- Sending ------------------------------------------------------------------------------------

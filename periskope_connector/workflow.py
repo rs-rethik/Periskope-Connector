@@ -22,6 +22,7 @@ from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
 from periskope_connector import sla
+from periskope_connector.text_rules import NOT_ANSWERS
 
 STATUSES = ("Open", "Pending", "Resolved", "Closed")
 DONE = ("Resolved", "Closed")
@@ -103,7 +104,7 @@ def on_message(chat: str, message) -> None:
 	stamp = get_datetime(message.message_timestamp) if message.message_timestamp else now_datetime()
 	if message.direction == "Incoming":
 		_customer_wrote(row, stamp)
-	elif message.get("agent_reply") != "Holding":
+	elif message.get("agent_reply") not in NOT_ANSWERS:
 		_we_answered(row, stamp)
 
 

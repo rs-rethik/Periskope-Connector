@@ -27,7 +27,7 @@ from frappe.utils import escape_html, get_datetime, get_time, get_url_to_form, n
 
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
-from periskope_connector.text_rules import is_acknowledgement
+from periskope_connector.text_rules import NOT_ANSWERS, is_acknowledgement
 
 LOOKBACK_DAYS = 7
 MAX_SPAN_DAYS = 60
@@ -162,12 +162,12 @@ def needs_reply(message, extra_words: list[str] | None = None) -> bool:
 
 
 def _is_reply(m) -> bool:
-	"""A message from our side that answers the customer. The assistant's holding message does not:
-	it only says a rep will come back."""
+	"""A message from our side that answers the customer. The assistant's holding message and welcome
+	do not (text_rules.NOT_ANSWERS)."""
 	return (
 		m.direction == "Outgoing"
 		and bool(m.message_timestamp)
-		and getattr(m, "agent_reply", None) != "Holding"
+		and getattr(m, "agent_reply", None) not in NOT_ANSWERS
 	)
 
 

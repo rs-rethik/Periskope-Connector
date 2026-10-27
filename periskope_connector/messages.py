@@ -14,7 +14,8 @@ from periskope_connector.linking import ensure_group, link_message, number_key
 from periskope_connector.outbound import match_sent
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
-from periskope_connector.text_rules import analysis_skip_reason, skip_fields
+from periskope_connector.text_rules import NOT_ANSWERS, analysis_skip_reason, skip_fields
+from periskope_connector.welcome import on_message as welcome_on_message
 
 MESSAGE_CREATED = "message.created"
 MESSAGE_UPDATED = "message.updated"
@@ -172,7 +173,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 		frappe.db.rollback()
 		return None
 
-	if from_me and agent_reply != "Holding":
+	if from_me and agent_reply not in NOT_ANSWERS:
 		# The rep has answered: the customer's earlier messages in this chat are replied to.
 		frappe.db.sql(
 			"""update `tabPeriskope Message` set replied = 1
@@ -194,6 +195,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 
 		classifier.queue(doc.name)
 	autoreply_on_message(doc)
+	welcome_on_message(doc)
 	if not from_me and doc.message_type == "audio":
 		from periskope_connector.ai import transcribe
 

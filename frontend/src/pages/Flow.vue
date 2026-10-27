@@ -529,10 +529,11 @@ const panel = computed(() => {
 			return {
 				kick: "Step 4",
 				title: "Auto reply",
-				text: "When no rep has answered a customer within the set time, the AI answers from the knowledge base, ERPNext and the deal's last quotation. When the data does not answer it, the customer gets a holding reply and the rep a task. Never in groups.",
+				text: "When no rep has answered a customer within the set time, the AI answers from the knowledge base, ERPNext and the deal's last quotation. When the data does not answer it, the customer gets a holding reply and the rep a task. A new number is welcomed at once and asked for their name, company, city and email, which fill its lead. Never in groups.",
 				rows: [
 					["Answered today", t.Sent || 0],
 					["Holding replies today", t["Holding Sent"] || 0],
+					["New numbers welcomed today", t["Welcome Sent"] || 0],
 					["Dry runs today (test mode)", (t["Dry Run"] || 0) + (t.Blocked || 0)],
 					["Failed today", t.Failed || 0],
 					["Waiting now", d.autoreply.waiting],
@@ -544,6 +545,7 @@ const panel = computed(() => {
 						label: "When no rep answers within (minutes)",
 						type: "number",
 					},
+					{ field: "welcome_new_numbers", label: "Welcome new numbers", type: "check" },
 				],
 				links: [list("auto_replies", "All auto replies", true)],
 			};
