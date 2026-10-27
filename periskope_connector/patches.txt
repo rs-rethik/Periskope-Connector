@@ -7,3 +7,4 @@
 periskope_connector.patches.remove_rule_doctypes
 periskope_connector.patches.whatsapp_numbers_and_chats
 periskope_connector.patches.retire_desk_screens
+periskope_connector.patches.type_videos_locations_contacts_polls

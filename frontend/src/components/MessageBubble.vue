@@ -65,7 +65,7 @@
 						class="mb-1 max-h-72 cursor-zoom-in rounded"
 						loading="lazy"
 						alt=""
-						@click="open"
+						@click="$emit('view', message)"
 					/>
 					<audio
 						v-else-if="message.message_type === 'audio'"
@@ -94,8 +94,67 @@
 						}}</span>
 					</a>
 				</template>
+				<a
+					v-else-if="message.message_type === 'location'"
+					:href="mapsUrl"
+					target="_blank"
+					rel="noopener"
+					class="mb-1 flex w-64 items-start gap-2 rounded bg-surface-gray-1 px-2 py-2 hover:bg-surface-gray-2"
+					:class="mapsUrl ? '' : 'pointer-events-none'"
+				>
+					<LucideMapPin class="mt-0.5 size-5 shrink-0 text-ink-red-6" />
+					<span class="min-w-0 text-sm">
+						<span class="block font-medium text-ink-gray-9">{{
+							shared.name || "Location"
+						}}</span>
+						<span v-if="shared.address" class="block text-ink-gray-6">{{
+							shared.address
+						}}</span>
+						<span v-if="mapsUrl" class="block text-ink-blue-6">Open in Maps</span>
+					</span>
+				</a>
 				<div
-					v-if="message.body"
+					v-else-if="message.message_type === 'contact'"
+					class="mb-1 flex w-64 flex-col gap-1.5"
+				>
+					<div
+						v-for="(c, i) in shared.contacts || [{ name: message.body }]"
+						:key="i"
+						class="flex items-center gap-2 rounded bg-surface-gray-1 px-2 py-2"
+					>
+						<Avatar :label="c.name || '?'" size="md" />
+						<div class="min-w-0 text-sm">
+							<div class="truncate font-medium text-ink-gray-9">
+								{{ c.name || "Contact" }}
+							</div>
+							<a
+								v-for="p in c.phones || []"
+								:key="p.number"
+								:href="'tel:' + p.number.replace(/[^\d+]/g, '')"
+								class="block text-ink-gray-6 hover:text-ink-gray-8"
+								>{{ p.number }}</a
+							>
+						</div>
+					</div>
+				</div>
+				<div v-else-if="message.message_type === 'poll'" class="mb-1 w-64 text-sm">
+					<div class="mb-1 flex items-center gap-1 font-medium text-ink-gray-9">
+						<LucideChartBar class="size-4 shrink-0" />
+						{{ shared.question || message.body || "Poll" }}
+					</div>
+					<div
+						v-for="o in shared.options || []"
+						:key="o"
+						class="mt-1 flex items-center justify-between gap-2 rounded bg-surface-gray-1 px-2 py-1"
+					>
+						<span class="min-w-0 break-words">{{ o }}</span>
+						<span v-if="shared.votes" class="shrink-0 text-xs text-ink-gray-5">{{
+							shared.votes[o] || 0
+						}}</span>
+					</div>
+				</div>
+				<div
+					v-if="message.body && !(message.message_type in SHARED_KINDS)"
 					class="whitespace-pre-wrap break-words text-base text-ink-gray-9"
 				>
 					{{ message.body }}
@@ -104,10 +163,21 @@
 					“{{ message.transcript }}”
 				</div>
 				<div
-					v-if="!message.body && !message.has_media && message.message_type !== 'text'"
+					v-if="
+						!message.has_media &&
+						!(message.message_type in SHARED_KINDS) &&
+						!['text', 'other'].includes(message.message_type) &&
+						!message.body
+					"
 					class="text-sm text-ink-gray-5"
 				>
 					[{{ message.message_type }}]
+				</div>
+				<div
+					v-else-if="message.message_type === 'other' && !message.body"
+					class="text-sm italic text-ink-gray-5"
+				>
+					This kind of message can't be shown here. Open it in WhatsApp.
 				</div>
 			</template>
 
@@ -161,10 +231,12 @@
 
 <script setup>
 import { computed, ref } from "vue";
-import { Button, call } from "frappe-ui";
+import { Avatar, Button, call } from "frappe-ui";
 import LucideBot from "~icons/lucide/bot";
 import LucideBan from "~icons/lucide/ban";
 import LucideFileText from "~icons/lucide/file-text";
+import LucideMapPin from "~icons/lucide/map-pin";
+import LucideChartBar from "~icons/lucide/chart-bar";
 import LucideCheck from "~icons/lucide/check";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideClock from "~icons/lucide/clock";
@@ -172,22 +244,31 @@ import LucideReply from "~icons/lucide/reply";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { messageTime } from "@/utils/format";
 import { showError } from "@/utils/errors";
+import { mediaUrl as messageMediaUrl } from "@/utils/media";
 
 const props = defineProps({
 	message: { type: Object, required: true },
 	isGroup: { type: Boolean, default: false },
 	showSenderName: { type: Boolean, default: true },
 });
-const emit = defineEmits(["reply", "updated"]);
+const emit = defineEmits(["reply", "updated", "view"]);
 
 const outgoing = computed(() => props.message.direction === "Outgoing");
 const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);
-const mediaUrl = computed(
-	() =>
-		`/api/method/periskope_connector.api.inbox.media?message=${encodeURIComponent(
-			props.message.name
-		)}`
-);
+const mediaUrl = computed(() => messageMediaUrl(props.message));
+
+// A shared location, contact card or poll: its parts come from the server as `shared`. Their body is
+// the card's own text (or a map picture), so it is not shown again below.
+const SHARED_KINDS = { location: 1, contact: 1, poll: 1 };
+const shared = computed(() => props.message.shared || {});
+const mapsUrl = computed(() => {
+	const s = shared.value;
+	if (s.latitude != null && s.longitude != null)
+		return `https://www.google.com/maps/search/?api=1&query=${s.latitude},${s.longitude}`;
+	if (s.url) return s.url;
+	const q = [s.name, s.address].filter(Boolean).join(", ");
+	return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : "";
+});
 const size = computed(() => {
 	const b = props.message.media_size || 0;
 	return b > 1048576
@@ -248,9 +329,5 @@ async function retry() {
 	} finally {
 		retrying.value = false;
 	}
-}
-
-function open() {
-	window.open(mediaUrl.value, "_blank");
 }
 </script>
