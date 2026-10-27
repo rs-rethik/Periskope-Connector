@@ -13,7 +13,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from periskope_connector import access, attachments, numbers
+from periskope_connector import access, attachments, numbers, shared_items
 
 PAGE = 50
 MESSAGE_PAGE = 50
@@ -50,6 +50,7 @@ MESSAGE_FIELDS = [
 	"media_filename",
 	"media_mimetype",
 	"media_size",
+	"shared_details",
 	"media_path",
 	"attachment_file",
 	"attachment_summary",
@@ -297,6 +298,7 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 			row.sender_label = names.get(row.sender_phone) or row.sender_name or ""
 		row.quoted = quoted.get(row.quoted_message_id) if row.quoted_message_id else None
 		row.reactions = json.loads(row.reactions) if row.reactions else {}
+		row.shared = shared_items.from_row(row)
 	return {"messages": rows, "has_more": more, "notes": _notes(chat, rows, more, before)}
 
 

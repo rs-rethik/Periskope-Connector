@@ -6,7 +6,7 @@ import pytz
 from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
-from periskope_connector import attachments, numbers
+from periskope_connector import attachments, numbers, shared_items
 from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
@@ -43,13 +43,23 @@ def _to_site_datetime(value: str | None):
 	return dt.astimezone(pytz.timezone(get_system_timezone())).replace(tzinfo=None)
 
 
-MEDIA_TYPES = {"image": "image", "document": "document", "audio": "audio", "ptt": "audio"}
+MEDIA_TYPES = {"image": "image", "video": "video", "document": "document", "audio": "audio", "ptt": "audio"}
+# Shared items the inbox shows from the saved payload (shared_items.py).
+SHARED_TYPES = {"location": "location", "vcard": "contact", "multi_vcard": "contact", "poll_creation": "poll"}
 
 
 def normalise_type(raw: str | None) -> str:
-	"""Periskope's message type as one of text / image / document / audio / other."""
+	"""Periskope's message type as one of text / image / video / document / audio / location /
+	contact / poll / other."""
 	raw = (raw or "chat").lower()
-	return "text" if raw == "chat" else MEDIA_TYPES.get(raw, "other")
+	return "text" if raw == "chat" else MEDIA_TYPES.get(raw) or SHARED_TYPES.get(raw, "other")
+
+
+def _shared_details(kind: str, data: dict) -> str | None:
+	"""A location, contact card or poll as the inbox shows it, kept on the message (the raw payload
+	is cleared after a while)."""
+	found = shared_items.details(kind, data)
+	return json.dumps(found) if found else None
 
 
 def _sales_person_for_phone(number: str) -> str | None:
@@ -152,6 +162,7 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			"performed_by": data.get("performed_by"),
 			"webhook_log": webhook_log,
 			"raw_payload": json.dumps(data, indent=1),
+			"shared_details": _shared_details(kind, data),
 		}
 	)
 	try:
