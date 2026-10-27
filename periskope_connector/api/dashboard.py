@@ -106,7 +106,7 @@ def _waits(start, end, where: str, values: dict) -> list[dict]:
 			select m.periskope_chat, m.direction, m.message_timestamp,
 				lag(m.direction) over (partition by m.periskope_chat order by m.message_timestamp, m.creation) as prev
 			from `tabPeriskope Message` m
-			where m.is_group = 0 and ifnull(m.agent_reply, '') != 'Holding' and m.is_deleted = 0
+			where m.is_group = 0 and ifnull(m.agent_reply, '') not in ('Holding', 'Welcome') and m.is_deleted = 0
 				and ifnull(m.periskope_chat, '') != ''
 				and m.message_timestamp between %(lookback)s and %(end)s
 		) o
@@ -123,7 +123,7 @@ def _waits(start, end, where: str, values: dict) -> list[dict]:
 	for row in frappe.db.sql(
 		"""select periskope_chat, message_timestamp, agent_reply, sent_by, rep
 		from `tabPeriskope Message`
-		where periskope_chat in %(chats)s and direction = 'Outgoing' and ifnull(agent_reply, '') != 'Holding'
+		where periskope_chat in %(chats)s and direction = 'Outgoing' and ifnull(agent_reply, '') not in ('Holding', 'Welcome')
 			and ifnull(send_status, '') not in ('Failed', 'Not Sent', 'Sending') and message_timestamp >= %(start)s
 		order by message_timestamp""",
 		{"chats": chats, "start": values["start"]},

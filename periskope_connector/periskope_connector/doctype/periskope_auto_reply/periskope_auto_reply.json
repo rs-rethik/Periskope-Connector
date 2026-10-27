@@ -9,6 +9,7 @@
   "contact_number",
   "org_phone",
   "rep",
+  "kind",
   "column_state",
   "status",
   "due_on",
@@ -22,7 +23,8 @@
   "column_result",
   "sent_on",
   "follow_up",
-  "error"
+  "error",
+  "captured"
  ],
  "fields": [
   {
@@ -51,6 +53,17 @@
    "options": "User"
   },
   {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Kind",
+   "options": "Reply\nWelcome",
+   "default": "Reply",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "Welcome: the first message to a new number, asking for the details a lead needs."
+  },
+  {
    "fieldname": "column_state",
    "fieldtype": "Column Break"
   },
@@ -58,7 +71,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Waiting\nSent\nHolding Sent\nDry Run\nBlocked\nCancelled\nSkipped\nFailed",
+   "options": "Waiting\nSent\nHolding Sent\nWelcome Sent\nDry Run\nBlocked\nCancelled\nSkipped\nFailed",
    "default": "Waiting",
    "in_list_view": 1,
    "in_standard_filter": 1,
@@ -135,11 +148,19 @@
    "fieldtype": "Small Text",
    "label": "Error",
    "read_only": 1
+  },
+  {
+   "fieldname": "captured",
+   "fieldtype": "JSON",
+   "label": "Details Captured",
+   "read_only": 1,
+   "depends_on": "eval:doc.kind=='Welcome'",
+   "description": "What the customer told us after the welcome and the lead got: name, company, city or address, email."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-13 12:00:00.000000",
+ "modified": "2026-10-27 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Auto Reply",

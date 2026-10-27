@@ -65,11 +65,13 @@ def send_test(chat_id: str, text: str = "", phone: str = "") -> dict:
 
 
 def match_sent(chat_id: str, data: dict) -> str:
-	"""For a message from our own number arriving through the webhook: "Answer" or "Holding" when it
-	is the auto reply's own send, so it is not taken for a rep's reply. "" for anything else.
+	"""For a message from our own number arriving through the webhook: "Answer", "Holding" or
+	"Welcome" when it is the assistant's own send, so it is not taken for a rep's reply. "" for
+	anything else.
 
 	Periskope's copy carries the unique_id it returned on send (its message_id is
 	"true_<chat>_<unique_id>"), so the send is found exactly; the text match is the fallback."""
+	from periskope_connector.autoreply import AGENT_REPLY
 	from periskope_connector.autoreply import match_sent as match_by_text
 
 	# "true_<chat>_<id>", with "_<participant>" after it in a group: the id is the third part.
@@ -84,5 +86,5 @@ def match_sent(chat_id: str, data: dict) -> str:
 		if detail:
 			auto_reply = (frappe.parse_json(detail) or {}).get("auto_reply")
 			status = auto_reply and frappe.db.get_value("Periskope Auto Reply", auto_reply, "status")
-			return {"Sent": "Answer", "Holding Sent": "Holding"}.get(status, "")
+			return AGENT_REPLY.get(status, "")
 	return match_by_text(chat_id, data.get("body"))

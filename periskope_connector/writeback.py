@@ -31,6 +31,7 @@ TOPICS = {
 	"delivery": "Delivery",
 	"payment_terms": "Payment terms",
 	"contact_person": "Contact person",
+	"address": "Address",
 	"complaint": "Complaint",
 	"other": "Other details",
 }

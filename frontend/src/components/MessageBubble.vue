@@ -30,7 +30,10 @@
 				class="mb-0.5 flex items-center gap-1 text-xs font-medium text-ink-violet-6"
 			>
 				<LucideBot class="size-3" /> AI
-				{{ message.agent_reply === "Holding" ? "holding reply" : "reply" }}
+				{{
+					{ Holding: "holding reply", Welcome: "welcome" }[message.agent_reply] ||
+					"reply"
+				}}
 			</div>
 			<div
 				v-else-if="outgoing && message.sender_label"

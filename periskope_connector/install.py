@@ -144,6 +144,9 @@ def _ensure_assistant_defaults():
 	one thing the team switches on."""
 	if not _stored("reply_delay_minutes"):
 		frappe.db.set_single_value("Periskope Settings", "reply_delay_minutes", 15)
+	# New numbers are welcomed once "Reply to Customers" is on (welcome.py).
+	if not _stored("welcome_new_numbers"):
+		frappe.db.set_single_value("Periskope Settings", "welcome_new_numbers", 1)
 	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
 	# once: an admin who switches it off later is not overridden by the next migrate.
 	if not _stored("test_mode"):
