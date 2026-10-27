@@ -133,6 +133,7 @@ SECTIONS = [
 		"fields": [
 			"enable_auto_reply",
 			"reply_delay_minutes",
+			"welcome_new_numbers",
 			"working_hours_start",
 			"working_hours_end",
 			"working_days",

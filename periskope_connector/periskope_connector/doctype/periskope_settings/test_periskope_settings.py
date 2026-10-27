@@ -459,9 +459,9 @@ class TestHealthFigures(FrappeTestCase):
 
 
 class TestOutboundMessagingBoundary(FrappeTestCase):
-	"""The hard boundary: only outbound.py calls client.send_message (the auto reply goes through it),
-	client.send_message runs the test-mode check before any request, and nothing is sent while the
-	auto reply is off."""
+	"""The hard boundary: only outbound.py calls client.send_message (the auto reply and the welcome go
+	through it), client.send_message runs the test-mode check before any request, and nothing is sent
+	while the auto reply is off."""
 
 	SEND_MARKERS = (
 		"messages/send",
@@ -471,9 +471,9 @@ class TestOutboundMessagingBoundary(FrappeTestCase):
 		"chats/send",
 		"/sendmessage",
 	)
-	ALLOWED = ("client.py", "outbound.py", "autoreply.py")
+	ALLOWED = ("client.py", "outbound.py", "autoreply.py", "welcome.py")
 
-	def test_only_the_auto_reply_calls_send_message(self):
+	def test_only_the_auto_reply_and_welcome_call_send_message(self):
 		for path in APP.rglob("*.py"):
 			if "__pycache__" in str(path) or path.name.startswith("test_") or path.name in self.ALLOWED:
 				continue

@@ -99,7 +99,9 @@ def _label(m) -> str:
 	so a lead that wrote to two numbers reads clearly."""
 	from periskope_connector import numbers
 
-	ai = {"Answer": "AI reply", "Holding": "AI holding message"}.get(m.agent_reply or "", "")
+	ai = {"Answer": "AI reply", "Holding": "AI holding message", "Welcome": "AI welcome"}.get(
+		m.agent_reply or "", ""
+	)
 	via = f"via {numbers.label(m.org_phone)}" if m.org_phone else ""
 	return " · ".join(part for part in (ai, via) if part)
 

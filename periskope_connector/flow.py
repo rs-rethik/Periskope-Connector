@@ -22,6 +22,7 @@ SETTING_FIELDS = (
 	"escalation_emails",
 	"enable_auto_reply",
 	"reply_delay_minutes",
+	"welcome_new_numbers",
 )
 
 

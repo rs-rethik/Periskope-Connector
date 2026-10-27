@@ -66,6 +66,10 @@ def analysis_skip_reason(body: str | None) -> str | None:
 	return None
 
 
+# The assistant's messages that do not answer the customer: the holding reply only says a rep will
+# come back, and the welcome only asks a new number who they are.
+NOT_ANSWERS = ("Holding", "Welcome")
+
 MEDIA_LABELS = {"image": "[image]", "document": "[document]", "audio": "[voice note]", "video": "[video]"}
 
 
