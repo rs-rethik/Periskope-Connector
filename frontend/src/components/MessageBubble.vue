@@ -65,7 +65,7 @@
 						class="mb-1 max-h-72 cursor-zoom-in rounded"
 						loading="lazy"
 						alt=""
-						@click="open"
+						@click="$emit('view', message)"
 					/>
 					<audio
 						v-else-if="message.message_type === 'audio'"
@@ -172,22 +172,18 @@ import LucideReply from "~icons/lucide/reply";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { messageTime } from "@/utils/format";
 import { showError } from "@/utils/errors";
+import { mediaUrl as messageMediaUrl } from "@/utils/media";
 
 const props = defineProps({
 	message: { type: Object, required: true },
 	isGroup: { type: Boolean, default: false },
 	showSenderName: { type: Boolean, default: true },
 });
-const emit = defineEmits(["reply", "updated"]);
+const emit = defineEmits(["reply", "updated", "view"]);
 
 const outgoing = computed(() => props.message.direction === "Outgoing");
 const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);
-const mediaUrl = computed(
-	() =>
-		`/api/method/periskope_connector.api.inbox.media?message=${encodeURIComponent(
-			props.message.name
-		)}`
-);
+const mediaUrl = computed(() => messageMediaUrl(props.message));
 const size = computed(() => {
 	const b = props.message.media_size || 0;
 	return b > 1048576
@@ -248,9 +244,5 @@ async function retry() {
 	} finally {
 		retrying.value = false;
 	}
-}
-
-function open() {
-	window.open(mediaUrl.value, "_blank");
 }
 </script>

@@ -236,6 +236,29 @@ class TestInboxApi(InboxCase):
 		self.assertRaises(frappe.PermissionError, inbox.media, message)
 		self.assertEqual([n["name"] for n in inbox.get_boot()["numbers"]], [A])
 
+	def test_media_opens_in_the_browser_by_its_type(self):
+		message = frappe.db.get_value("Periskope Message", {"periskope_chat": self.mine})
+		cases = (
+			("image", "image/jpeg", "3EB0A24ABF7D6882E5210A", "inline"),
+			("document", "application/pdf", "Packing list.pdf", "inline"),
+			("document", "text/html", "page.html", "attachment"),
+		)
+		for kind, mime, filename, shown_as in cases:
+			frappe.db.set_value(
+				"Periskope Message",
+				message,
+				{
+					"message_type": kind,
+					"media_mimetype": mime,
+					"media_filename": filename,
+					"media_path": "https://example.com/file",
+				},
+			)
+			with patch("periskope_connector.attachments.download", lambda url: b"x"):
+				inbox.media(message)
+			self.assertEqual(frappe.local.response.content_type, mime)
+			self.assertEqual(frappe.local.response.display_content_as, shown_as)
+
 	def test_messages_never_carry_the_periskope_link(self):
 		rows = inbox.get_messages(self.mine)["messages"]
 		self.assertNotIn("media_path", rows[0])

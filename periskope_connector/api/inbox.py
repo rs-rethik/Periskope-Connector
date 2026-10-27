@@ -6,6 +6,7 @@ Message. Nothing here calls Periskope: the browser never gets a Periskope key or
 """
 
 import json
+import mimetypes
 import re
 
 import frappe
@@ -366,6 +367,8 @@ def mark_seen(chat: str) -> None:
 
 
 SAFE_NAME = re.compile(r"[^\w.\- ]+")
+INLINE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf")
+INLINE_PREFIXES = ("video/", "audio/")
 
 
 @frappe.whitelist()
@@ -397,10 +400,16 @@ def media(message: str):
 	else:
 		raise frappe.DoesNotExistError
 	name = SAFE_NAME.sub("", doc.media_filename or "") or doc.name
+	# WhatsApp names images by id, with no extension, so the type comes from the message.
+	content_type = attachments._mime(doc) or mimetypes.guess_type(name)[0] or "application/octet-stream"
 	frappe.local.response.filename = name
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
-	frappe.local.response.display_content_as = "inline"
+	frappe.local.response.content_type = content_type
+	# Only media the browser shows safely opens in place; anything else (HTML, SVG) is downloaded.
+	frappe.local.response.display_content_as = (
+		"inline" if content_type in INLINE_TYPES or content_type.startswith(INLINE_PREFIXES) else "attachment"
+	)
 
 
 @frappe.whitelist()
