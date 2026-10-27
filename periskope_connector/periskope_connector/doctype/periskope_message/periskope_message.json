@@ -74,6 +74,7 @@
   "attachment_summary",
   "attachment_not_on_crm",
   "media_size",
+  "shared_details",
   "attachment_file",
   "section_meta",
   "chat_id",
@@ -120,7 +121,7 @@
    "in_standard_filter": 1,
    "label": "Message Type",
    "read_only": 1,
-   "options": "\ntext\nimage\ndocument\naudio\nother"
+   "options": "\ntext\nimage\nvideo\ndocument\naudio\nlocation\ncontact\npoll\nother"
   },
   {
    "fieldname": "message_timestamp",
@@ -363,6 +364,13 @@
    "fieldname": "media_size",
    "fieldtype": "Int",
    "label": "File Size (bytes)",
+   "read_only": 1
+  },
+  {
+   "description": "A shared location, contact card or poll, as the inbox shows it.",
+   "fieldname": "shared_details",
+   "fieldtype": "JSON",
+   "label": "Shared Item",
    "read_only": 1
   },
   {
@@ -697,7 +705,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-23 15:00:29.889883",
+ "modified": "2026-10-27 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

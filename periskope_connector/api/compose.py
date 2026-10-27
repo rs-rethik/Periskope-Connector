@@ -17,7 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
-from periskope_connector import access, attachments, chat, safety
+from periskope_connector import access, attachments, chat, safety, shared_items
 from periskope_connector.outbound import send as send_whatsapp
 from periskope_connector.setup_status import agent_on
 from periskope_connector.text_rules import skip_fields
@@ -388,6 +388,7 @@ def _row(name: str) -> dict:
 	row = frappe.db.get_value("Periskope Message", name, MESSAGE_FIELDS, as_dict=True)
 	row.has_media = bool(row.attachment_file) or attachments.has_file(row)
 	row.pop("media_path", None)
+	row.shared = shared_items.from_row(row)
 	return row
 
 

@@ -15,6 +15,8 @@ from frappe.utils import get_datetime
 from periskope_connector.periskope_connector.doctype.periskope_chat.periskope_chat import key
 from periskope_connector.text_rules import MEDIA_LABELS, readable_text
 
+SHARED_LABELS = {"location": "[location]", "contact": "[contact]", "poll": "[poll]"}
+
 PREVIEW_CHARS = 140
 
 
@@ -48,10 +50,13 @@ def preview(message) -> str:
 	if message.get("is_deleted"):
 		return "This message was deleted"
 	text = readable_text(message)
-	if not text and message.get("message_type") in MEDIA_LABELS:
-		text = MEDIA_LABELS[message.message_type] + (
-			f" {message.media_filename}" if message.get("media_filename") else ""
-		)
+	kind = message.get("message_type")
+	if not text and kind in MEDIA_LABELS:
+		text = MEDIA_LABELS[kind] + (f" {message.media_filename}" if message.get("media_filename") else "")
+	elif not text and kind in SHARED_LABELS:
+		# a contact card's body is the contact's name; a location's may be a picture, so it is not shown
+		name = message.get("body") if kind != "location" else ""
+		text = SHARED_LABELS[kind] + (f" {name}" if name else "")
 	return " ".join((text or "").split())[:PREVIEW_CHARS]
 
 

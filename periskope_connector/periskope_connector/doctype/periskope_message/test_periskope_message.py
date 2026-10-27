@@ -195,14 +195,18 @@ class TestPeriskopeMessage(FrappeTestCase):
 		self.assertIsNone(dt.tzinfo)
 		self.assertIsNone(messages._to_site_datetime("not a date"))
 
-	def test_message_type_is_one_of_five_and_the_raw_type_is_kept(self):
+	def test_message_type_is_normalised_and_the_raw_type_is_kept(self):
 		for raw, expected in (
 			("chat", "text"),
 			("image", "image"),
+			("video", "video"),
 			("document", "document"),
 			("ptt", "audio"),
 			("audio", "audio"),
-			("video", "other"),
+			("location", "location"),
+			("vcard", "contact"),
+			("multi_vcard", "contact"),
+			("poll_creation", "poll"),
 			("sticker", "other"),
 		):
 			doc = frappe.get_doc(

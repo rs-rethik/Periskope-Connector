@@ -71,6 +71,7 @@
 						:show-sender-name="showName(i)"
 						@reply="replyTo = $event"
 						@updated="replace"
+						@view="viewing = $event.name"
 					/>
 				</template>
 				<div v-if="loading" class="flex justify-center p-6">
@@ -95,6 +96,7 @@
 			@noted="addNote"
 			@clear-reply="replyTo = null"
 		/>
+		<MediaViewer v-model="viewing" :images="images" :chat-title="chat?.title || ''" />
 	</div>
 </template>
 
@@ -108,6 +110,7 @@ import LucideArrowLeft from "~icons/lucide/arrow-left";
 import MessageBubble from "@/components/MessageBubble.vue";
 import Composer from "@/components/Composer.vue";
 import ChatActions from "@/components/ChatActions.vue";
+import MediaViewer from "@/components/MediaViewer.vue";
 import { changed, chatCache, inbox, loadCounts } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
@@ -155,6 +158,11 @@ const composer = ref(null);
 const replyTo = ref(null);
 const actions = ref(null);
 const content = ref(null);
+// The image open in the viewer, and the chat's images it steps through, oldest first.
+const viewing = ref(null);
+const images = computed(() =>
+	messages.value.filter((m) => m.has_media && m.message_type === "image" && !m.is_deleted)
+);
 // Whether the view follows the newest message: true until the reader scrolls up, so images and files
 // that finish loading after the jump to the bottom do not push the latest messages out of view.
 const stuck = ref(true);
@@ -339,6 +347,7 @@ watch(
 		notes.value = [];
 		chat.value = null;
 		replyTo.value = null;
+		viewing.value = null;
 		restore();
 		load();
 	}
