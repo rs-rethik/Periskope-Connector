@@ -41,6 +41,8 @@
 				</div>
 			</header>
 
+			<FestivalBanner />
+
 			<!-- the four numbers -->
 			<section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 				<button
@@ -278,6 +280,8 @@ import LucideHandshake from "~icons/lucide/handshake";
 import LucideUserRound from "~icons/lucide/user-round";
 import SlaBadge from "@/components/SlaBadge.vue";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
+import FestivalBanner from "@/components/FestivalBanner.vue";
+import { setFestival } from "@/utils/festival";
 import { boot } from "@/boot";
 import { inbox } from "@/stores/inbox";
 import { messageTime } from "@/utils/format";
@@ -347,6 +351,7 @@ async function load() {
 	loading.value = true;
 	try {
 		data.value = await call("periskope_connector.api.today.get_today");
+		setFestival(data.value.festival);
 	} catch (e) {
 		showError(e, "Could not load Today.");
 	} finally {

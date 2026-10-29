@@ -89,26 +89,18 @@
 
 html,
 body {
-	font-family:
-		"Geist Variable",
-		ui-sans-serif,
-		system-ui,
-		-apple-system,
-		"Segoe UI",
-		sans-serif;
+	font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* The sidebar: light, with a soft mint wash at the top. */
 .side-panel {
 	--surface-sidebar: transparent;
-	background:
-		radial-gradient(420px 260px at 0% 0%, oklch(90% 0.06 170 / 0.55), transparent 70%),
+	background: radial-gradient(420px 260px at 0% 0%, oklch(90% 0.06 170 / 0.55), transparent 70%),
 		linear-gradient(180deg, oklch(96.4% 0.018 168) 0%, var(--surface-gray-1) 55%);
 }
 
 :root[data-theme="dark"] .side-panel {
-	background:
-		radial-gradient(420px 260px at 0% 0%, oklch(45% 0.08 175 / 0.22), transparent 70%),
+	background: radial-gradient(420px 260px at 0% 0%, oklch(45% 0.08 175 / 0.22), transparent 70%),
 		linear-gradient(180deg, oklch(23.5% 0.022 180) 0%, var(--surface-gray-1) 55%);
 }
 
@@ -165,9 +157,7 @@ body {
 .panel-frame {
 	border: 1px solid var(--outline-gray-1);
 	border-radius: 14px;
-	box-shadow:
-		0 1px 2px oklch(25% 0.02 180 / 0.05),
-		0 14px 34px -24px oklch(25% 0.03 180 / 0.35);
+	box-shadow: 0 1px 2px oklch(25% 0.02 180 / 0.05), 0 14px 34px -24px oklch(25% 0.03 180 / 0.35);
 }
 .panel {
 	background-color: var(--surface-base);
@@ -190,16 +180,14 @@ body {
 		border: 1px solid var(--outline-gray-1);
 		border-radius: 14px;
 		background-color: var(--surface-base);
-		box-shadow:
-			0 1px 2px oklch(25% 0.02 180 / 0.05),
+		box-shadow: 0 1px 2px oklch(25% 0.02 180 / 0.05),
 			0 14px 34px -24px oklch(25% 0.03 180 / 0.35);
 		overflow: hidden;
 	}
 }
 
 .app-canvas {
-	background:
-		radial-gradient(640px 260px at 6% 0%, oklch(72% 0.09 175 / 0.13), transparent 70%),
+	background: radial-gradient(640px 260px at 6% 0%, oklch(72% 0.09 175 / 0.13), transparent 70%),
 		radial-gradient(560px 240px at 96% 0%, oklch(70% 0.08 240 / 0.09), transparent 70%),
 		var(--app-canvas);
 }
@@ -291,4 +279,165 @@ body {
 	padding: 0.6rem 0.75rem;
 	font-size: 0.8125rem;
 	color: var(--ink-gray-5);
+}
+
+/* Brand colour (Settings > Branding; utils/brand.js sets --brand and <html data-brand>): solid buttons,
+   the sidebar wash and the selected menu item. Solid buttons keep white text readable: a light colour is
+   darkened for them (and lightened in dark mode) where the browser can. */
+:root[data-brand] {
+	--surface-gray-9: var(--brand);
+	--surface-gray-9: oklch(from var(--brand) min(l, 0.52) c h);
+	--surface-gray-10: color-mix(in oklch, var(--brand) 75%, black);
+}
+:root[data-brand][data-theme="dark"] {
+	--surface-gray-9: color-mix(in oklch, var(--brand) 55%, white);
+	--surface-gray-9: oklch(from var(--brand) max(l, 0.78) min(c, 0.14) h);
+	--surface-gray-10: color-mix(in oklch, var(--brand) 20%, white);
+}
+:root[data-brand] .side-panel {
+	background: radial-gradient(
+			420px 260px at 0% 0%,
+			color-mix(in oklch, var(--brand) 34%, transparent),
+			transparent 70%
+		),
+		linear-gradient(
+			180deg,
+			color-mix(in oklch, var(--brand) 12%, var(--surface-gray-1)) 0%,
+			var(--surface-gray-1) 55%
+		);
+}
+:root[data-brand][data-theme="dark"] .side-panel {
+	background: radial-gradient(
+			420px 260px at 0% 0%,
+			color-mix(in oklch, var(--brand) 28%, transparent),
+			transparent 70%
+		),
+		linear-gradient(
+			180deg,
+			color-mix(in oklch, var(--brand) 10%, var(--surface-gray-1)) 0%,
+			var(--surface-gray-1) 55%
+		);
+}
+:root[data-brand] .side-panel [data-state="active"] {
+	background: color-mix(in oklch, var(--brand) 18%, var(--surface-base));
+	box-shadow: inset 3px 0 0 var(--brand);
+}
+:root[data-brand][data-theme="dark"] .side-panel [data-state="active"] {
+	background: color-mix(in oklch, var(--brand) 34%, var(--surface-base));
+	box-shadow: inset 3px 0 0 color-mix(in oklch, var(--brand) 60%, white);
+}
+
+/* Festival days (utils/festival.js sets <html data-festival="<look>">): the sidebar, the page
+   background, the active menu item and the solid buttons take the festival's two hues. */
+:root[data-festival="diwali"] {
+	--fest-h1: 45;
+	--fest-h2: 80;
+}
+:root[data-festival="pongal"] {
+	--fest-h1: 140;
+	--fest-h2: 90;
+}
+:root[data-festival="tamil_new_year"] {
+	--fest-h1: 50;
+	--fest-h2: 95;
+}
+:root[data-festival="ayudha_pooja"] {
+	--fest-h1: 30;
+	--fest-h2: 60;
+}
+:root[data-festival="christmas"] {
+	--fest-h1: 25;
+	--fest-h2: 150;
+}
+:root[data-festival="new_year"] {
+	--fest-h1: 290;
+	--fest-h2: 330;
+}
+:root[data-festival="holi"] {
+	--fest-h1: 350;
+	--fest-h2: 300;
+}
+:root[data-festival="eid"] {
+	--fest-h1: 170;
+	--fest-h2: 90;
+}
+:root[data-festival="national"] {
+	--fest-h1: 50;
+	--fest-h2: 145;
+}
+:root[data-festival="festive"] {
+	--fest-h1: 0;
+	--fest-h2: 70;
+}
+
+:root[data-festival] {
+	--surface-gray-9: oklch(48% 0.14 var(--fest-h1));
+	--surface-gray-10: oklch(38% 0.12 var(--fest-h1));
+}
+:root[data-festival][data-theme="dark"] {
+	--surface-gray-9: oklch(80% 0.12 var(--fest-h1));
+	--surface-gray-10: oklch(92% 0.05 var(--fest-h1));
+}
+
+:root[data-festival] .side-panel {
+	background: radial-gradient(
+			420px 280px at 0% 0%,
+			oklch(88% 0.09 var(--fest-h1) / 0.6),
+			transparent 70%
+		),
+		radial-gradient(
+			360px 240px at 100% 100%,
+			oklch(90% 0.08 var(--fest-h2) / 0.45),
+			transparent 70%
+		),
+		linear-gradient(180deg, oklch(96.5% 0.025 var(--fest-h1)) 0%, var(--surface-gray-1) 60%);
+}
+:root[data-festival][data-theme="dark"] .side-panel {
+	background: radial-gradient(
+			420px 280px at 0% 0%,
+			oklch(45% 0.1 var(--fest-h1) / 0.3),
+			transparent 70%
+		),
+		radial-gradient(
+			360px 240px at 100% 100%,
+			oklch(45% 0.09 var(--fest-h2) / 0.2),
+			transparent 70%
+		),
+		linear-gradient(180deg, oklch(24% 0.03 var(--fest-h1)) 0%, var(--surface-gray-1) 60%);
+}
+
+:root[data-festival] .app-canvas {
+	background: radial-gradient(
+			680px 280px at 6% 0%,
+			oklch(78% 0.13 var(--fest-h1) / 0.16),
+			transparent 70%
+		),
+		radial-gradient(
+			600px 260px at 96% 0%,
+			oklch(80% 0.12 var(--fest-h2) / 0.14),
+			transparent 70%
+		),
+		var(--app-canvas);
+}
+:root[data-festival][data-theme="dark"] .app-canvas {
+	background: radial-gradient(
+			680px 280px at 6% 0%,
+			oklch(60% 0.12 var(--fest-h1) / 0.14),
+			transparent 70%
+		),
+		radial-gradient(
+			600px 260px at 96% 0%,
+			oklch(60% 0.11 var(--fest-h2) / 0.1),
+			transparent 70%
+		),
+		var(--app-canvas);
+}
+
+:root[data-festival] .side-panel [data-state="active"] {
+	background: oklch(93% 0.05 var(--fest-h1));
+	box-shadow: inset 3px 0 0 oklch(62% 0.16 var(--fest-h1));
+}
+:root[data-festival][data-theme="dark"] .side-panel [data-state="active"] {
+	background: oklch(32% 0.06 var(--fest-h1));
+	box-shadow: inset 3px 0 0 oklch(75% 0.14 var(--fest-h1));
 }

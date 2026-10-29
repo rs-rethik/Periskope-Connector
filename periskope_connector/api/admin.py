@@ -146,6 +146,11 @@ SECTIONS = [
 		"confirm": True,
 		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails"],
 	},
+	{
+		"key": "branding",
+		"title": "Branding",
+		"fields": ["brand_name", "brand_logo", "brand_color", "app_name", "app_icon", "festival_themes"],
+	},
 ]
 SECRET_TYPES = ("Password",)
 
