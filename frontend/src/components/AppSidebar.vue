@@ -3,9 +3,15 @@
 		<Sidebar v-model:collapsed="collapsed" class="border-r border-outline-gray-1">
 			<div class="flex h-full flex-col p-2">
 				<div class="flex shrink-0 items-center gap-2 px-2 py-1.5">
-					<img :src="logo" class="size-7 shrink-0 rounded" alt="" />
+					<img
+						:src="boot.brand?.logo || logo"
+						class="size-7 shrink-0 rounded object-contain"
+						alt=""
+					/>
 					<div v-if="!collapsed" class="min-w-0">
-						<div class="truncate text-base font-medium text-ink-gray-9">WhatsApp</div>
+						<div class="truncate text-base font-medium text-ink-gray-9">
+							{{ boot.brand?.name || "WhatsApp" }}
+						</div>
 						<div class="truncate text-xs text-ink-gray-5">{{ boot.full_name }}</div>
 					</div>
 				</div>

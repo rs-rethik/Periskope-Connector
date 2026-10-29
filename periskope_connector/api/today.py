@@ -11,6 +11,7 @@ from frappe import _
 from frappe.utils import add_days, get_datetime, get_fullname, getdate, now_datetime, today
 
 from periskope_connector import access, reminders
+from periskope_connector.ai import festival
 from periskope_connector.api.inbox import CHAT_COLUMNS, _decorate, _where
 
 LIMIT = 8
@@ -36,6 +37,7 @@ def get_today() -> dict:
 		"tasks": {"rows": tasks, "total": tasks_total, "overdue": overdue},
 		"quiet": {"rows": quiet, "total": quiet_total, "days": QUIET_DAYS},
 		"new": {"rows": new, "total": new_total},
+		"festival": festival.current(),
 	}
 
 

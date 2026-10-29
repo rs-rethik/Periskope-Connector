@@ -13,6 +13,7 @@ from frappe.utils import strip_html
 
 from periskope_connector import access, chat, numbers
 from periskope_connector.linking import link_message
+from periskope_connector.text_rules import readable_text
 
 DOCTYPES = ("CRM Lead", "CRM Deal")
 NOTE_LIMIT = 5
@@ -73,6 +74,7 @@ def get_context(chat_name: str) -> dict:
 		"other_chats": _other_chats(row),
 	}
 	record = _record(row)
+	out["related"] = _related(row, record)
 	if not record:
 		return out
 	doctype, name = record
@@ -102,6 +104,104 @@ def get_context(chat_name: str) -> dict:
 		"tasks": _tasks(doctype, name),
 	}
 	return out
+
+
+def _related(row, active: tuple[str, str] | None) -> list[dict]:
+	"""Every lead and deal tied to this chat, the one it follows first: the chat's record, the leads
+	and deals with the contact's number, the records its messages were linked to (a group can hold
+	several customers), the deals made from its messages, and the deals of each of those leads."""
+	from periskope_connector.linking import by_mobile
+
+	pairs = []  # (doctype, name)
+	if active:
+		pairs.append(active)
+	if row.contact_number and not row.is_group:
+		for lead, deal in by_mobile(row.contact_number):
+			pairs += [("CRM Deal", deal)] if deal else []
+			pairs += [("CRM Lead", lead)] if lead else []
+	for m in frappe.get_all(
+		"Periskope Message",
+		filters={"chat_id": row.chat_id},
+		fields=["crm_lead", "crm_deal"],
+		distinct=True,
+		limit=200,
+	):
+		pairs += [("CRM Deal", m.crm_deal)] if m.crm_deal else []
+		pairs += [("CRM Lead", m.crm_lead)] if m.crm_lead else []
+	if frappe.get_meta("CRM Deal").has_field("periskope_message"):
+		made = frappe.db.sql(
+			"""select d.name from `tabCRM Deal` d join `tabPeriskope Message` m on m.name = d.periskope_message
+			where m.chat_id = %s""",
+			row.chat_id,
+		)
+		pairs += [("CRM Deal", r[0]) for r in made]
+	leads = {n for dt, n in pairs if dt == "CRM Lead"}
+	if leads:
+		pairs += [
+			("CRM Deal", d)
+			for d in frappe.get_all("CRM Deal", filters={"lead": ["in", list(leads)]}, pluck="name")
+		]
+	pairs = list(dict.fromkeys(p for p in pairs if p[1]))
+
+	types = {
+		dt: {r.name: r for r in frappe.get_all(f"{dt} Status", fields=["name", "color", "type"])}
+		for dt in DOCTYPES
+	}
+	made_from = {}
+	if frappe.get_meta("CRM Deal").has_field("periskope_message"):
+		names = [n for dt, n in pairs if dt == "CRM Deal"]
+		if names:
+			made_from = dict(
+				frappe.get_all(
+					"CRM Deal",
+					filters={"name": ["in", names], "periskope_message": ["is", "set"]},
+					fields=["name", "periskope_message"],
+					as_list=True,
+				)
+			)
+	out = []
+	for doctype, name in pairs:
+		if not frappe.db.exists(doctype, name) or not frappe.has_permission(doctype, "read", name):
+			continue
+		is_deal = doctype == "CRM Deal"
+		fields = (
+			["name", "status", "modified", "deal_owner as owner", "organization", "lead_name"]
+			if is_deal
+			else [
+				"name",
+				"status",
+				"modified",
+				"lead_owner as owner",
+				"organization",
+				"lead_name",
+				"converted",
+			]
+		)
+		if is_deal:
+			fields += [f for f in ("deal_value",) if frappe.get_meta("CRM Deal").has_field(f)]
+		r = frappe.db.get_value(doctype, name, fields, as_dict=True)
+		status = types[doctype].get(r.status)
+		out.append(
+			{
+				"doctype": doctype,
+				"name": name,
+				"title": (r.organization if is_deal else None) or r.lead_name or r.organization or name,
+				"status": r.status,
+				"color": status.color if status else None,
+				"closed": bool(status and status.type in ("Won", "Lost")) or bool(r.get("converted")),
+				"owner_name": frappe.utils.get_fullname(r.owner) if r.owner else "",
+				"value": r.get("deal_value") or 0,
+				"modified": r.modified,
+				"route": _route(doctype, name),
+				"active": active == (doctype, name),
+				"from_message": made_from.get(name),
+			}
+		)
+	# the followed one, then open deals, open leads, then the closed ones; newest first in each
+	out.sort(
+		key=lambda x: (not x["active"], x["closed"], x["doctype"] != "CRM Deal", -x["modified"].timestamp())
+	)
+	return out[:25]
 
 
 def _summary(note: str | None) -> str:
@@ -422,6 +522,163 @@ def reschedule_task(chat_name: str, task: str | int, due_date: str) -> dict:
 	doc.due_date = frappe.utils.get_datetime(due_date)
 	doc.save()
 	return get_context(chat_name)
+
+
+# --- A deal made from a message -------------------------------------------------------------------
+
+MESSAGE_FIELDS = [
+	"name",
+	"chat_id",
+	"periskope_chat",
+	"direction",
+	"body",
+	"message_type",
+	"transcript",
+	"message_timestamp",
+	"sender_phone",
+	"sender_name",
+	"sent_by",
+]
+
+
+def _lead_of(row) -> str | None:
+	"""The lead this chat's customer is: the chat's lead, or the lead of its deal."""
+	if row.crm_lead:
+		return row.crm_lead
+	return frappe.db.get_value("CRM Deal", row.crm_deal, "lead") if row.crm_deal else None
+
+
+def _sender(row, msg) -> tuple[str | None, str]:
+	"""(phone, name) of who wrote the message: in a group the participant, else the chat's contact."""
+	if row.is_group:
+		phone = msg.sender_phone
+		from periskope_connector.api.inbox import _participant_names
+
+		name = msg.get("sender_name") or _participant_names([phone] if phone else []).get(phone) or ""
+		return phone, name or (f"+{phone}" if phone else "")
+	return row.contact_number, row.chat_name or (f"+{row.contact_number}" if row.contact_number else "")
+
+
+def _customer_message(row, message: str):
+	msg = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
+	if not msg or msg.chat_id != row.chat_id:
+		frappe.throw(_("That message is not in this chat."), frappe.PermissionError)
+	if msg.direction != "Incoming":
+		frappe.throw(_("Make the deal from the customer's message, not ours."))
+	return msg
+
+
+def _lead_for(row, phone: str | None) -> str | None:
+	"""The lead of the person a deal is for: in a group, the one matched by the sender's number."""
+	if not row.is_group:
+		return _lead_of(row)
+	from periskope_connector.linking import by_mobile, resolve
+
+	lead, deal, _status = resolve(by_mobile(phone)) if phone else (None, None, None)
+	return lead or (frappe.db.get_value("CRM Deal", deal, "lead") if deal else None)
+
+
+@frappe.whitelist()
+def deal_defaults(chat_name: str, message: str | None = None) -> dict:
+	"""What the "Create deal" form starts with: the customer's name, email and company from the lead
+	(or the chat), and the deal statuses (the first open one preselected)."""
+	access.require_inbox_user()
+	row = _chat(chat_name)
+	phone, sender = _sender(row, _customer_message(row, message)) if message else (row.contact_number, "")
+	lead = _lead_for(row, phone)
+	values = {"first_name": "", "last_name": "", "email": "", "organization": ""}
+	if lead and frappe.has_permission("CRM Lead", "read", lead):
+		values.update(
+			frappe.db.get_value(
+				"CRM Lead", lead, ["first_name", "last_name", "email", "organization"], as_dict=True
+			)
+			or {}
+		)
+	if not values.get("first_name"):
+		values["first_name"] = (
+			sender or row.chat_name or (f"+{row.contact_number}" if row.contact_number else "")
+		)
+	options = statuses("CRM Deal")
+	first_open = next((s["value"] for s in options if s["type"] not in ("Won", "Lost")), None)
+	return {
+		**{k: v or "" for k, v in values.items()},
+		"lead": lead,
+		"for_phone": phone,
+		"statuses": options,
+		"status": first_open,
+		"can_create": bool(frappe.has_permission("CRM Deal", "create")),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def create_deal_from_message(
+	chat_name: str,
+	message: str,
+	status: str | None = None,
+	organization: str = "",
+	first_name: str = "",
+	last_name: str = "",
+	email: str = "",
+	expected_closure_date: str | None = None,
+	deal_value: float | None = None,
+	note: str = "",
+) -> dict:
+	"""A new deal straight from a message: the customer's contact and company (found or made by the
+	CRM's own create_deal), the chat's lead linked but not converted, the message kept on the deal
+	(the "From WhatsApp Message" field and a note), and the chat moved to the new deal."""
+	from crm.fcrm.doctype.crm_deal.crm_deal import create_deal
+
+	access.require_inbox_user()
+	row = _chat(chat_name)
+	msg = _customer_message(row, message)
+	phone, sender = _sender(row, msg)
+	frappe.has_permission("CRM Deal", "create", throw=True)
+	options = [s["value"] for s in statuses("CRM Deal")]
+	if status and status not in options:
+		frappe.throw(_("Unknown status {0}").format(status))
+
+	lead = _lead_for(row, phone)
+	doc = {
+		"first_name": (first_name or "").strip() or sender or None,
+		"last_name": (last_name or "").strip() or None,
+		"email": (email or "").strip() or None,
+		"mobile_no": f"+{phone}" if phone else None,
+		"organization_name": (organization or "").strip() or None,
+		"lead": lead,
+		"deal_owner": frappe.session.user,
+		"status": status or None,
+		"expected_closure_date": expected_closure_date or None,
+	}
+	meta = frappe.get_meta("CRM Deal")
+	if deal_value and meta.has_field("deal_value"):
+		doc["deal_value"] = frappe.utils.flt(deal_value)
+	if meta.has_field("periskope_message"):
+		doc["periskope_message"] = msg.name
+	if lead and meta.has_field("lead_name"):
+		doc["lead_name"] = frappe.db.get_value("CRM Lead", lead, "lead_name")
+	doc = {k: v for k, v in doc.items() if v not in (None, "")}
+	deal = create_deal(doc)
+
+	text = readable_text(msg) or _("[{0}]").format(msg.message_type or _("message"))
+	who = sender or row.chat_name
+	when = frappe.utils.format_datetime(msg.message_timestamp, "d MMM yyyy, h:mm a")
+	extra = frappe.utils.escape_html((note or "").strip()).replace("\n", "<br>")
+	frappe.get_doc(
+		{
+			"doctype": "FCRM Note",
+			"title": _("From WhatsApp"),
+			"content": (f"<p>{extra}</p>" if extra else "")
+			+ f"<p><b>{frappe.utils.escape_html(who)}</b> · {when}</p>"
+			+ f"<blockquote>{frappe.utils.escape_html(text).replace(chr(10), '<br>')}</blockquote>"
+			+ f'<p><a href="/whatsapp/inbox/{row.name}">{_("Open the WhatsApp chat")}</a></p>',
+			"reference_doctype": "CRM Deal",
+			"reference_docname": deal,
+		}
+	).insert()
+	_relink(row, lead, deal, by_hand=True)
+	context = get_context(chat_name)
+	context["created_deal"] = {"name": deal, "route": _route("CRM Deal", deal)}
+	return context
 
 
 # --- The full view: the lead, its deals, and their quotations and sales orders -----------------

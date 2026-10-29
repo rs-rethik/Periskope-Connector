@@ -35,6 +35,16 @@ CUSTOM_FIELDS = {
 		),
 	],
 	"CRM Deal": [
+		# the WhatsApp message a rep made this deal from (api/crm_panel.create_deal_from_message)
+		dict(
+			fieldname="periskope_message",
+			label="From WhatsApp Message",
+			fieldtype="Link",
+			options="Periskope Message",
+			insert_after="lead",
+			read_only=1,
+			no_copy=1,
+		),
 		dict(
 			fieldname="periskope_phone_e164",
 			label="Periskope Phone (E.164)",

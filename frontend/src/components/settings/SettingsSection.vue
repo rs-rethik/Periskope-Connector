@@ -142,6 +142,8 @@ const hint = computed(
 			test_mode:
 				"While testing, messages and emails go only to the listed numbers and addresses.",
 			voice: "Google Gemini turns customers' voice notes into text.",
+			branding:
+				"Your company's name, logo and colour in the app, and how it looks when installed on a phone.",
 		}[props.sectionKey] || "")
 );
 

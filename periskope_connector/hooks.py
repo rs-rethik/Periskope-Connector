@@ -31,11 +31,16 @@ add_to_apps_screen = [
 # The WhatsApp inbox app (frontend/, built into www/whatsapp.html).
 website_route_rules = [
 	{"from_route": "/whatsapp/sw.js", "to_route": "whatsapp_sw"},
+	{"from_route": "/whatsapp/manifest.webmanifest", "to_route": "whatsapp_manifest"},
 	{"from_route": "/whatsapp/<path:app_path>", "to_route": "whatsapp"},
 ]
 
 # the inbox's service worker, served inside /whatsapp/ (pwa.py)
-page_renderer = ["periskope_connector.pwa.ServiceWorkerRenderer"]
+# and its install manifest, with the name and icon from Settings > Branding (branding.py)
+page_renderer = [
+	"periskope_connector.pwa.ServiceWorkerRenderer",
+	"periskope_connector.branding.ManifestRenderer",
+]
 
 after_install = "periskope_connector.install.after_install"
 after_migrate = "periskope_connector.install.after_migrate"
@@ -107,6 +112,8 @@ scheduler_events = {
 		"*/30 * * * *": ["periskope_connector.messages.sweep_unprocessed"],
 		# Read the chat history from Periskope and save messages a missed webhook never delivered.
 		"15 * * * *": ["periskope_connector.backfill.run"],
+		# Once a day the AI searches the web for today's festival (the Today page's festive look).
+		"5 * * * *": ["periskope_connector.ai.festival.refresh"],
 	},
 	"daily": [
 		# Yesterday's unmatched contacts to the sales head, ranked by activity.

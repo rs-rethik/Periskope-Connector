@@ -57,6 +57,79 @@
 				:model-value="modelValue"
 				@update:model-value="(v) => emit('update:modelValue', v)"
 			/>
+			<!-- an image: uploaded as a public file (the install icon is fetched without a login) -->
+			<div v-else-if="field.fieldtype === 'Attach Image'" class="flex items-center gap-3">
+				<span
+					class="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+				>
+					<img
+						v-if="modelValue"
+						:src="modelValue"
+						class="size-full object-contain"
+						alt=""
+					/>
+					<LucideImage v-else class="size-5 text-ink-gray-4" />
+				</span>
+				<FileUploader
+					file-types="image/*"
+					:upload-args="{ private: false }"
+					@success="(file) => emit('update:modelValue', file.file_url)"
+				>
+					<template #default="{ uploading, progress, error, openFileSelector }">
+						<span v-if="error" class="mr-2 text-xs text-ink-red-6">Not uploaded.</span>
+						<Button
+							size="sm"
+							:loading="uploading"
+							:label="
+								uploading
+									? `Uploading ${progress}%`
+									: modelValue
+									? 'Change'
+									: 'Upload'
+							"
+							@click="openFileSelector"
+						/>
+					</template>
+				</FileUploader>
+				<Button
+					v-if="modelValue"
+					size="sm"
+					variant="ghost"
+					label="Remove"
+					@click="emit('update:modelValue', '')"
+				/>
+			</div>
+			<div v-else-if="field.fieldtype === 'Color'" class="flex items-center gap-2">
+				<label
+					class="relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-outline-gray-2"
+					:style="{ background: modelValue || 'transparent' }"
+					title="Pick a colour"
+				>
+					<input
+						type="color"
+						class="absolute inset-0 cursor-pointer opacity-0"
+						:value="modelValue || '#2f6f5e'"
+						@input="(e) => emit('update:modelValue', e.target.value)"
+					/>
+					<LucidePipette
+						v-if="!modelValue"
+						class="absolute inset-0 m-auto size-4 text-ink-gray-5"
+					/>
+				</label>
+				<FormControl
+					class="w-32"
+					placeholder="#2f6f5e"
+					:model-value="modelValue"
+					@update:model-value="(v) => emit('update:modelValue', v)"
+				/>
+				<Button
+					v-if="modelValue"
+					size="sm"
+					variant="ghost"
+					label="Use standard"
+					@click="emit('update:modelValue', '')"
+				/>
+			</div>
 			<FormControl
 				v-else-if="field.fieldtype === 'Password'"
 				type="password"
@@ -80,7 +153,9 @@
 <script setup>
 import { computed } from "vue";
 import dayjs from "dayjs";
-import { FormControl } from "frappe-ui";
+import { Button, FileUploader, FormControl } from "frappe-ui";
+import LucideImage from "~icons/lucide/image";
+import LucidePipette from "~icons/lucide/pipette";
 import { fromNow } from "@/utils/format";
 import Picker from "@/components/settings/Picker.vue";
 
