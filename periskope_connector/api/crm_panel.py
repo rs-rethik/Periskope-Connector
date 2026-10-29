@@ -409,6 +409,168 @@ def complete_task(chat_name: str, task: str | int) -> dict:  # CRM Task names ar
 	return get_context(chat_name)
 
 
+@frappe.whitelist(methods=["POST"])
+def reschedule_task(chat_name: str, task: str | int, due_date: str) -> dict:
+	"""Move a task of this chat's record to a new due date and time (the panel's Reschedule)."""
+	access.require_inbox_user()
+	doctype, name = _record_for_change(chat_name)
+	doc = frappe.get_doc("CRM Task", task)
+	if (doc.reference_doctype, doc.reference_docname) != (doctype, name):
+		frappe.throw(_("That task is not on this chat's record."), frappe.PermissionError)
+	if not due_date:
+		frappe.throw(_("Pick the new date and time."))
+	doc.due_date = frappe.utils.get_datetime(due_date)
+	doc.save()
+	return get_context(chat_name)
+
+
+# --- The full view: the lead, its deals, and their quotations and sales orders -----------------
+
+DEAL_FIELDS = ["name", "status", "organization", "lead_name", "deal_owner", "currency", "modified"]
+QUOTE_FIELDS = ["name", "transaction_date", "valid_till", "grand_total", "currency", "status"]
+SHOWN = 50  # the latest quotations and orders shown; "more" says when there are others
+ORDER_FIELDS = [
+	"name",
+	"transaction_date",
+	"delivery_date",
+	"grand_total",
+	"currency",
+	"status",
+	"per_delivered",
+	"per_billed",
+]
+
+
+def _has(doctype: str, field: str) -> bool:
+	return bool(frappe.db.exists("DocType", doctype)) and frappe.get_meta(doctype).has_field(field)
+
+
+def _readable(doctype: str, **kwargs) -> list | None:
+	"""Rows the user may read, or None when they may not read the doctype at all."""
+	if not frappe.db.exists("DocType", doctype) or not frappe.has_permission(doctype, "read"):
+		return None
+	return frappe.get_list(doctype, **kwargs)
+
+
+@frappe.whitelist()
+def full_view(chat_name: str) -> dict:
+	"""Everything the customer of this chat has with us: the lead, all its deals (or the deal and
+	the others of its lead), the ERPNext customers of those deals, and their quotations and sales
+	orders. The ERPNext links are custom fields on some sites, so each is used only if it exists."""
+	access.require_inbox_user()
+	if not access.can_see_chat(chat_name):
+		frappe.throw(_("You cannot open this chat."), frappe.PermissionError)
+	record = _record(_chat(chat_name))
+	if not record:
+		frappe.throw(_("Link this chat to a lead or deal first."))
+	doctype, name = record
+	lead_name = name if doctype == "CRM Lead" else frappe.db.get_value("CRM Deal", name, "lead")
+
+	lead = None
+	if lead_name and frappe.has_permission("CRM Lead", "read", lead_name):
+		lead = frappe.db.get_value(
+			"CRM Lead",
+			lead_name,
+			["name", "lead_name", "organization", "status", "lead_owner", "email", "mobile_no", "creation"],
+			as_dict=True,
+		)
+		if lead:
+			lead.route = _route("CRM Lead", lead.name)
+
+	deal_fields = DEAL_FIELDS + [
+		f
+		for f in (
+			"deal_value",
+			"expected_deal_value",
+			"expected_closure_date",
+			"custom_customer",
+			"erpnext_customer",
+		)
+		if _has("CRM Deal", f)
+	]
+	deal_filters = {"lead": lead_name} if lead_name else {"name": name}
+	deals = (
+		_readable("CRM Deal", filters=deal_filters, fields=deal_fields, order_by="creation desc", limit=50)
+		or []
+	)
+	if doctype == "CRM Deal" and name not in [d.name for d in deals]:
+		deals += _readable("CRM Deal", filters={"name": name}, fields=deal_fields) or []
+	deal_names = [d.name for d in deals]
+	statuses = {r.name: r for r in frappe.get_all("CRM Deal Status", fields=["name", "color", "type"])}
+	for d in deals:
+		d.route = _route("CRM Deal", d.name)
+		d.color = statuses[d.status].color if d.status in statuses else None
+		d.closed = statuses[d.status].type in ("Won", "Lost") if d.status in statuses else False
+		d.value = d.get("deal_value") or d.get("expected_deal_value") or 0
+
+	customers = set()
+	for d in deals:
+		customers.update(c for c in (d.get("custom_customer"), d.get("erpnext_customer")) if c)
+	if deal_names and _has("Customer", "crm_deal"):
+		customers.update(frappe.get_all("Customer", filters={"crm_deal": ["in", deal_names]}, pluck="name"))
+	customers = sorted(c for c in customers if frappe.db.exists("Customer", c))
+
+	quotations = None
+	if frappe.db.exists("DocType", "Quotation"):
+		or_filters = []
+		if deal_names and _has("Quotation", "crm_deal"):
+			or_filters.append(["crm_deal", "in", deal_names])
+		if customers:
+			or_filters.append(["party_name", "in", customers])
+		quotations = (
+			_readable(
+				"Quotation",
+				or_filters=or_filters,
+				filters={"docstatus": ["<", 2]},
+				fields=QUOTE_FIELDS,
+				order_by="transaction_date desc",
+				limit=SHOWN + 1,
+			)
+			if or_filters
+			else ([] if frappe.has_permission("Quotation", "read") else None)
+		)
+
+	orders = None
+	if frappe.db.exists("DocType", "Sales Order"):
+		or_filters = []
+		if deal_names and _has("Sales Order", "custom_crm_deal"):
+			or_filters.append(["custom_crm_deal", "in", deal_names])
+		if customers:
+			or_filters.append(["customer", "in", customers])
+		orders = (
+			_readable(
+				"Sales Order",
+				or_filters=or_filters,
+				filters={"docstatus": ["<", 2]},
+				fields=ORDER_FIELDS,
+				order_by="transaction_date desc",
+				limit=SHOWN + 1,
+			)
+			if or_filters
+			else ([] if frappe.has_permission("Sales Order", "read") else None)
+		)
+
+	more = {
+		"quotations": bool(quotations and len(quotations) > SHOWN),
+		"orders": bool(orders and len(orders) > SHOWN),
+	}
+	quotations = quotations[:SHOWN] if quotations else quotations
+	orders = orders[:SHOWN] if orders else orders
+	for q in quotations or []:
+		q.route = f"/app/quotation/{q.name}"
+	for o in orders or []:
+		o.route = f"/app/sales-order/{o.name}"
+	return {
+		"record": {"doctype": doctype, "name": name},
+		"lead": lead,
+		"deals": deals,
+		"customers": [{"name": c, "route": f"/app/customer/{c}"} for c in customers],
+		"quotations": quotations,
+		"orders": orders,
+		"more": more,
+	}
+
+
 # --- From the CRM -------------------------------------------------------------------------------
 
 

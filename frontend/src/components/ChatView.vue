@@ -21,6 +21,15 @@
 				</div>
 			</div>
 			<ChatActions ref="actions" :chat="chat" @changed="load({ keepPosition: true })" />
+			<Button
+				v-if="chat.crm_lead || chat.crm_deal"
+				title="The lead, all its deals, quotations and sales orders"
+				@click="fullView = true"
+			>
+				<template #prefix><LucideLayoutDashboard class="size-4" /></template>
+				Full view
+			</Button>
+			<FullView v-model="fullView" :chat="chat" />
 			<slot name="actions" />
 		</div>
 
@@ -105,6 +114,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import { Button, LoadingIndicator, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
+import FullView from "@/components/FullView.vue";
+import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
@@ -115,6 +126,7 @@ import MediaViewer from "@/components/MediaViewer.vue";
 import { changed, chatCache, inbox, loadCounts } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
+const fullView = ref(false);
 const props = defineProps({
 	name: { type: String, required: true },
 	back: { type: Boolean, default: false }, // a back arrow (phone: the chat fills the screen)

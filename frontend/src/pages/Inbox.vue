@@ -94,7 +94,7 @@
 				</div>
 				<template v-else>
 					<Button
-						class="absolute right-2 top-2 z-10"
+						class="absolute right-2 top-2 z-10 !bg-surface-base shadow-sm"
 						variant="ghost"
 						title="Hide the CRM panel"
 						@click="toggleCrm"
