@@ -30,8 +30,12 @@ add_to_apps_screen = [
 
 # The WhatsApp inbox app (frontend/, built into www/whatsapp.html).
 website_route_rules = [
+	{"from_route": "/whatsapp/sw.js", "to_route": "whatsapp_sw"},
 	{"from_route": "/whatsapp/<path:app_path>", "to_route": "whatsapp"},
 ]
+
+# the inbox's service worker, served inside /whatsapp/ (pwa.py)
+page_renderer = ["periskope_connector.pwa.ServiceWorkerRenderer"]
 
 after_install = "periskope_connector.install.after_install"
 after_migrate = "periskope_connector.install.after_migrate"

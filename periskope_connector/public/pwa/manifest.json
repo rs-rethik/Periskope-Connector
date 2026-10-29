@@ -1,0 +1,32 @@
+{
+	"id": "/whatsapp/",
+	"name": "Pranera Connect",
+	"short_name": "Pranera Connect",
+	"description": "Answer customers on your company's WhatsApp numbers, with the CRM beside every chat.",
+	"start_url": "/whatsapp/today",
+	"scope": "/whatsapp/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#eef3f0",
+	"theme_color": "#eef3f0",
+	"icons": [
+		{
+			"src": "/assets/periskope_connector/pwa/icon-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/assets/periskope_connector/pwa/icon-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/assets/periskope_connector/pwa/maskable-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}
