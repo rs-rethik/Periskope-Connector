@@ -64,7 +64,21 @@
 			</button>
 		</div>
 
-		<div class="relative px-3 py-2" :class="mode === 'note' ? 'bg-surface-amber-1' : ''">
+		<div
+			v-if="mode === 'reply' && quick.length"
+			class="flex gap-1.5 overflow-x-auto px-3 pt-2 [scrollbar-width:none]"
+		>
+			<button
+				v-for="q in quick.slice(0, 6)"
+				:key="q.name || q.title"
+				class="flex shrink-0 items-center gap-1 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 py-1 text-sm text-ink-gray-7 transition hover:border-outline-gray-3 hover:bg-surface-gray-1"
+				:title="q.body"
+				@click="insert(q.body, true)"
+			>
+				<LucideZap class="size-3 text-ink-amber-6" />{{ q.title }}
+			</button>
+		</div>
+		<div class="relative px-3 pb-3 pt-2">
 			<div
 				v-if="suggestions.length"
 				class="absolute bottom-full left-3 z-10 mb-1 max-h-60 w-80 overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base p-1 shadow-lg"
@@ -82,69 +96,76 @@
 					}}</span>
 				</button>
 			</div>
-			<textarea
-				ref="box"
-				v-model="text"
-				rows="1"
-				class="max-h-48 min-h-[40px] w-full resize-none rounded border-0 bg-transparent p-1 text-base text-ink-gray-9 placeholder-ink-gray-4 focus:ring-0"
-				:placeholder="
-					mode === 'note'
-						? 'Write a note for your team…'
-						: 'Type a message. / for quick replies'
-				"
-				@input="onInput"
-				@keydown="onKey"
-			/>
-			<div class="flex items-center gap-1">
-				<Popover v-if="mode === 'reply'">
-					<template #target="{ togglePopover }">
-						<Button variant="ghost" title="Emoji" @click="togglePopover()"
-							><template #icon><LucideSmile class="size-4" /></template
-						></Button>
-					</template>
-					<template #body="{ close }">
-						<div
-							class="grid w-72 grid-cols-8 gap-1 rounded-lg border border-outline-gray-2 bg-surface-base p-2 shadow-lg"
-						>
-							<button
-								v-for="e in EMOJI"
-								:key="e"
-								class="rounded p-1 text-lg hover:bg-surface-gray-2"
-								@click="
-									insert(e);
-									close();
-								"
+			<div
+				class="rounded-2xl border border-outline-gray-2 px-2 pb-1.5 pt-1 transition focus-within:border-outline-gray-3 focus-within:shadow-sm"
+				:class="mode === 'note' ? 'bg-surface-amber-1' : 'bg-surface-gray-1'"
+			>
+				<textarea
+					ref="box"
+					v-model="text"
+					rows="1"
+					class="max-h-48 min-h-[40px] w-full resize-none rounded border-0 bg-transparent p-1 text-base text-ink-gray-9 placeholder-ink-gray-4 focus:ring-0"
+					:placeholder="
+						mode === 'note'
+							? 'Write a note for your team…'
+							: 'Type a message. / for quick replies'
+					"
+					@input="onInput"
+					@keydown="onKey"
+				/>
+				<div class="flex items-center gap-1">
+					<Popover v-if="mode === 'reply'">
+						<template #target="{ togglePopover }">
+							<Button variant="ghost" title="Emoji" @click="togglePopover()"
+								><template #icon><LucideSmile class="size-4" /></template
+							></Button>
+						</template>
+						<template #body="{ close }">
+							<div
+								class="grid w-72 grid-cols-8 gap-1 rounded-lg border border-outline-gray-2 bg-surface-base p-2 shadow-lg"
 							>
-								{{ e }}
-							</button>
-						</div>
-					</template>
-				</Popover>
-				<Button
-					v-if="mode === 'reply'"
-					variant="ghost"
-					title="Attach a file"
-					@click="$refs.picker.click()"
-				>
-					<template #icon><LucidePaperclip class="size-4" /></template>
-				</Button>
-				<input ref="picker" type="file" class="hidden" @change="onFile" />
-				<Dropdown v-if="mode === 'reply'" :options="quickOptions">
-					<Button variant="ghost" title="Quick replies"
-						><template #icon><LucideZap class="size-4" /></template
-					></Button>
-				</Dropdown>
-				<span v-if="error" class="ml-2 truncate text-sm text-ink-red-8">{{ error }}</span>
-				<Button
-					class="ml-auto"
-					variant="solid"
-					:label="mode === 'note' ? 'Add note' : 'Send'"
-					:loading="sending"
-					:disabled="!canSubmit"
-					@click="submit"
-				>
-					<template #suffix><LucideSendHorizontal class="size-4" /></template>
-				</Button>
+								<button
+									v-for="e in EMOJI"
+									:key="e"
+									class="rounded p-1 text-lg hover:bg-surface-gray-2"
+									@click="
+										insert(e);
+										close();
+									"
+								>
+									{{ e }}
+								</button>
+							</div>
+						</template>
+					</Popover>
+					<Button
+						v-if="mode === 'reply'"
+						variant="ghost"
+						title="Attach a file"
+						@click="$refs.picker.click()"
+					>
+						<template #icon><LucidePaperclip class="size-4" /></template>
+					</Button>
+					<input ref="picker" type="file" class="hidden" @change="onFile" />
+					<Dropdown v-if="mode === 'reply'" :options="quickOptions">
+						<Button variant="ghost" title="Quick replies"
+							><template #icon><LucideZap class="size-4" /></template
+						></Button>
+					</Dropdown>
+					<span v-if="error" class="ml-2 truncate text-sm text-ink-red-8">{{
+						error
+					}}</span>
+					<Button
+						class="ml-auto !rounded-full"
+						variant="solid"
+						:label="mode === 'note' ? 'Add note' : 'Send'"
+						:loading="sending"
+						:disabled="!canSubmit"
+						@click="submit"
+					>
+						<template #suffix><LucideSendHorizontal class="size-4" /></template>
+					</Button>
+				</div>
 			</div>
 		</div>
 

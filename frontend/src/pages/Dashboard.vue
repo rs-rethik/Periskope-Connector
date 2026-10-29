@@ -1,7 +1,7 @@
 <template>
 	<div class="dashboard flex h-full min-h-0 flex-col">
 		<!-- Filters, in one row above everything -->
-		<div class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3">
+		<div class="page-head">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">Dashboard</h1>
 			<div class="flex rounded bg-surface-gray-2 p-0.5">
 				<button

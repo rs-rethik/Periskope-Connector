@@ -12,9 +12,9 @@
 			<LucideReply class="size-4" />
 		</button>
 		<div
-			class="relative max-w-[75%] rounded-lg px-3 py-1.5 shadow-sm"
+			class="relative max-w-[75%] rounded-2xl px-3.5 py-2 shadow-[0_1px_2px_rgb(0_0_0/0.06),0_6px_16px_-10px_rgb(0_0_0/0.18)]"
 			:class="[
-				outgoing ? 'bg-surface-green-1' : 'border border-outline-gray-1 bg-surface-base',
+				outgoing ? 'bg-surface-green-2' : 'bg-surface-base',
 				unsent ? 'ring-1 ring-outline-red-2' : '',
 				hasReactions ? 'mb-3' : '',
 			]"

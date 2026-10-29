@@ -1,17 +1,17 @@
 <template>
-	<div class="flex h-full min-w-0 flex-col bg-surface-gray-1">
+	<div class="flex h-full min-w-0 flex-col bg-surface-base">
 		<div
 			v-if="chat"
-			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-2.5"
+			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-3"
 		>
 			<Button v-if="back" variant="ghost" title="Back to the chats" @click="emit('back')">
 				<template #icon><LucideArrowLeft class="size-5" /></template>
 			</Button>
-			<Avatar :label="chat.chat_name || chat.contact_number || chat.title" size="lg" />
+			<InitialsAvatar :name="chat.chat_name || chat.contact_number || chat.title" />
 			<div class="min-w-[10rem] flex-1 sm:min-w-[14rem]">
 				<div class="flex items-center gap-2">
 					<LucideUsers v-if="chat.is_group" class="size-4 shrink-0 text-ink-gray-5" />
-					<span class="truncate text-base font-medium text-ink-gray-9">{{
+					<span class="truncate text-base font-semibold text-ink-gray-9">{{
 						chat.title
 					}}</span>
 				</div>
@@ -24,7 +24,7 @@
 			<slot name="actions" />
 		</div>
 
-		<div ref="scroller" class="flex-1 overflow-y-auto" @scroll="onScroll">
+		<div ref="scroller" class="chat-dots flex-1 overflow-y-auto" @scroll="onScroll">
 			<div ref="content" class="py-3">
 				<div v-if="hasMore" class="flex justify-center pb-2">
 					<Button
@@ -103,7 +103,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Avatar, Button, LoadingIndicator, call } from "frappe-ui";
+import { Button, LoadingIndicator, call } from "frappe-ui";
+import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
 import LucideArrowLeft from "~icons/lucide/arrow-left";

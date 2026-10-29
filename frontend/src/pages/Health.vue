@@ -1,6 +1,6 @@
 <template>
 	<div class="flex h-full min-h-0 flex-col">
-		<div class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3">
+		<div class="page-head">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">Health</h1>
 			<span class="text-sm text-ink-gray-5"
 				>Live figures of the connection, the AI and the agent.</span
