@@ -266,3 +266,127 @@ class TestFullView(PanelCase):
 
 	def test_an_unlinked_chat_has_no_full_view(self):
 		self.assertRaises(frappe.ValidationError, crm_panel.full_view, self._msg(A, "919600088888"))
+
+
+class TestDealFromMessage(PanelCase):
+	def _message(self, chat_name):
+		return frappe.get_all(
+			"Periskope Message",
+			filters={"periskope_chat": chat_name},
+			pluck="name",
+			order_by="message_timestamp desc",
+			limit=1,
+		)[0]
+
+	def test_a_message_becomes_a_deal_that_keeps_it_and_the_lead_stays(self):
+		from periskope_connector.api import inbox
+
+		lead = _lead("Direct", CUSTOMER)
+		on_a = self._msg(A, body="Need 800 kg of 40s combed, delivery by month end")
+		message = self._message(on_a)
+		defaults = crm_panel.deal_defaults(on_a)
+		self.assertEqual((defaults["lead"], defaults["first_name"]), (lead, "Direct"))
+		ctx = crm_panel.create_deal_from_message(
+			on_a,
+			message,
+			status=defaults["status"],
+			organization="Direct Mills",
+			expected_closure_date="2031-02-01",
+			deal_value=245000,
+			note="Repeat order",
+		)
+		deal = frappe.get_doc("CRM Deal", ctx["created_deal"]["name"])
+		self.assertEqual((deal.lead, deal.periskope_message), (lead, message))
+		self.assertEqual(
+			frappe.db.get_value("CRM Organization", deal.organization, "organization_name"), "Direct Mills"
+		)
+		self.assertTrue(deal.contacts)
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead, "converted"), 0)
+		note = frappe.db.get_value(
+			"FCRM Note", {"reference_doctype": "CRM Deal", "reference_docname": deal.name}, "content"
+		)
+		self.assertIn("800 kg of 40s combed", note)
+		self.assertIn("Repeat order", note)
+		self.assertEqual(frappe.db.get_value("Periskope Chat", on_a, "crm_deal"), deal.name)
+		marked = {m.name: m.deals for m in inbox.get_messages(on_a)["messages"]}
+		self.assertEqual(marked[message], [deal.name])
+
+	def test_a_chat_with_a_deal_gets_another_one(self):
+		_lead("Repeat", CUSTOMER)
+		on_a = self._msg(A)
+		message = self._message(on_a)
+		first = crm_panel.create_deal_from_message(on_a, message)["created_deal"]["name"]
+		second = crm_panel.create_deal_from_message(on_a, message)["created_deal"]["name"]
+		self.assertNotEqual(first, second)
+		self.assertEqual(frappe.db.get_value("Periskope Chat", on_a, "crm_deal"), second)
+
+	def test_a_message_of_another_chat_is_refused(self):
+		on_a = self._msg(A)
+		other = self._msg(A, "919600099999")
+		self.assertRaises(
+			frappe.PermissionError, crm_panel.create_deal_from_message, on_a, self._message(other)
+		)
+
+
+class TestManyRecords(PanelCase):
+	def _ours(self, contact=CUSTOMER, body="Price is 245 per kg"):
+		self.n += 1
+		return messages.create_message(
+			event(
+				message_id=f"true_{contact}@c.us_O{self.n}{frappe.generate_hash(length=4)}",
+				chat_id=f"{contact}@c.us",
+				sender_phone=f"{A}@c.us",
+				org_phone=f"{A}@c.us",
+				from_me=True,
+				body=body,
+			)
+		)
+
+	def test_a_deal_is_made_only_from_the_customers_message(self):
+		_lead("Ours", CUSTOMER)
+		on_a = self._msg(A)
+		ours = self._ours()
+		self.assertRaises(frappe.ValidationError, crm_panel.create_deal_from_message, on_a, ours)
+		self.assertRaises(frappe.ValidationError, crm_panel.deal_defaults, on_a, ours)
+
+	def test_every_lead_and_deal_of_the_contact_is_listed_the_followed_one_first(self):
+		first_lead = _lead("Many", CUSTOMER)
+		second_lead = _lead("Many again", CUSTOMER)
+		deal = _deal(first_lead)
+		on_a = self._msg(A)
+		crm_panel.link_record(on_a, "CRM Lead", second_lead)
+		related = crm_panel.get_context(on_a)["related"]
+		names = [r["name"] for r in related]
+		self.assertEqual(names[0], second_lead)
+		self.assertTrue(related[0]["active"])
+		self.assertTrue({first_lead, second_lead, deal} <= set(names))
+		# following another one moves the chat
+		ctx = crm_panel.link_record(on_a, "CRM Deal", deal)
+		self.assertEqual(ctx["related"][0]["name"], deal)
+
+	def test_in_a_group_the_deal_is_for_the_sender(self):
+		sender = "919600044444"
+		lead = _lead("Group buyer", sender)
+		self.n += 1
+		messages.create_message(
+			event(
+				message_id=f"false_120363000000000001@g.us_G{self.n}{frappe.generate_hash(length=4)}",
+				chat_id="120363000000000001@g.us",
+				sender_phone=f"{sender}@c.us",
+				org_phone=f"{A}@c.us",
+				body="Please book 300 kg of 30s",
+				is_group=True,
+			)
+		)
+		group_chat = chat.name_of(A, "120363000000000001@g.us")
+		message = frappe.get_all(
+			"Periskope Message", filters={"periskope_chat": group_chat}, pluck="name", limit=1
+		)[0]
+		self.assertEqual(crm_panel.deal_defaults(group_chat, message)["lead"], lead)
+		ctx = crm_panel.create_deal_from_message(group_chat, message)
+		deal = frappe.get_doc("CRM Deal", ctx["created_deal"]["name"])
+		self.assertEqual(deal.lead, lead)
+		contact_phones = frappe.get_all(
+			"Contact Phone", filters={"parent": deal.contacts[0].contact}, pluck="phone"
+		)
+		self.assertIn(f"+{sender}", contact_phones)

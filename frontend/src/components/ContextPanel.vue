@@ -314,6 +314,72 @@
 						/>
 					</div>
 				</div>
+
+				<!-- the other leads and deals of this customer (or group); one click makes the chat follow one -->
+				<div v-if="others.length" class="mt-3">
+					<div
+						class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-gray-6"
+					>
+						<LucideLayers class="size-3.5" />
+						{{ others.length }} more
+						{{ others.length === 1 ? "record" : "records" }} for
+						{{ ctx.is_group ? "this group" : "this customer" }}
+					</div>
+					<div class="flex flex-col gap-1.5">
+						<div
+							v-for="r in others"
+							:key="r.doctype + r.name"
+							class="flex items-center gap-2.5 rounded-xl border border-outline-gray-1 bg-surface-base p-2.5 transition hover:border-outline-gray-2 hover:shadow-sm"
+							:class="r.closed ? 'opacity-70' : ''"
+						>
+							<span
+								class="grid size-7 shrink-0 place-items-center rounded-lg"
+								:class="
+									r.doctype === 'CRM Deal'
+										? 'bg-surface-violet-1 text-ink-violet-7'
+										: 'bg-surface-amber-1 text-ink-amber-7'
+								"
+							>
+								<component
+									:is="
+										r.doctype === 'CRM Deal'
+											? LucideHandshake
+											: LucideUserRound
+									"
+									class="size-3.5"
+								/>
+							</span>
+							<a :href="r.route" target="_blank" class="min-w-0 flex-1">
+								<span class="block truncate text-sm font-medium text-ink-gray-8">{{
+									r.title
+								}}</span>
+								<span
+									class="flex items-center gap-1 truncate text-xs text-ink-gray-5"
+								>
+									<span
+										class="size-1.5 shrink-0 rounded-full"
+										:style="{ background: dotColor(r.color) }"
+									/>
+									{{ r.status }} · {{ r.name }}
+									<LucideMessageSquareQuote
+										v-if="r.from_message"
+										class="size-3 shrink-0 text-ink-violet-6"
+										title="Made from a message in this chat"
+									/>
+								</span>
+							</a>
+							<Tooltip text="Make this chat follow it">
+								<button
+									class="cp-add shrink-0"
+									:disabled="busy"
+									@click="follow(r)"
+								>
+									Follow
+								</button>
+							</Tooltip>
+						</div>
+					</div>
+				</div>
 			</section>
 
 			<PanelSection v-if="record && record.summary" id="summary" title="WhatsApp summary">
@@ -685,6 +751,10 @@ import LucideListChecks from "~icons/lucide/list-checks";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarPlus from "~icons/lucide/calendar-plus";
 import LucideCalendar from "~icons/lucide/calendar";
+import LucideLayers from "~icons/lucide/layers";
+import LucideHandshake from "~icons/lucide/handshake";
+import LucideUserRound from "~icons/lucide/user-round";
+import LucideMessageSquareQuote from "~icons/lucide/message-square-quote";
 import LucideStickyNote from "~icons/lucide/sticky-note";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import { computed, ref, watch } from "vue";
@@ -984,6 +1054,30 @@ const quickDates = [
 ];
 async function reschedule(t, close) {
 	if (await run("reschedule_task", { task: t.name, due_date: moveTo.value })) close();
+}
+
+// The other leads and deals tied to this chat; the followed one is the card above.
+const others = computed(() => (ctx.value?.related || []).filter((r) => !r.active));
+
+const STATUS_DOTS = {
+	gray: "#9ca3af",
+	blue: "#3b82f6",
+	green: "#22c55e",
+	red: "#ef4444",
+	orange: "#f97316",
+	amber: "#f59e0b",
+	yellow: "#eab308",
+	cyan: "#06b6d4",
+	teal: "#14b8a6",
+	violet: "#8b5cf6",
+	pink: "#ec4899",
+	purple: "#a855f7",
+	black: "#374151",
+};
+const dotColor = (color) => STATUS_DOTS[color] || STATUS_DOTS.gray;
+
+function follow(r) {
+	run("link_record", { doctype: r.doctype, name: r.name });
 }
 
 function unlink() {

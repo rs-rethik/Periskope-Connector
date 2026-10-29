@@ -49,6 +49,14 @@
   "column_test_mode",
   "test_allowed_chats",
   "test_allowed_emails",
+  "section_branding",
+  "brand_name",
+  "brand_logo",
+  "brand_color",
+  "column_branding",
+  "app_name",
+  "app_icon",
+  "festival_themes",
   "tab_health",
   "section_health",
   "health_last_webhook",
@@ -347,6 +355,53 @@
    "depends_on": "test_mode"
   },
   {
+   "fieldname": "section_branding",
+   "fieldtype": "Section Break",
+   "label": "Branding",
+   "description": "How the WhatsApp app looks to your team: its name, logo and colour, and the name and icon it gets when installed on a phone or computer."
+  },
+  {
+   "fieldname": "brand_name",
+   "fieldtype": "Data",
+   "label": "Name in the App",
+   "description": "Shown at the top of the sidebar. Empty: WhatsApp."
+  },
+  {
+   "fieldname": "brand_logo",
+   "fieldtype": "Attach Image",
+   "label": "Logo",
+   "description": "A square image, shown beside the name and in the browser tab."
+  },
+  {
+   "fieldname": "brand_color",
+   "fieldtype": "Color",
+   "label": "Brand Colour",
+   "description": "Used for the main buttons, the sidebar and the selected menu item. Empty: the standard green."
+  },
+  {
+   "fieldname": "column_branding",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "app_name",
+   "fieldtype": "Data",
+   "label": "Installed App Name",
+   "description": "The name under the icon when the app is installed. Empty: Pranera Connect."
+  },
+  {
+   "fieldname": "app_icon",
+   "fieldtype": "Attach Image",
+   "label": "Installed App Icon",
+   "description": "A square PNG of at least 512 × 512 pixels. Phones that installed the app pick it up when they next update it."
+  },
+  {
+   "fieldname": "festival_themes",
+   "fieldtype": "Check",
+   "label": "Festival Themes",
+   "default": "1",
+   "description": "On a festival day the AI finds on the web, show a greeting and the festival's colours."
+  },
+  {
    "fieldname": "tab_health",
    "fieldtype": "Tab Break",
    "label": "Health"
@@ -500,7 +555,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-27 14:00:00.000000",
+ "modified": "2026-10-29 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

@@ -13,7 +13,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from periskope_connector import access, attachments, numbers, shared_items
+from periskope_connector import access, attachments, branding, numbers, shared_items
+from periskope_connector.ai import festival
 
 PAGE = 50
 MESSAGE_PAGE = 50
@@ -299,7 +300,24 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 		row.quoted = quoted.get(row.quoted_message_id) if row.quoted_message_id else None
 		row.reactions = json.loads(row.reactions) if row.reactions else {}
 		row.shared = shared_items.from_row(row)
+	_deals_made(rows)
 	return {"messages": rows, "has_more": more, "notes": _notes(chat, rows, more, before)}
+
+
+def _deals_made(rows: list) -> None:
+	"""Mark the messages a deal was made from (CRM Deal.periskope_message) with that deal."""
+	if not rows or not frappe.get_meta("CRM Deal").has_field("periskope_message"):
+		return
+	made = frappe.get_all(
+		"CRM Deal",
+		filters={"periskope_message": ["in", [r.name for r in rows]]},
+		fields=["name", "periskope_message"],
+	)
+	by_message = {}
+	for d in made:
+		by_message.setdefault(d.periskope_message, []).append(d.name)
+	for row in rows:
+		row.deals = by_message.get(row.name, [])
 
 
 def _notes(chat: str, rows: list, more: bool, before: str | None) -> list[dict]:
@@ -445,4 +463,6 @@ def boot() -> dict:
 			for r in rows
 		],
 		"tags": frappe.get_all("Periskope Tag", pluck="name", order_by="name asc"),
+		"brand": branding.brand(),
+		"festival": festival.current(),
 	}

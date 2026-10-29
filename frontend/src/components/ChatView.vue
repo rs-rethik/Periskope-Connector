@@ -81,6 +81,8 @@
 						@reply="replyTo = $event"
 						@updated="replace"
 						@view="viewing = $event.name"
+						:can-create-deal="!!chat"
+						@create-deal="dealFrom = $event"
 					/>
 				</template>
 				<div v-if="loading" class="flex justify-center p-6">
@@ -105,6 +107,13 @@
 			@noted="addNote"
 			@clear-reply="replyTo = null"
 		/>
+		<CreateDealDialog
+			:model-value="!!dealFrom"
+			:chat="chat"
+			:message="dealFrom"
+			@update:model-value="(open) => !open && (dealFrom = null)"
+			@created="dealCreated"
+		/>
 		<MediaViewer v-model="viewing" :images="images" :chat-title="chat?.title || ''" />
 	</div>
 </template>
@@ -115,6 +124,7 @@ import { useRoute, useRouter } from "vue-router";
 import { Button, LoadingIndicator, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import FullView from "@/components/FullView.vue";
+import CreateDealDialog from "@/components/CreateDealDialog.vue";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
@@ -127,6 +137,13 @@ import { changed, chatCache, inbox, loadCounts } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
 const fullView = ref(false);
+const dealFrom = ref(null); // the message a deal is being made from
+
+// A deal was made: reload this chat (the message's deal chip) and the CRM panel (the new deal).
+function dealCreated() {
+	inbox.changed = [props.name];
+	inbox.version++;
+}
 const props = defineProps({
 	name: { type: String, required: true },
 	back: { type: Boolean, default: false }, // a back arrow (phone: the chat fills the screen)

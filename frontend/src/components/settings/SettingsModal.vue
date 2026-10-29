@@ -186,6 +186,7 @@ import LucideMic from "~icons/lucide/mic";
 import LucideBellRing from "~icons/lucide/bell-ring";
 import LucideClock from "~icons/lucide/clock";
 import LucideFlaskConical from "~icons/lucide/flask-conical";
+import LucidePalette from "~icons/lucide/palette";
 import RecordsPage from "@/components/settings/RecordsPage.vue";
 import SettingsSection from "@/components/settings/SettingsSection.vue";
 import Picker from "@/components/settings/Picker.vue";
@@ -211,7 +212,7 @@ const invite = ref({ email: "", first_name: "", numbers: [], send_welcome_email:
 const inviteError = ref("");
 let reloadAgents = null;
 
-const sectionKeys = ["connect", "ai", "voice", "team", "auto_reply", "test_mode"];
+const sectionKeys = ["connect", "ai", "voice", "team", "auto_reply", "test_mode", "branding"];
 const menu = computed(() => [
 	{
 		label: "Team",
@@ -242,6 +243,7 @@ const menu = computed(() => [
 						{ key: "team", label: "Approvers and alerts", icon: LucideBellRing },
 						{ key: "auto_reply", label: "Auto reply and hours", icon: LucideClock },
 						{ key: "test_mode", label: "Test mode", icon: LucideFlaskConical },
+						{ key: "branding", label: "Branding", icon: LucidePalette },
 					],
 				},
 		  ]
@@ -252,9 +254,15 @@ async function loadSettings() {
 	if (my.value.admin) settings.value = await call("periskope_connector.api.admin.get_settings");
 }
 
-function settingsSaved(data) {
+async function settingsSaved(data) {
 	if (data) settings.value = data;
 	else loadSettings();
+	// the new name, logo, colour or festival switch shows at once
+	if (page.value === "branding") {
+		const fresh = await call("periskope_connector.api.inbox.get_boot");
+		boot.brand = fresh.brand;
+		boot.festival = fresh.festival;
+	}
 }
 
 function refreshInbox() {

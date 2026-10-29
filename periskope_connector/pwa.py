@@ -25,10 +25,15 @@ class ServiceWorkerRenderer(BaseRenderer):
 		return self.path == ENDPOINT and os.path.isfile(self.file_path)
 
 	def render(self):
-		from periskope_connector import __version__
+		from periskope_connector import __version__, branding
 
 		with open(self.file_path, encoding="utf-8") as f:
 			body = f.read().replace("__VERSION__", __version__)
+		# the name goes into the offline page, an HTML string inside a JS template literal
+		name = frappe.utils.escape_html(branding.app_name())
+		for char, entity in (("`", "&#96;"), ("$", "&#36;"), ("\\", "&#92;")):
+			name = name.replace(char, entity)
+		body = body.replace("__APP_NAME__", name)
 		response = Response(body)
 		response.mimetype = "text/javascript"
 		response.headers["Service-Worker-Allowed"] = SCOPE

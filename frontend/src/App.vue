@@ -1,6 +1,7 @@
 <template>
 	<FrappeUIProvider>
 		<div class="flex h-full w-full overflow-hidden bg-surface-base">
+			<FestivalLights />
 			<AppSidebar v-if="!isMobile" />
 			<main class="app-canvas flex min-w-0 flex-1 flex-col">
 				<div
@@ -10,8 +11,14 @@
 					<Button variant="ghost" title="Menu" @click="menuOpen = true">
 						<template #icon><LucideMenu class="size-5" /></template>
 					</Button>
-					<img :src="logo" class="size-6 rounded" alt="" />
-					<span class="text-base font-medium text-ink-gray-9">WhatsApp</span>
+					<img
+						:src="boot.brand?.logo || logo"
+						class="size-6 rounded object-contain"
+						alt=""
+					/>
+					<span class="truncate text-base font-medium text-ink-gray-9">{{
+						boot.brand?.name || "WhatsApp"
+					}}</span>
 					<span
 						v-if="inbox.bell.unread"
 						class="ml-auto mr-2 rounded-full bg-surface-red-5 px-1.5 text-xs text-ink-white"
@@ -47,7 +54,10 @@ import { useRoute } from "vue-router";
 import { Button, FrappeUIProvider, useTheme } from "frappe-ui";
 import LucideMenu from "~icons/lucide/menu";
 import AppSidebar from "@/components/AppSidebar.vue";
+import FestivalLights from "@/components/FestivalLights.vue";
 import { inbox } from "@/stores/inbox";
+import { boot } from "@/boot";
+import "@/utils/brand";
 import { isMobile } from "@/utils/screen";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
