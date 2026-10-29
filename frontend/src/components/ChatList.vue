@@ -1,6 +1,6 @@
 <template>
 	<div class="flex h-full flex-col">
-		<div class="flex flex-col gap-2 border-b border-outline-gray-1 p-3">
+		<div class="flex flex-col gap-2.5 border-b border-outline-gray-1 p-3 pb-2.5">
 			<div class="flex items-center gap-2">
 				<h2 class="truncate text-lg font-semibold text-ink-gray-9">{{ title }}</h2>
 				<span class="text-sm text-ink-gray-5">{{ total }}</span>
@@ -17,42 +17,54 @@
 			<NewChatDialog v-model="newChat" />
 			<TextInput
 				v-model="search"
+				class="search-pill"
 				placeholder="Search name, number or message"
 				:debounce="300"
 			>
 				<template #prefix><LucideSearch class="size-4 text-ink-gray-5" /></template>
 			</TextInput>
-			<div class="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
-				<Button
+			<div
+				class="flex gap-0.5 overflow-x-auto rounded-full bg-surface-gray-2 p-1 [scrollbar-width:none]"
+			>
+				<button
 					v-for="t in tabs"
 					:key="t.key"
-					class="shrink-0"
-					size="sm"
-					:variant="tab === t.key ? 'subtle' : 'ghost'"
-					:label="t.label"
+					class="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm transition"
+					:class="
+						tab === t.key
+							? 'bg-surface-base font-medium text-ink-gray-9 shadow-sm'
+							: 'text-ink-gray-6 hover:text-ink-gray-8'
+					"
 					@click="tab = t.key"
-				/>
+				>
+					{{ t.label }}
+					<span
+						v-if="tab === t.key && total"
+						class="rounded-full bg-surface-gray-3 px-1.5 text-xs tabular-nums text-ink-gray-7"
+						>{{ total }}</span
+					>
+				</button>
 			</div>
 		</div>
 
 		<div
 			ref="scroller"
-			class="flex-1 overflow-y-auto transition-opacity"
+			class="flex-1 overflow-y-auto px-2 py-2 transition-opacity"
 			:class="switching ? 'opacity-60' : ''"
 			@scroll="onScroll"
 		>
 			<button
 				v-for="c in chats"
 				:key="c.name"
-				class="flex w-full gap-3 border-b border-outline-gray-1 px-3 py-2.5 text-left hover:bg-surface-gray-1"
-				:class="c.name === selected ? 'bg-surface-gray-2 hover:bg-surface-gray-2' : ''"
+				class="relative mb-0.5 flex w-full gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-surface-gray-1"
+				:class="c.name === selected ? 'bg-surface-green-1 hover:bg-surface-green-1' : ''"
 				@click="select(c)"
 			>
-				<Avatar
-					:label="c.chat_name || c.contact_number || c.title"
-					size="lg"
-					class="shrink-0"
+				<span
+					v-if="c.name === selected"
+					class="absolute inset-y-2 left-0 w-[3px] rounded-full bg-surface-green-6"
 				/>
+				<InitialsAvatar :name="c.chat_name || c.contact_number || c.title" />
 				<div class="min-w-0 flex-1">
 					<div class="flex items-center gap-2">
 						<LucideUsers v-if="c.is_group" class="size-3.5 shrink-0 text-ink-gray-5" />
@@ -63,8 +75,13 @@
 							{{ c.title }}
 						</span>
 						<span
+							v-if="waiting(c)"
+							class="size-1.5 shrink-0 rounded-full bg-surface-amber-6"
+							title="Waiting on us"
+						/>
+						<span
 							class="ml-auto shrink-0 text-xs"
-							:class="c.unread ? 'text-ink-green-6' : 'text-ink-gray-5'"
+							:class="c.unread ? 'font-medium text-ink-green-7' : 'text-ink-gray-5'"
 						>
 							{{ listTime(c.last_message_at) }}
 						</span>
@@ -79,7 +96,7 @@
 						}}</span>
 						<span
 							v-if="c.unread"
-							class="ml-auto size-2.5 shrink-0 rounded-full bg-surface-green-6"
+							class="ml-auto size-2.5 shrink-0 rounded-full bg-surface-green-6 ring-2 ring-surface-green-2"
 						/>
 					</div>
 					<div class="mt-1 flex flex-wrap items-center gap-1">
@@ -124,12 +141,13 @@
 							size="sm"
 						/>
 						<SlaBadge v-if="c.sla && c.sla !== 'On Track'" :chat="c" />
-						<span
+						<InitialsAvatar
 							v-if="c.assigned_to.length"
-							class="ml-auto truncate text-xs text-ink-gray-5"
-							:title="c.assigned_to.join(', ')"
-							>{{ c.assigned_to[0].split("@")[0] }}</span
-						>
+							class="ml-auto"
+							size="xs"
+							:name="c.assigned_to[0].split('@')[0].replace(/[._]/g, ' ')"
+							:title="'Assigned to ' + c.assigned_to.join(', ')"
+						/>
 					</div>
 				</div>
 			</button>
@@ -149,7 +167,8 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { Avatar, Badge, Button, LoadingIndicator, TextInput, call } from "frappe-ui";
+import { Badge, Button, LoadingIndicator, TextInput, call } from "frappe-ui";
+import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import LucideSearch from "~icons/lucide/search";
 import LucideUsers from "~icons/lucide/users";
 import LucideCheckCheck from "~icons/lucide/check-check";
@@ -171,6 +190,9 @@ function select(c) {
 }
 
 const newChat = ref(false);
+// the customer wrote last and the chat is still open: our move
+const waiting = (c) =>
+	c.last_message_direction === "Incoming" && c.status === "Open" && !c.is_group;
 const tabs = [
 	{ key: "all", label: "All" },
 	{ key: "chats", label: "Chats" },

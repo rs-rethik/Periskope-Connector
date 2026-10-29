@@ -1,6 +1,6 @@
 <template>
 	<div class="kb flex h-full min-h-0 flex-col">
-		<div class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3">
+		<div class="page-head">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">Knowledge base</h1>
 			<span class="text-sm text-ink-gray-5"
 				>What the AI answers from. Topics branch into conditions and end in answers.</span
@@ -33,7 +33,7 @@
 		<div
 			v-else
 			ref="root"
-			class="relative min-h-0 flex-1 select-none overflow-hidden bg-surface-gray-1"
+			class="panel-frame page-card relative min-h-0 flex-1 select-none overflow-hidden bg-surface-gray-1"
 			:class="panning ? 'cursor-grabbing' : 'cursor-grab'"
 			@pointerdown="onPointerDown"
 			@wheel.prevent="onWheel"

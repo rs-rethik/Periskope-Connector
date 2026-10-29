@@ -1,6 +1,6 @@
 <template>
-	<div class="flex h-full min-h-0">
-		<div class="min-w-0 flex-1">
+	<div class="split flex h-full min-h-0">
+		<div class="pane min-w-0 flex-1">
 			<ChatView :name="$route.params.chat" @loaded="onLoaded">
 				<template #actions>
 					<Button
@@ -22,7 +22,7 @@
 				</template>
 			</ChatView>
 		</div>
-		<div class="hidden w-[320px] shrink-0 flex-col lg:flex">
+		<div class="pane hidden w-[320px] shrink-0 flex-col lg:flex">
 			<div
 				class="flex gap-1 border-b border-l border-outline-gray-1 bg-surface-base px-3 py-2"
 			>
