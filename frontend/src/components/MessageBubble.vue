@@ -210,6 +210,18 @@
 					@click="retry"
 				/>
 			</div>
+			<div v-if="message.deals?.length" class="mt-1.5 flex flex-wrap gap-1">
+				<a
+					v-for="d in message.deals"
+					:key="d"
+					:href="`/crm/deals/${d}`"
+					target="_blank"
+					class="inline-flex items-center gap-1 rounded-full bg-surface-violet-1 px-2 py-0.5 text-xs font-medium text-ink-violet-7 hover:bg-surface-violet-2"
+					title="A deal was created from this message"
+				>
+					<LucideHandshake class="size-3" />{{ d }}
+				</a>
+			</div>
 			<div
 				v-if="hasReactions"
 				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-base px-1.5 py-0.5 text-sm shadow-sm"
@@ -229,6 +241,14 @@
 		>
 			<LucideReply class="size-4" />
 		</button>
+		<button
+			v-if="!outgoing && canCreateDeal"
+			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-violet-7 group-hover:visible"
+			title="Create a deal from the customer's message"
+			@click="$emit('create-deal', message)"
+		>
+			<LucideHandshake class="size-4" />
+		</button>
 	</div>
 </template>
 
@@ -236,6 +256,7 @@
 import { computed, ref } from "vue";
 import { Avatar, Button, call } from "frappe-ui";
 import LucideBot from "~icons/lucide/bot";
+import LucideHandshake from "~icons/lucide/handshake";
 import LucideBan from "~icons/lucide/ban";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideMapPin from "~icons/lucide/map-pin";
@@ -253,8 +274,9 @@ const props = defineProps({
 	message: { type: Object, required: true },
 	isGroup: { type: Boolean, default: false },
 	showSenderName: { type: Boolean, default: true },
+	canCreateDeal: { type: Boolean, default: false },
 });
-const emit = defineEmits(["reply", "updated", "view"]);
+const emit = defineEmits(["reply", "updated", "view", "create-deal"]);
 
 const outgoing = computed(() => props.message.direction === "Outgoing");
 const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);
