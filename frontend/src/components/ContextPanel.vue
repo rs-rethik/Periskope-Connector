@@ -1,21 +1,28 @@
 <template>
-	<div
-		class="flex h-full flex-col overflow-y-auto border-l border-outline-gray-1 bg-surface-base"
-	>
+	<div class="flex h-full flex-col overflow-y-auto bg-surface-base">
 		<div v-if="chat" class="flex flex-col gap-5 p-4">
-			<section>
-				<div class="text-xs font-medium uppercase text-ink-gray-5">Contact</div>
-				<div class="mt-1 text-base text-ink-gray-9">{{ chat.title }}</div>
-				<div v-if="chat.contact_number" class="text-sm text-ink-gray-6">
-					+{{ chat.contact_number }}
+			<section class="flex items-center gap-3 border-b border-outline-gray-1 pb-4 pr-8">
+				<InitialsAvatar
+					size="lg"
+					:name="chat.chat_name || chat.contact_number || chat.title"
+				/>
+				<div class="min-w-0">
+					<div class="truncate text-lg font-semibold text-ink-gray-9">
+						{{ chat.title }}
+					</div>
+					<div class="truncate text-sm text-ink-gray-6">
+						<span v-if="chat.contact_number">+{{ chat.contact_number }}</span>
+						<span v-if="chat.is_group">WhatsApp group</span>
+						· on {{ chat.number_label }}
+					</div>
 				</div>
-				<div v-if="chat.is_group" class="text-sm text-ink-gray-6">WhatsApp group</div>
-				<div class="mt-1 text-xs text-ink-gray-5">On {{ chat.number_label }}</div>
 			</section>
 
 			<!-- The lead or deal -->
 			<section>
-				<div class="mb-1 flex items-center text-xs font-medium uppercase text-ink-gray-5">
+				<div
+					class="mb-1 flex items-center text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
 					CRM
 					<Button
 						v-if="record && !record.hidden"
@@ -122,7 +129,9 @@
 			</section>
 
 			<section v-if="record && record.summary">
-				<div class="mb-1 text-xs font-medium uppercase text-ink-gray-5">
+				<div
+					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
 					WhatsApp summary
 				</div>
 				<div class="text-sm text-ink-gray-7">
@@ -137,7 +146,9 @@
 			</section>
 
 			<section v-if="record && !record.hidden">
-				<div class="mb-1 flex items-center text-xs font-medium uppercase text-ink-gray-5">
+				<div
+					class="mb-1 flex items-center text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
 					Open tasks
 					<Button
 						class="ml-auto"
@@ -173,7 +184,9 @@
 			</section>
 
 			<section v-if="record && !record.hidden">
-				<div class="mb-1 flex items-center text-xs font-medium uppercase text-ink-gray-5">
+				<div
+					class="mb-1 flex items-center text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
 					CRM notes
 					<Button
 						class="ml-auto"
@@ -201,7 +214,11 @@
 			</section>
 
 			<section v-if="ctx && ctx.tags.length">
-				<div class="mb-1 text-xs font-medium uppercase text-ink-gray-5">AI tags</div>
+				<div
+					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
+					AI tags
+				</div>
 				<div class="flex flex-wrap gap-1">
 					<Badge
 						v-for="t in ctx.tags"
@@ -214,7 +231,9 @@
 			</section>
 
 			<section v-if="ctx && ctx.other_chats.length">
-				<div class="mb-1 text-xs font-medium uppercase text-ink-gray-5">
+				<div
+					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
 					On our other numbers
 				</div>
 				<button
@@ -231,7 +250,9 @@
 			</section>
 
 			<section>
-				<div class="text-xs font-medium uppercase text-ink-gray-5">Assigned to</div>
+				<div class="text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5">
+					Assigned to
+				</div>
 				<div class="mt-1 text-sm text-ink-gray-8">
 					{{ chat.assigned_to?.length ? chat.assigned_to.join(", ") : "Nobody" }}
 				</div>
@@ -408,6 +429,7 @@
 </template>
 
 <script setup>
+import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import { computed, ref, watch } from "vue";
 import {
 	Badge,

@@ -1,5 +1,5 @@
 <template>
-	<div class="relative flex h-full bg-surface-gray-1">
+	<div class="side-panel relative flex h-full">
 		<Sidebar v-model:collapsed="collapsed" class="border-r border-outline-gray-1">
 			<div class="flex h-full flex-col p-2">
 				<div class="flex shrink-0 items-center gap-2 px-2 py-1.5">
@@ -15,6 +15,15 @@
 					class="-mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 [&>*]:shrink-0"
 				>
 					<NotificationsBell :collapsed="collapsed" />
+					<SidebarItem
+						label="Today"
+						:to="{ name: 'Today' }"
+						:active="$route.name === 'Today'"
+					>
+						<template #prefix
+							><LucideSunrise class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
 					<SidebarItem
 						label="Inbox"
 						:to="{ name: 'Inbox' }"
@@ -145,6 +154,16 @@
 							><LucideSettings class="size-4 text-ink-gray-6"
 						/></template>
 					</SidebarItem>
+					<SidebarItem
+						:label="currentTheme === 'dark' ? 'Light mode' : 'Dark mode'"
+						@click="toggleTheme()"
+					>
+						<template #prefix
+							><component
+								:is="currentTheme === 'dark' ? LucideSun : LucideMoon"
+								class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
 					<SidebarItem label="Open CRM" to="/crm" @click.prevent="goTo('/crm')">
 						<template #prefix
 							><LucideExternalLink class="size-4 text-ink-gray-6"
@@ -161,8 +180,11 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel } from "frappe-ui";
+import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel, useTheme } from "frappe-ui";
+import LucideMoon from "~icons/lucide/moon";
+import LucideSun from "~icons/lucide/sun";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
+import LucideSunrise from "~icons/lucide/sunrise";
 import LucideList from "~icons/lucide/list";
 import LucidePhone from "~icons/lucide/phone";
 import LucideExternalLink from "~icons/lucide/external-link";
@@ -192,6 +214,7 @@ import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/
 const logo = "/assets/periskope_connector/images/logo.svg";
 defineProps({ mobile: { type: Boolean, default: false } });
 const collapsed = ref(false);
+const { currentTheme, toggleTheme } = useTheme();
 const settingsOpen = ref(false);
 const manage = [
 	{

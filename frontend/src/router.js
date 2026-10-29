@@ -2,11 +2,16 @@ import { createRouter, createWebHistory } from "vue-router";
 import { boot } from "@/boot";
 
 const routes = [
-	{ path: "/", redirect: { name: "Inbox" } },
+	{ path: "/", redirect: { name: "Today" } },
 	{
 		path: "/inbox/:chat?",
 		name: "Inbox",
 		component: () => import("@/pages/Inbox.vue"),
+	},
+	{
+		path: "/today",
+		name: "Today",
+		component: () => import("@/pages/Today.vue"),
 	},
 	{
 		path: "/conversations",
@@ -36,7 +41,7 @@ const routes = [
 		component: () => import(`@/pages/${page}.vue`),
 		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
 	})),
-	{ path: "/:pathMatch(.*)*", redirect: { name: "Inbox" } },
+	{ path: "/:pathMatch(.*)*", redirect: { name: "Today" } },
 ];
 
 export default createRouter({

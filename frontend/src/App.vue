@@ -2,7 +2,7 @@
 	<FrappeUIProvider>
 		<div class="flex h-full w-full overflow-hidden bg-surface-base">
 			<AppSidebar v-if="!isMobile" />
-			<main class="flex min-w-0 flex-1 flex-col">
+			<main class="app-canvas flex min-w-0 flex-1 flex-col">
 				<div
 					v-if="isMobile"
 					class="flex h-12 shrink-0 items-center gap-2 border-b border-outline-gray-1 px-2"
@@ -44,7 +44,7 @@
 <script setup>
 import { ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { Button, FrappeUIProvider } from "frappe-ui";
+import { Button, FrappeUIProvider, useTheme } from "frappe-ui";
 import LucideMenu from "~icons/lucide/menu";
 import AppSidebar from "@/components/AppSidebar.vue";
 import { inbox } from "@/stores/inbox";
@@ -52,6 +52,7 @@ import { isMobile } from "@/utils/screen";
 
 const logo = "/assets/periskope_connector/images/logo.svg";
 const menuOpen = ref(false);
+useTheme(); // applies the saved light/dark choice before the sidebar mounts
 const route = useRoute();
 watch(
 	() => route.fullPath,

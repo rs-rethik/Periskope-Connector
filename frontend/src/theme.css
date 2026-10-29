@@ -1,0 +1,243 @@
+/* The app's look: frappe-ui's neutral tokens tinted sage green, a deep teal for solid buttons, a
+   dark green sidebar and the Geist font. Only frappe-ui's own CSS variables are changed, so every
+   component follows, and dark mode is the same tokens under [data-theme="dark"]. */
+
+@import "@fontsource-variable/geist";
+
+:root {
+	--app-canvas: oklch(96.4% 0.009 162);
+
+	--surface-base: oklch(99.6% 0.003 165);
+	--surface-gray-1: oklch(97.6% 0.006 165);
+	--surface-gray-2: oklch(95.7% 0.008 165);
+	--surface-gray-3: oklch(93.6% 0.01 165);
+	--surface-gray-4: oklch(90.4% 0.012 166);
+	--surface-gray-5: oklch(82.4% 0.014 168);
+	--surface-gray-6: oklch(67.8% 0.016 170);
+	--surface-gray-7: oklch(57.8% 0.018 172);
+	--surface-gray-8: oklch(43.4% 0.022 176);
+	--surface-gray-9: oklch(42.5% 0.072 183);
+	--surface-gray-10: oklch(31% 0.05 183);
+	--surface-elevation-1: oklch(99.6% 0.003 165);
+	--surface-elevation-2: oklch(99.6% 0.003 165);
+	--surface-elevation-3: oklch(99.6% 0.003 165);
+
+	--ink-gray-1: oklch(94.4% 0.008 165);
+	--ink-gray-2: oklch(90.6% 0.01 165);
+	--ink-gray-3: oklch(82.2% 0.012 166);
+	--ink-gray-4: oklch(67.6% 0.014 168);
+	--ink-gray-5: oklch(57.4% 0.016 170);
+	--ink-gray-6: oklch(46.4% 0.018 172);
+	--ink-gray-7: oklch(37.6% 0.02 174);
+	--ink-gray-8: oklch(28.6% 0.022 176);
+	--ink-gray-9: oklch(23.4% 0.024 178);
+
+	--outline-gray-1: oklch(92.8% 0.009 165);
+	--outline-gray-2: oklch(89.6% 0.011 165);
+	--outline-gray-3: oklch(82% 0.012 166);
+	--outline-gray-4: oklch(67.6% 0.014 168);
+	--outline-gray-5: oklch(57.4% 0.016 170);
+	--outline-gray-6: oklch(46.4% 0.018 172);
+	--outline-gray-7: oklch(37.6% 0.02 174);
+	--outline-gray-8: oklch(28.6% 0.022 176);
+	--outline-gray-9: oklch(23.4% 0.024 178);
+	--outline-elevation-1: oklch(92.8% 0.009 165);
+	--outline-elevation-2: oklch(92.8% 0.009 165);
+}
+
+:root[data-theme="dark"] {
+	--app-canvas: oklch(17.2% 0.013 182);
+
+	--surface-base: oklch(20.2% 0.015 182);
+	--surface-gray-1: oklch(23% 0.016 181);
+	--surface-gray-2: oklch(26.6% 0.017 180);
+	--surface-gray-3: oklch(31.8% 0.018 179);
+	--surface-gray-4: oklch(36% 0.018 178);
+	--surface-gray-5: oklch(44% 0.018 176);
+	--surface-gray-6: oklch(57% 0.018 174);
+	--surface-gray-7: oklch(67% 0.016 172);
+	--surface-gray-8: oklch(75% 0.014 170);
+	--surface-gray-9: oklch(79.5% 0.105 174);
+	--surface-gray-10: oklch(95% 0.02 170);
+	--surface-elevation-1: oklch(23% 0.016 181);
+	--surface-elevation-2: oklch(25.4% 0.017 180);
+	--surface-elevation-3: oklch(31.8% 0.018 179);
+
+	--ink-base: oklch(20.2% 0.015 182);
+	--ink-gray-1: oklch(26% 0.015 180);
+	--ink-gray-2: oklch(33.6% 0.015 178);
+	--ink-gray-3: oklch(38% 0.015 176);
+	--ink-gray-4: oklch(58% 0.014 172);
+	--ink-gray-5: oklch(62% 0.014 170);
+	--ink-gray-6: oklch(70% 0.014 170);
+	--ink-gray-7: oklch(78% 0.013 170);
+	--ink-gray-8: oklch(89% 0.012 170);
+	--ink-gray-9: oklch(95.6% 0.01 170);
+
+	--outline-gray-1: oklch(27.4% 0.016 180);
+	--outline-gray-2: oklch(33% 0.016 178);
+	--outline-gray-3: oklch(38.4% 0.016 176);
+	--outline-gray-4: oklch(46% 0.016 174);
+	--outline-gray-5: oklch(58% 0.016 172);
+	--outline-gray-6: oklch(68% 0.014 170);
+	--outline-gray-7: oklch(92% 0.01 170);
+	--outline-gray-8: oklch(95% 0.01 170);
+	--outline-gray-9: oklch(97% 0.008 170);
+	--outline-elevation-1: oklch(28% 0.016 180);
+	--outline-elevation-2: oklch(33% 0.016 178);
+}
+
+html,
+body {
+	font-family:
+		"Geist Variable",
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		"Segoe UI",
+		sans-serif;
+}
+
+/* The sidebar: light, with a soft mint wash at the top. */
+.side-panel {
+	--surface-sidebar: transparent;
+	background:
+		radial-gradient(420px 260px at 0% 0%, oklch(90% 0.06 170 / 0.55), transparent 70%),
+		linear-gradient(180deg, oklch(96.4% 0.018 168) 0%, var(--surface-gray-1) 55%);
+}
+
+:root[data-theme="dark"] .side-panel {
+	background:
+		radial-gradient(420px 260px at 0% 0%, oklch(45% 0.08 175 / 0.22), transparent 70%),
+		linear-gradient(180deg, oklch(23.5% 0.022 180) 0%, var(--surface-gray-1) 55%);
+}
+
+/* Scrollbars: thin and rounded, no arrows, in the theme's colours. */
+:root {
+	--scroll-thumb: oklch(57% 0.02 170 / 0.35);
+	--scroll-thumb-hover: oklch(57% 0.02 170 / 0.6);
+}
+:root[data-theme="dark"] {
+	--scroll-thumb: oklch(80% 0.02 170 / 0.22);
+	--scroll-thumb-hover: oklch(80% 0.02 170 / 0.4);
+}
+@supports not selector(::-webkit-scrollbar) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--scroll-thumb) transparent;
+	}
+}
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background-color: var(--scroll-thumb);
+	background-clip: content-box;
+	border: 3px solid transparent;
+	border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--scroll-thumb-hover);
+}
+::-webkit-scrollbar-button {
+	display: none;
+}
+
+/* Pages: a title row without a rule, and content on rounded cards over the canvas. */
+.page-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 1.25rem 1.25rem 0.875rem;
+}
+.page-head h1 {
+	font-size: 22px;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+}
+.panel,
+.panel-frame {
+	border: 1px solid var(--outline-gray-1);
+	border-radius: 14px;
+	box-shadow:
+		0 1px 2px oklch(25% 0.02 180 / 0.05),
+		0 14px 34px -24px oklch(25% 0.03 180 / 0.35);
+}
+.panel {
+	background-color: var(--surface-base);
+}
+.page-card {
+	margin: 0 1.25rem 1.25rem;
+}
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .panel-frame {
+	box-shadow: 0 18px 40px -26px oklch(0% 0 0 / 0.8);
+}
+
+/* The inbox: from a tablet up, the list, the chat and the CRM panel float as cards. */
+@media (min-width: 768px) {
+	.split {
+		gap: 0.75rem;
+		padding: 0.75rem;
+	}
+	.split > .pane {
+		border: 1px solid var(--outline-gray-1);
+		border-radius: 14px;
+		background-color: var(--surface-base);
+		box-shadow:
+			0 1px 2px oklch(25% 0.02 180 / 0.05),
+			0 14px 34px -24px oklch(25% 0.03 180 / 0.35);
+		overflow: hidden;
+	}
+}
+
+.app-canvas {
+	background:
+		radial-gradient(640px 260px at 6% 0%, oklch(72% 0.09 175 / 0.13), transparent 70%),
+		radial-gradient(560px 240px at 96% 0%, oklch(70% 0.08 240 / 0.09), transparent 70%),
+		var(--app-canvas);
+}
+
+/* Inbox details */
+.search-pill input {
+	height: 2.25rem;
+	border-radius: 9999px;
+	padding-left: 2.25rem;
+}
+.chat-dots {
+	background-color: var(--surface-gray-1);
+	background-image: radial-gradient(oklch(57% 0.02 170 / 0.16) 1px, transparent 1.2px);
+	background-size: 16px 16px;
+}
+:root[data-theme="dark"] .chat-dots {
+	background-image: radial-gradient(oklch(80% 0.02 170 / 0.08) 1px, transparent 1.2px);
+}
+.kbd {
+	display: inline-grid;
+	place-items: center;
+	min-width: 1.35rem;
+	height: 1.35rem;
+	padding: 0 0.3rem;
+	border: 1px solid var(--outline-gray-2);
+	border-bottom-width: 2px;
+	border-radius: 6px;
+	background: var(--surface-base);
+	font-size: 0.75rem;
+	color: var(--ink-gray-7);
+}
+
+/* Dropdowns and popovers float above sticky table headers and cards (frappe-ui gives them no z-index). */
+[data-reka-popper-content-wrapper] {
+	z-index: 60 !important;
+}
+
+:root[data-theme="dark"] input[type="checkbox"]:not(:checked) {
+	background-color: var(--surface-gray-2);
+	border-color: var(--outline-gray-4);
+}

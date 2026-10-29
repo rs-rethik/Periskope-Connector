@@ -1,8 +1,6 @@
 <template>
 	<div class="flow flex h-full min-h-0 flex-col">
-		<div
-			class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-outline-gray-1 px-5 py-3"
-		>
+		<div class="page-head gap-x-4">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">How a message moves</h1>
 			<span
 				v-for="s in legend"
@@ -18,7 +16,7 @@
 			<Button label="Health" @click="$router.push({ name: 'Health' })" />
 		</div>
 
-		<div class="flex min-h-0 flex-1">
+		<div class="panel-frame page-card flex min-h-0 flex-1 overflow-hidden">
 			<!-- The diagram -->
 			<div
 				ref="canvas"

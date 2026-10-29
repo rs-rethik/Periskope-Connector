@@ -18,7 +18,7 @@
 				{{ l.label }}
 			</button>
 		</div>
-		<div class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3">
+		<div class="page-head">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">{{ meta?.title || "" }}</h1>
 			<TextInput
 				v-if="meta?.searchable"
@@ -42,7 +42,7 @@
 		</div>
 
 		<div
-			class="min-h-0 flex-1 overflow-auto transition-opacity"
+			class="panel page-card min-h-0 flex-1 overflow-auto transition-opacity"
 			:class="switching ? 'opacity-60' : ''"
 		>
 			<table class="w-full min-w-max text-sm">
@@ -155,7 +155,7 @@
 			</div>
 		</div>
 
-		<div class="flex items-center gap-2 border-t border-outline-gray-1 px-5 py-2">
+		<div class="-mt-3 flex items-center gap-2 px-6 pb-4">
 			<span class="text-sm text-ink-gray-5">{{ rows.length }} of {{ total }}</span>
 			<Button
 				v-if="rows.length < total"

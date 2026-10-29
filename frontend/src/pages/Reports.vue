@@ -1,8 +1,6 @@
 <template>
 	<div class="flex h-full min-h-0">
-		<nav
-			class="w-56 shrink-0 overflow-y-auto border-r border-outline-gray-1 bg-surface-gray-1 p-2"
-		>
+		<nav class="panel my-5 ml-5 w-56 shrink-0 overflow-y-auto p-2">
 			<div class="px-2 pb-2 pt-1 text-base font-semibold text-ink-gray-9">Reports</div>
 			<button
 				v-for="r in list"
@@ -19,10 +17,7 @@
 			</button>
 		</nav>
 		<div class="flex min-w-0 flex-1 flex-col">
-			<div
-				v-if="current"
-				class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-5 py-3"
-			>
+			<div v-if="current" class="page-head">
 				<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">{{ current.label }}</h1>
 				<!-- the field name stays beside each date, so a filled From and To can be told apart -->
 				<label
@@ -43,7 +38,7 @@
 				}}</span>
 			</div>
 			<div
-				class="min-h-0 flex-1 overflow-auto transition-opacity"
+				class="panel page-card min-h-0 flex-1 overflow-auto transition-opacity"
 				:class="loading && result ? 'opacity-60' : ''"
 			>
 				<div v-if="loading && !result" class="p-10 text-center text-sm text-ink-gray-5">

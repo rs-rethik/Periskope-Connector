@@ -1,4 +1,5 @@
 import "./index.css";
+import "./theme.css";
 
 import { createApp } from "vue";
 import { FrappeUI, setConfig, frappeRequest } from "frappe-ui";
