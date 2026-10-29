@@ -1,21 +1,206 @@
 <template>
 	<div class="flex h-full flex-col overflow-y-auto bg-surface-base">
 		<div v-if="chat" class="flex flex-col gap-5 p-4">
-			<section class="flex items-center gap-3 border-b border-outline-gray-1 pb-4 pr-8">
-				<InitialsAvatar
-					size="lg"
-					:name="chat.chat_name || chat.contact_number || chat.title"
-				/>
-				<div class="min-w-0">
-					<div class="truncate text-lg font-semibold text-ink-gray-9">
-						{{ chat.title }}
-					</div>
-					<div class="truncate text-sm text-ink-gray-6">
-						<span v-if="chat.contact_number">+{{ chat.contact_number }}</span>
-						<span v-if="chat.is_group">WhatsApp group</span>
-						· on {{ chat.number_label }}
+			<section class="flex flex-col gap-3 border-b border-outline-gray-1 pb-4">
+				<div class="flex items-center gap-3 pr-8">
+					<InitialsAvatar
+						size="lg"
+						:name="chat.chat_name || chat.contact_number || chat.title"
+					/>
+					<div class="min-w-0">
+						<div class="truncate text-lg font-semibold text-ink-gray-9">
+							{{ chat.title }}
+						</div>
+						<div class="truncate text-sm text-ink-gray-6">
+							<span v-if="chat.contact_number">+{{ chat.contact_number }}</span>
+							<span v-if="chat.is_group">WhatsApp group</span>
+							· on {{ chat.number_label }}
+						</div>
 					</div>
 				</div>
+				<div class="flex flex-wrap gap-1.5">
+					<Tooltip v-if="record && !record.hidden" text="Open it in the CRM">
+						<a
+							:href="record.route"
+							target="_blank"
+							class="cp-chip bg-surface-gray-2 text-ink-gray-8 hover:bg-surface-gray-3"
+						>
+							<span
+								class="size-2 rounded-full"
+								:style="{ background: statusColor }"
+							/>
+							{{ kindLabel }} · {{ record.status }}
+						</a>
+					</Tooltip>
+					<Tooltip
+						v-else-if="ctx && !record"
+						text="Link this chat to a lead or deal below"
+					>
+						<span class="cp-chip bg-surface-amber-1 text-ink-amber-8">Not in CRM</span>
+					</Tooltip>
+					<SlaBadge v-if="chat.sla && chat.sla !== 'On Track'" :chat="chat" />
+					<Tooltip
+						v-if="ctx && ctx.tags.length"
+						:text="`AI tag on ${ctx.tags[0].count} message${
+							ctx.tags[0].count === 1 ? '' : 's'
+						}`"
+					>
+						<span class="cp-chip bg-surface-blue-1 text-ink-blue-7">
+							<LucideSparkles class="size-3" />{{ ctx.tags[0].tag }}
+						</span>
+					</Tooltip>
+					<Tooltip
+						:text="
+							chat.last_message_direction === 'Incoming'
+								? 'The customer wrote last'
+								: 'We wrote last'
+						"
+					>
+						<span class="cp-chip bg-surface-green-1 text-ink-green-8">
+							<LucideMessageCircle class="size-3" />{{
+								chat.last_message_direction === "Incoming"
+									? "Waiting on us"
+									: "Answered"
+							}}
+						</span>
+					</Tooltip>
+				</div>
+				<div class="flex gap-1.5">
+					<Tooltip v-if="record && !record.hidden" :text="`Open the ${kind} in the CRM`">
+						<a :href="record.route" target="_blank" class="cp-icon"
+							><LucideExternalLink class="size-4"
+						/></a>
+					</Tooltip>
+				</div>
+			</section>
+
+			<!-- What happens next: the earliest open task, with the actions on it -->
+			<section v-if="record && !record.hidden">
+				<div
+					class="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+				>
+					Next step
+				</div>
+				<div class="rounded-xl border border-outline-gray-1 bg-surface-gray-1 p-3">
+					<template v-if="nextTask">
+						<div class="flex items-start justify-between gap-2">
+							<div class="text-base font-semibold" :class="dueTone(nextTask)">
+								{{ dueDay(nextTask) }}
+							</div>
+							<span
+								class="cp-chip"
+								:class="priorityTone[nextTask.priority] || priorityTone.Medium"
+							>
+								<span class="size-1.5 rounded-full bg-current" />{{
+									nextTask.priority
+								}}
+							</span>
+						</div>
+						<div class="mt-0.5 text-sm text-ink-gray-7">
+							<span v-if="dueTime(nextTask)">{{ dueTime(nextTask) }} · </span
+							>{{ nextTask.title }}
+						</div>
+						<div
+							v-if="nextTask.assigned_to"
+							class="mt-2 flex items-center gap-2 text-sm text-ink-gray-6"
+						>
+							<InitialsAvatar size="xs" :name="person(nextTask.assigned_to)" />
+							{{ person(nextTask.assigned_to) }}
+						</div>
+						<div
+							v-if="record.tasks.length > 1"
+							class="mt-1 flex items-center gap-1.5 text-xs text-ink-gray-5"
+						>
+							<LucideListChecks class="size-3.5" />
+							{{ record.tasks.length - 1 }} more open task{{
+								record.tasks.length > 2 ? "s" : ""
+							}}
+						</div>
+						<div class="mt-3 flex flex-wrap gap-2">
+							<Button
+								size="sm"
+								variant="solid"
+								theme="green"
+								class="!rounded-full"
+								:loading="busy"
+								@click="run('complete_task', { task: nextTask.name })"
+							>
+								<template #prefix><LucideCheck class="size-3.5" /></template>
+								Done
+							</Button>
+							<Popover placement="bottom-start">
+								<template #target="{ togglePopover }">
+									<Button
+										size="sm"
+										class="!rounded-full"
+										@click="
+											moveTo = toInput(nextTask.due_date);
+											togglePopover();
+										"
+									>
+										<template #prefix
+											><LucideCalendarClock class="size-3.5"
+										/></template>
+										Reschedule
+									</Button>
+								</template>
+								<template #body="{ close }">
+									<div
+										class="mt-1 flex w-64 flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
+									>
+										<div class="text-sm font-medium text-ink-gray-8">
+											Move to
+										</div>
+										<input
+											v-model="moveTo"
+											type="datetime-local"
+											class="rounded-lg border border-outline-gray-2 bg-surface-base px-2 py-1.5 text-sm text-ink-gray-8"
+										/>
+										<div class="flex flex-wrap gap-1">
+											<button
+												v-for="q in quickDates"
+												:key="q.label"
+												class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs text-ink-gray-7 hover:bg-surface-gray-3"
+												@click="moveTo = q.value()"
+											>
+												{{ q.label }}
+											</button>
+										</div>
+										<Button
+											variant="solid"
+											label="Save"
+											:disabled="!moveTo"
+											:loading="busy"
+											@click="reschedule(nextTask, close)"
+										/>
+									</div>
+								</template>
+							</Popover>
+							<Button
+								size="sm"
+								class="!rounded-full"
+								label="Details"
+								@click="openUrl(record.route)"
+							/>
+						</div>
+					</template>
+					<div v-else class="flex flex-col items-start gap-2">
+						<div class="text-sm text-ink-gray-6">
+							No open task. Plan what happens next.
+						</div>
+					</div>
+				</div>
+				<Button
+					class="mt-3 w-full !rounded-full"
+					variant="solid"
+					@click="
+						error = '';
+						taskDialog = true;
+					"
+				>
+					<template #prefix><LucideCalendarPlus class="size-4" /></template>
+					Add follow-up
+				</Button>
 			</section>
 
 			<!-- The lead or deal -->
@@ -46,7 +231,10 @@
 						Linked to a {{ kind }} you cannot open.
 					</div>
 				</template>
-				<div v-else-if="record" class="rounded-lg border border-outline-gray-1 p-3">
+				<div
+					v-else-if="record"
+					class="rounded-xl border border-outline-gray-1 bg-surface-base p-3"
+				>
 					<div class="flex items-start gap-2">
 						<div class="min-w-0 flex-1">
 							<a
@@ -128,133 +316,189 @@
 				</div>
 			</section>
 
-			<section v-if="record && record.summary">
+			<PanelSection v-if="record && record.summary" id="summary" title="WhatsApp summary">
 				<div
-					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
+					class="flex flex-col gap-2.5 rounded-xl border border-outline-gray-1 bg-surface-gray-1 p-3"
 				>
-					WhatsApp summary
-				</div>
-				<div class="text-sm text-ink-gray-7">
-					<div
-						v-for="(line, i) in summaryLines"
-						:key="i"
-						:class="line.heading ? 'mt-2 font-medium text-ink-gray-8 first:mt-0' : ''"
-					>
-						{{ line.text }}
+					<div v-for="(part, i) in summaryParts" :key="i">
+						<div
+							v-if="part.heading"
+							class="mb-0.5 flex items-center gap-1.5 text-xs font-semibold"
+							:class="part.tone"
+						>
+							<span class="size-1.5 rounded-full bg-current" />{{ part.heading }}
+						</div>
+						<div class="text-sm leading-snug text-ink-gray-7">{{ part.text }}</div>
 					</div>
 				</div>
-			</section>
+			</PanelSection>
 
-			<section v-if="record && !record.hidden">
-				<div
-					class="mb-1 flex items-center text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
-				>
-					Open tasks
-					<Button
-						class="ml-auto"
-						size="sm"
-						variant="ghost"
-						label="Add"
+			<PanelSection
+				v-if="record && !record.hidden"
+				id="tasks"
+				:title="`Open tasks · ${record.tasks.length}`"
+			>
+				<template #actions>
+					<button
+						class="cp-add"
 						@click="
 							error = '';
 							taskDialog = true;
 						"
 					>
-						<template #prefix><LucidePlus class="size-3.5" /></template>
-					</Button>
-				</div>
-				<div v-if="!record.tasks.length" class="text-sm text-ink-gray-5">None</div>
-				<div v-for="t in record.tasks" :key="t.name" class="flex items-start gap-2 py-1">
-					<input
-						type="checkbox"
-						class="mt-0.5 rounded border-outline-gray-3"
-						:title="'Mark done'"
-						:disabled="busy"
-						@change="completeTask(t, $event)"
-					/>
-					<div class="min-w-0 flex-1">
-						<div class="text-sm text-ink-gray-8">{{ t.title }}</div>
-						<div class="text-xs text-ink-gray-5">
-							<span v-if="t.due_date">Due {{ fromNow(t.due_date) }} · </span
-							>{{ t.priority }}
-							<span v-if="t.assigned_to"> · {{ t.assigned_to }}</span>
+						<LucidePlus class="size-3.5" />Add
+					</button>
+				</template>
+				<div v-if="!record.tasks.length" class="cp-empty">No open tasks.</div>
+				<div class="flex flex-col gap-1.5">
+					<div
+						v-for="t in record.tasks"
+						:key="t.name"
+						class="group flex items-start gap-2.5 rounded-xl border border-outline-gray-1 bg-surface-base p-2.5 transition hover:border-outline-gray-2 hover:shadow-sm"
+					>
+						<Tooltip text="Mark done">
+							<button
+								class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-outline-gray-3 text-transparent transition hover:border-outline-green-2 hover:bg-surface-green-2 hover:text-ink-green-7"
+								:disabled="busy"
+								@click="run('complete_task', { task: t.name })"
+							>
+								<LucideCheck class="size-3" />
+							</button>
+						</Tooltip>
+						<div class="min-w-0 flex-1">
+							<div class="text-sm font-medium text-ink-gray-8">{{ t.title }}</div>
+							<div class="mt-1 flex flex-wrap items-center gap-1">
+								<span
+									v-if="t.due_date"
+									class="cp-chip"
+									:class="dueChip(t)"
+									:title="dayjs(t.due_date).format('D MMM YYYY, h:mm A')"
+								>
+									<LucideCalendar class="size-3" />{{ dueDay(t)
+									}}<template v-if="dueTime(t)"> · {{ dueTime(t) }}</template>
+								</span>
+								<span
+									class="cp-chip"
+									:class="priorityTone[t.priority] || priorityTone.Medium"
+									>{{ t.priority }}</span
+								>
+								<span
+									v-if="t.assigned_to"
+									class="cp-chip bg-surface-gray-2 text-ink-gray-7"
+									:title="t.assigned_to"
+								>
+									<InitialsAvatar size="xs" :name="person(t.assigned_to)" />{{
+										person(t.assigned_to).split(" ")[0]
+									}}
+								</span>
+							</div>
 						</div>
 					</div>
 				</div>
-			</section>
+			</PanelSection>
 
-			<section v-if="record && !record.hidden">
-				<div
-					class="mb-1 flex items-center text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
-				>
-					CRM notes
-					<Button
-						class="ml-auto"
-						size="sm"
-						variant="ghost"
-						label="Add"
+			<PanelSection
+				v-if="record && !record.hidden"
+				id="notes"
+				:title="`CRM notes · ${record.notes.length}`"
+			>
+				<template #actions>
+					<button
+						class="cp-add"
 						@click="
 							error = '';
 							noteDialog = true;
 						"
 					>
-						<template #prefix><LucidePlus class="size-3.5" /></template>
-					</Button>
+						<LucidePlus class="size-3.5" />Add
+					</button>
+				</template>
+				<div v-if="!record.notes.length" class="cp-empty">No notes yet.</div>
+				<div class="flex flex-col gap-1.5">
+					<div
+						v-for="n in record.notes"
+						:key="n.name"
+						class="rounded-xl border border-outline-gray-1 bg-surface-base p-2.5 transition hover:border-outline-gray-2 hover:shadow-sm"
+					>
+						<div class="flex items-start gap-2">
+							<LucideStickyNote class="mt-0.5 size-3.5 shrink-0 text-ink-amber-7" />
+							<div class="min-w-0 flex-1 text-sm font-medium text-ink-gray-8">
+								{{ n.title }}
+							</div>
+							<span
+								class="shrink-0 text-xs text-ink-gray-5"
+								:title="dayjs(n.creation).format('D MMM YYYY, h:mm A')"
+								>{{ fromNow(n.creation) }}</span
+							>
+						</div>
+						<div
+							class="mt-1 line-clamp-3 pl-[22px] text-sm leading-snug text-ink-gray-6"
+						>
+							{{ plain(n.content) }}
+						</div>
+					</div>
 				</div>
-				<div v-if="!record.notes.length" class="text-sm text-ink-gray-5">None</div>
-				<div
-					v-for="n in record.notes"
-					:key="n.name"
-					class="border-b border-outline-gray-1 py-1.5 last:border-0"
-				>
-					<div class="text-sm font-medium text-ink-gray-8">{{ n.title }}</div>
-					<div class="line-clamp-3 text-sm text-ink-gray-6">{{ plain(n.content) }}</div>
-					<div class="text-xs text-ink-gray-5">{{ fromNow(n.creation) }}</div>
-				</div>
-			</section>
+			</PanelSection>
 
-			<section v-if="ctx && ctx.tags.length">
-				<div
-					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
-				>
-					AI tags
-				</div>
-				<div class="flex flex-wrap gap-1">
-					<Badge
+			<PanelSection v-if="ctx && ctx.tags.length" id="tags" title="AI tags">
+				<div class="flex flex-wrap gap-1.5">
+					<span
 						v-for="t in ctx.tags"
 						:key="t.tag"
-						:label="t.count > 1 ? `${t.tag} · ${t.count}` : t.tag"
-						variant="subtle"
-						theme="blue"
-					/>
+						class="cp-chip bg-surface-blue-1 text-ink-blue-7"
+						:title="`${t.count} message${t.count === 1 ? '' : 's'}`"
+					>
+						<LucideSparkles class="size-3" />{{ t.tag
+						}}<span v-if="t.count > 1" class="text-ink-blue-5">· {{ t.count }}</span>
+					</span>
 				</div>
-			</section>
+			</PanelSection>
 
-			<section v-if="ctx && ctx.other_chats.length">
-				<div
-					class="mb-1 text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5"
-				>
-					On our other numbers
+			<PanelSection
+				v-if="ctx && ctx.other_chats.length"
+				id="other-numbers"
+				title="On our other numbers"
+			>
+				<div class="flex flex-col gap-1.5">
+					<button
+						v-for="o in ctx.other_chats"
+						:key="o.name"
+						class="flex w-full items-center gap-2.5 rounded-xl border border-outline-gray-1 bg-surface-base p-2.5 text-left transition hover:border-outline-gray-2 hover:shadow-sm"
+						@click="$router.push({ name: 'Inbox', params: { chat: o.name } })"
+					>
+						<span
+							class="grid size-7 shrink-0 place-items-center rounded-full bg-surface-green-2 text-ink-green-8"
+						>
+							<LucidePhone class="size-3.5" />
+						</span>
+						<span class="min-w-0 flex-1">
+							<span class="block text-sm font-medium text-ink-gray-8">{{
+								o.number_label
+							}}</span>
+							<span class="block truncate text-xs text-ink-gray-5">{{
+								o.last_message_preview
+							}}</span>
+						</span>
+						<LucideChevronRight class="size-4 shrink-0 text-ink-gray-4" />
+					</button>
 				</div>
-				<button
-					v-for="o in ctx.other_chats"
-					:key="o.name"
-					class="flex w-full flex-col rounded px-2 py-1.5 text-left hover:bg-surface-gray-2"
-					@click="$router.push({ name: 'Inbox', params: { chat: o.name } })"
-				>
-					<span class="text-sm text-ink-gray-8">{{ o.number_label }}</span>
-					<span class="truncate text-xs text-ink-gray-5">{{
-						o.last_message_preview
-					}}</span>
-				</button>
-			</section>
+			</PanelSection>
 
 			<section>
 				<div class="text-[11px] font-semibold uppercase tracking-wider text-ink-gray-5">
 					Assigned to
 				</div>
-				<div class="mt-1 text-sm text-ink-gray-8">
-					{{ chat.assigned_to?.length ? chat.assigned_to.join(", ") : "Nobody" }}
+				<div class="mt-1.5 flex flex-wrap gap-1.5">
+					<span
+						v-for="u in chat.assigned_to || []"
+						:key="u"
+						class="cp-chip bg-surface-gray-2 text-ink-gray-8"
+					>
+						<InitialsAvatar size="xs" :name="person(u)" />{{ person(u) }}
+					</span>
+					<span v-if="!chat.assigned_to?.length" class="text-sm text-ink-gray-5"
+						>Nobody</span
+					>
 				</div>
 			</section>
 		</div>
@@ -430,6 +674,19 @@
 
 <script setup>
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
+import PanelSection from "@/components/PanelSection.vue";
+import SlaBadge from "@/components/SlaBadge.vue";
+import dayjs from "dayjs";
+import LucidePhone from "~icons/lucide/phone";
+import LucideCheck from "~icons/lucide/check";
+import LucideSparkles from "~icons/lucide/sparkles";
+import LucideMessageCircle from "~icons/lucide/message-circle";
+import LucideListChecks from "~icons/lucide/list-checks";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCalendarPlus from "~icons/lucide/calendar-plus";
+import LucideCalendar from "~icons/lucide/calendar";
+import LucideStickyNote from "~icons/lucide/sticky-note";
+import LucideChevronRight from "~icons/lucide/chevron-right";
 import { computed, ref, watch } from "vue";
 import {
 	Badge,
@@ -439,7 +696,9 @@ import {
 	ErrorMessage,
 	FormControl,
 	LoadingIndicator,
+	Popover,
 	TextInput,
+	Tooltip,
 	call,
 } from "frappe-ui";
 import LucideExternalLink from "~icons/lucide/external-link";
@@ -632,9 +891,99 @@ async function markLost() {
 	if (ok) lostDialog.value = false;
 }
 
-async function completeTask(t, event) {
-	// untick again if it did not work, so the box never claims a task is done when it is not
-	if (!(await run("complete_task", { task: t.name }))) event.target.checked = false;
+// --- The header and the next step ---------------------------------------------------------------
+
+// The task to do next: the earliest one with a due date, else the first.
+const nextTask = computed(() => {
+	const tasks = record.value?.tasks || [];
+	return (
+		tasks.filter((t) => t.due_date).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0] ||
+		tasks[0] ||
+		null
+	);
+});
+
+// The summary as headed parts, each heading in its own colour.
+const SUMMARY_TONES = {
+	"What the customer wants": "text-ink-green-7",
+	"What we answered": "text-ink-blue-7",
+	"Still pending": "text-ink-amber-8",
+};
+const summaryParts = computed(() => {
+	const parts = [];
+	for (const line of summaryLines.value) {
+		const text = line.text.trim();
+		if (line.heading) parts.push({ heading: text, tone: SUMMARY_TONES[text], text: "" });
+		else if (parts.length) {
+			const last = parts[parts.length - 1];
+			last.text = last.text ? `${last.text} ${text}` : text;
+		} else parts.push({ heading: "", text });
+	}
+	return parts;
+});
+
+function dueChip(t) {
+	const days = dayjs(t.due_date).startOf("day").diff(dayjs().startOf("day"), "day");
+	if (days < 0) return "bg-surface-red-1 text-ink-red-7";
+	if (days === 0) return "bg-surface-amber-1 text-ink-amber-8";
+	return "bg-surface-gray-2 text-ink-gray-7";
+}
+
+const priorityTone = {
+	High: "bg-surface-red-1 text-ink-red-7",
+	Medium: "bg-surface-amber-1 text-ink-amber-8",
+	Low: "bg-surface-gray-2 text-ink-gray-6",
+};
+
+function dueDay(t) {
+	if (!t.due_date) return "No due date";
+	const due = dayjs(t.due_date);
+	const days = due.startOf("day").diff(dayjs().startOf("day"), "day");
+	if (days < 0) return days === -1 ? "Overdue · yesterday" : `Overdue · ${-days} days`;
+	if (days === 0) return "Today";
+	if (days === 1) return "Tomorrow";
+	return due.format(days < 7 ? "dddd" : "D MMM");
+}
+
+function dueTime(t) {
+	if (!t.due_date) return "";
+	const due = dayjs(t.due_date);
+	return due.format("HH:mm") === "00:00" ? "" : due.format("h:mm A");
+}
+
+function dueTone(t, fallback = "text-ink-gray-9") {
+	if (!t.due_date) return fallback;
+	const days = dayjs(t.due_date).startOf("day").diff(dayjs().startOf("day"), "day");
+	return days < 0 ? "text-ink-red-6" : days === 0 ? "text-ink-amber-8" : fallback;
+}
+
+function person(user) {
+	if (!user) return "";
+	return user
+		.split("@")[0]
+		.replace(/[._]/g, " ")
+		.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function openUrl(url) {
+	if (url) window.open(url, "_blank");
+}
+
+const moveTo = ref("");
+const toInput = (value) => (value ? dayjs(value).format("YYYY-MM-DDTHH:mm") : "");
+const at = (days, hour) => () =>
+	dayjs().add(days, "day").hour(hour).minute(0).format("YYYY-MM-DDTHH:mm");
+const quickDates = [
+	{
+		label: "Later today",
+		value: () => dayjs().add(2, "hour").minute(0).format("YYYY-MM-DDTHH:mm"),
+	},
+	{ label: "Tomorrow 10 AM", value: at(1, 10) },
+	{ label: "In 3 days", value: at(3, 10) },
+	{ label: "Next week", value: at(7, 10) },
+];
+async function reschedule(t, close) {
+	if (await run("reschedule_task", { task: t.name, due_date: moveTo.value })) close();
 }
 
 function unlink() {

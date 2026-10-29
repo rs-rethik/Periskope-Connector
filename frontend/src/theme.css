@@ -241,3 +241,54 @@ body {
 	background-color: var(--surface-gray-2);
 	border-color: var(--outline-gray-4);
 }
+
+/* The CRM panel's chips and round action buttons */
+.cp-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	border-radius: 9999px;
+	padding: 0.15rem 0.55rem;
+	font-size: 0.75rem;
+	font-weight: 500;
+	white-space: nowrap;
+	transition: background-color 0.15s;
+}
+.cp-icon {
+	display: grid;
+	place-items: center;
+	width: 2rem;
+	height: 2rem;
+	border-radius: 9999px;
+	border: 1px solid var(--outline-gray-2);
+	background: var(--surface-base);
+	color: var(--ink-gray-7);
+	transition: background-color 0.15s, color 0.15s;
+}
+.cp-icon:hover {
+	background: var(--surface-gray-2);
+	color: var(--ink-gray-9);
+}
+.cp-add {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	border-radius: 9999px;
+	border: 1px solid var(--outline-gray-2);
+	background: var(--surface-base);
+	padding: 0.1rem 0.6rem 0.1rem 0.45rem;
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--ink-gray-7);
+	transition: background-color 0.15s;
+}
+.cp-add:hover {
+	background: var(--surface-gray-2);
+}
+.cp-empty {
+	border: 1px dashed var(--outline-gray-2);
+	border-radius: 12px;
+	padding: 0.6rem 0.75rem;
+	font-size: 0.8125rem;
+	color: var(--ink-gray-5);
+}

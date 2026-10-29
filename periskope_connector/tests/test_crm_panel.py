@@ -217,6 +217,52 @@ class TestCreateAndChange(PanelCase):
 		self.assertEqual(frappe.db.get_value("CRM Task", task.name, "status"), "Done")
 		self.assertTrue(lead)
 
+	def test_a_task_is_rescheduled_only_on_its_own_record(self):
+		_lead("Resched", CUSTOMER)
+		on_a = self._msg(A)
+		task = crm_panel.add_task(on_a, "Send swatches", due_date="2031-01-05 10:00:00")["record"]["tasks"][0]
+		ctx = crm_panel.reschedule_task(on_a, task.name, "2031-01-07T16:30")
+		self.assertEqual(str(ctx["record"]["tasks"][0].due_date), "2031-01-07 16:30:00")
+		self.assertRaises(frappe.ValidationError, crm_panel.reschedule_task, on_a, task.name, "")
+		other = frappe.get_doc(
+			{"doctype": "CRM Task", "title": "Elsewhere", "status": "Todo", "assigned_to": "Administrator"}
+		).insert(ignore_permissions=True)
+		self.assertRaises(frappe.PermissionError, crm_panel.reschedule_task, on_a, other.name, "2031-01-08")
+
 	def test_changes_need_a_linked_record(self):
 		on_a = self._msg(A, "919600055555")
 		self.assertRaises(frappe.ValidationError, crm_panel.add_note, on_a, "hello")
+
+
+def _deal(lead, status=None):
+	doc = frappe.get_doc({"doctype": "CRM Deal", "lead": lead, "deal_owner": "Administrator"})
+	if status:
+		doc.status = status
+	doc.flags.ignore_mandatory = True
+	doc.flags.ignore_links = True
+	return doc.insert(ignore_permissions=True).name
+
+
+class TestFullView(PanelCase):
+	def test_a_lead_chat_shows_the_lead_and_all_its_deals(self):
+		lead = _lead("Full", CUSTOMER)
+		first, second = _deal(lead), _deal(lead)
+		view = crm_panel.full_view(self._msg(A))
+		self.assertEqual(view["lead"].name, lead)
+		self.assertEqual({d.name for d in view["deals"]}, {first, second})
+		self.assertTrue(all(d.route.startswith("/crm/deals/") for d in view["deals"]))
+		self.assertEqual(view["quotations"], [])
+		self.assertEqual(view["orders"], [])
+
+	def test_a_deal_chat_shows_its_lead_and_the_other_deals(self):
+		lead = _lead("Deal side")
+		first, second = _deal(lead), _deal(lead)
+		on_a = self._msg(A, "919600077777")
+		crm_panel.link_record(on_a, "CRM Deal", first)
+		view = crm_panel.full_view(on_a)
+		self.assertEqual(view["record"], {"doctype": "CRM Deal", "name": first})
+		self.assertEqual(view["lead"].name, lead)
+		self.assertEqual({d.name for d in view["deals"]}, {first, second})
+
+	def test_an_unlinked_chat_has_no_full_view(self):
+		self.assertRaises(frappe.ValidationError, crm_panel.full_view, self._msg(A, "919600088888"))
