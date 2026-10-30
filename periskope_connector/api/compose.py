@@ -223,8 +223,8 @@ def _set(name: str, **values):
 
 def _after_rep_reply(name: str):
 	"""The rep answered from the inbox: the same as a reply from their phone. The waiting AI reply
-	is cancelled, the customer's earlier messages count as replied, and the chat, CRM link and CRM
-	WhatsApp tab are brought up to date."""
+	is cancelled, the customer's earlier messages count as replied, and the chat and its CRM link
+	are brought up to date."""
 	from periskope_connector import autoreply
 	from periskope_connector.linking import link_message
 

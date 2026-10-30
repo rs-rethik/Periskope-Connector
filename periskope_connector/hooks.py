@@ -63,8 +63,6 @@ doc_events = {
 	},
 }
 
-# The CRM's WhatsApp tab sends through Periskope for the Periskope account (frappe_whatsapp is optional:
-# the override is only loaded when its doctype exists).
 # The WhatsApp inbox: a sales user sees only the chats on their numbers that are theirs (access.py).
 permission_query_conditions = {
 	"Periskope Chat": "periskope_connector.access.chat_query",
@@ -73,10 +71,6 @@ permission_query_conditions = {
 has_permission = {
 	"Periskope Chat": "periskope_connector.access.chat_permission",
 	"Periskope Message": "periskope_connector.access.message_permission",
-}
-
-override_doctype_class = {
-	"WhatsApp Message": "periskope_connector.overrides.whatsapp_message.PeriskopeWhatsAppMessage",
 }
 
 # Scheduled Tasks

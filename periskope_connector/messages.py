@@ -235,7 +235,7 @@ def process_webhook_log(log: str):
 
 def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	"""message.updated / message.deleted: the customer edited or deleted a message, or its delivery
-	ticks changed. The stored message follows, so does its copy in the CRM WhatsApp tab; an edited
+	ticks changed. The stored message follows; an edited
 	customer message is tagged again, and a deleted one no longer waits for a reply."""
 	data = payload.get("data") or {}
 	message_id = data.get("message_id")
@@ -264,10 +264,9 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	if not values:
 		return name
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
-	from periskope_connector import chat, mirror
+	from periskope_connector import chat
 	from periskope_connector.linking import CHAT_FIELDS
 
-	mirror.upsert(name)
 	# The inbox shows the edit or the deletion at once (its list preview too).
 	chat.ensure(frappe.db.get_value("Periskope Message", name, CHAT_FIELDS, as_dict=True))
 	if values.get("classification_status") == "Pending":
@@ -317,9 +316,6 @@ def update_ack(payload: dict) -> str | None:
 	if not values:
 		return name
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
-	from periskope_connector import mirror
-
-	mirror.upsert(name)
 	_changed(name, "ack")
 	return name
 

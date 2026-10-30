@@ -237,11 +237,7 @@ INBOX_SCRIPT = """class %(cls)s {
 
 
 def _ensure_crm_ui():
-	"""The Periskope WhatsApp account, so the CRM shows its WhatsApp tab, and the "Open WhatsApp
-	inbox" action on leads and deals."""
-	from periskope_connector.mirror import ensure_account
-
-	ensure_account()
+	"""The "Open WhatsApp inbox" action on leads and deals."""
 	if not frappe.db.exists("DocType", "CRM Form Script"):
 		return
 	for dt in ("CRM Lead", "CRM Deal"):

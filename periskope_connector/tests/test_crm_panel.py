@@ -7,7 +7,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import chat, messages, mirror
+from periskope_connector import chat, messages
 from periskope_connector.api import crm_panel
 from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate
 
@@ -154,14 +154,6 @@ class TestLinking(PanelCase):
 		with patch.object(frappe, "has_permission", lambda *a, **k: False):
 			self.assertRaises(frappe.PermissionError, crm_panel.link_record, on_a, "CRM Lead", lead)
 		self.assertRaises(frappe.PermissionError, crm_panel.link_record, on_a, "ToDo", "x")
-
-	def test_the_crm_tab_shows_which_number_a_message_came_on(self):
-		frappe.get_doc({"doctype": "WhatsApp Number", "number": B, "display_name": "Sales desk"}).insert(
-			ignore_permissions=True
-		)
-		self.assertEqual(
-			mirror._label(frappe._dict(agent_reply="Answer", org_phone=B)), "AI reply · via Sales desk"
-		)
 
 
 class TestSearch(PanelCase):

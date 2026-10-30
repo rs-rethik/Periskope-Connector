@@ -121,7 +121,7 @@ Your sales reps talk to customers on WhatsApp from their company numbers. Perisk
 4. **Decides and acts**: creates the tasks a message hands out, escalates to the managers or the MD, creates a lead for a new enquiry, keeps the record's notes, tasks and timeline up to date.
 5. **Answers** a customer no rep has answered in time, and reminds the team when a customer still waits.
 
-> **Note** The app sends a WhatsApp message only for the AI's replies (when **Reply to Customers** is on) and for a rep's reply typed in the CRM's WhatsApp tab. Test mode limits who can receive messages. Reps can keep using WhatsApp or WhatsApp Business as they do today.
+> **Note** The app sends a WhatsApp message only for the AI's replies (when **Reply to Customers** is on) and for a rep's reply typed in the WhatsApp app (`/whatsapp`). Test mode limits who can receive messages. Reps can keep using WhatsApp or WhatsApp Business as they do today.
 
 ##### Who uses it
 
@@ -129,7 +129,7 @@ Your sales reps talk to customers on WhatsApp from their company numbers. Perisk
 |---|---|
 | System Manager | Sets the app up and changes its settings. |
 | Sales Manager, WhatsApp Manager | Read the messages, reports and dashboard, correct tags, work the contact queue. |
-| Sales rep | Works in the CRM: gets tasks, bells and the WhatsApp tab on each lead and deal. |
+| Sales rep | Answers chats in the WhatsApp app (`/whatsapp`), with the lead or deal beside each chat; gets tasks and bells in the CRM. |
 
 ### Before you start
 

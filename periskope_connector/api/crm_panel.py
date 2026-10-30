@@ -333,7 +333,7 @@ def search_records(query: str = "") -> list[dict]:
 
 def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
 	"""Point every chat row of this contact (or the group) at the record, and link its messages again,
-	so the CRM WhatsApp tab and the timeline follow."""
+	so the CRM timeline follows."""
 	if row.is_group:
 		group = frappe.db.get_value("Periskope Group", {"chat_id": row.chat_id})
 		if group:
