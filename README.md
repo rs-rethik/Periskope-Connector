@@ -266,7 +266,9 @@ When any rep replies in the chat, the reminder closes, its task is closed and th
 
 Reps and managers work WhatsApp at **`/whatsapp`** (also in the Frappe apps switcher as *Periskope Connector*). It needs no Desk access and no Periskope seat: the one Periskope account stays the connection for all company numbers.
 
-**Who sees what.** Managers (Sales Manager, WhatsApp Manager, System Manager) see every number. A Sales User sees a chat only when its number is one of theirs (their **Agent** numbers or their team's numbers) and the chat is assigned to them, assigned to their team with team visibility on, or linked to a lead or deal they own. Admins set agents, teams and numbers in **Settings**.
+**Who sees what.** Managers (Sales Manager, WhatsApp Manager, System Manager) see every number. A Sales User sees the chats assigned to them, on any number, and a territory's sales rep also sees the chats assigned to the sales persons under them. On their own numbers (their **Agent** numbers or their team's numbers) they also see their team's chats when the team shares them, and the chats of leads and deals they own. Admins set agents, teams and numbers in **Settings**.
+
+**Territory sales reps.** A chat or group nobody is assigned to goes to the sales rep of its customer's territory: the territory of its deal, lead or organization, whose **Territory Manager** (CRM Territory; the parent territory's when it has none) is the rep. Hand assignments and team rules are never replaced. The rep can hand the chat to the sales persons under their own Sales Person in ERPNext (Sales Person → Employee → user). To assign the existing chats once, quietly: `bench --site <site> execute periskope_connector.territory.assign_unassigned`.
 
 **The inbox** has three panes: the chat list, the conversation, and the CRM record.
 
