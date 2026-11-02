@@ -89,7 +89,9 @@
 						@updated="replace"
 						@view="viewing = $event.name"
 						:can-create-deal="!!chat"
+						:can-create-order="!!chat && boot.can_create_order"
 						@create-deal="dealFrom = $event"
+						@create-order="orderFrom = $event"
 					/>
 				</template>
 				<div v-if="loading" class="flex justify-center p-6">
@@ -121,6 +123,13 @@
 			@update:model-value="(open) => !open && (dealFrom = null)"
 			@created="dealCreated"
 		/>
+		<CreateSalesOrderDialog
+			:model-value="!!orderFrom"
+			:chat="chat"
+			:message="orderFrom"
+			@update:model-value="(open) => !open && (orderFrom = null)"
+			@created="dealCreated"
+		/>
 		<MediaViewer v-model="viewing" :images="images" :chat-title="chat?.title || ''" />
 	</div>
 </template>
@@ -132,6 +141,8 @@ import { Button, LoadingIndicator, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import FullView from "@/components/FullView.vue";
 import CreateDealDialog from "@/components/CreateDealDialog.vue";
+import CreateSalesOrderDialog from "@/components/CreateSalesOrderDialog.vue";
+import { boot } from "@/boot";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
@@ -145,6 +156,7 @@ import { dayLabel, messageTime, sameDay } from "@/utils/format";
 
 const fullView = ref(false);
 const dealFrom = ref(null); // the message a deal is being made from
+const orderFrom = ref(null); // the message a sales order is being made from
 
 // A deal was made: reload this chat (the message's deal chip) and the CRM panel (the new deal).
 function dealCreated() {

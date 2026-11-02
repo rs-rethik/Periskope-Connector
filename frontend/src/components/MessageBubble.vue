@@ -206,7 +206,23 @@
 					@click="retry"
 				/>
 			</div>
-			<div v-if="message.deals?.length" class="mt-1.5 flex flex-wrap gap-1">
+			<div
+				v-if="message.deals?.length || message.orders?.length"
+				class="mt-1.5 flex flex-wrap gap-1"
+			>
+				<Tooltip
+					v-for="o in message.orders"
+					:key="o"
+					text="A sales order was created from this message"
+					><a
+						:href="`/app/sales-order/${o}`"
+						target="_blank"
+						class="inline-flex items-center gap-1 rounded-full bg-surface-blue-1 px-2 py-0.5 text-xs font-medium text-ink-blue-7 hover:bg-surface-blue-2"
+						aria-label="A sales order was created from this message"
+					>
+						<LucideShoppingCart class="size-3" />{{ o }}
+					</a></Tooltip
+				>
 				<Tooltip
 					v-for="d in message.deals"
 					:key="d"
@@ -249,6 +265,16 @@
 			>
 				<LucideHandshake class="size-4" /></button
 		></Tooltip>
+		<Tooltip
+			v-if="!outgoing && canCreateOrder"
+			text="Create a sales order from the customer's message"
+			><button
+				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-blue-7 group-hover:visible"
+				aria-label="Create a sales order from the customer's message"
+				@click="$emit('create-order', message)"
+			>
+				<LucideShoppingCart class="size-4" /></button
+		></Tooltip>
 	</div>
 </template>
 
@@ -257,6 +283,7 @@ import { computed, ref } from "vue";
 import { Avatar, Button, Tooltip, call } from "frappe-ui";
 import LucideBot from "~icons/lucide/bot";
 import LucideHandshake from "~icons/lucide/handshake";
+import LucideShoppingCart from "~icons/lucide/shopping-cart";
 import LucideBan from "~icons/lucide/ban";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideMapPin from "~icons/lucide/map-pin";
@@ -275,8 +302,9 @@ const props = defineProps({
 	isGroup: { type: Boolean, default: false },
 	showSenderName: { type: Boolean, default: true },
 	canCreateDeal: { type: Boolean, default: false },
+	canCreateOrder: { type: Boolean, default: false },
 });
-const emit = defineEmits(["reply", "updated", "view", "create-deal"]);
+const emit = defineEmits(["reply", "updated", "view", "create-deal", "create-order"]);
 
 const outgoing = computed(() => props.message.direction === "Outgoing");
 const showSender = computed(() => props.isGroup && !outgoing.value && props.showSenderName);

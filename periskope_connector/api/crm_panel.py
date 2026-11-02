@@ -358,6 +358,11 @@ def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
 		_("Linked to {0}").format(record) if record else _("Link removed: matched by number again"),
 		user=frappe.session.user,
 	)
+	if record:
+		from periskope_connector import territory
+
+		for name in frappe.get_all("Periskope Chat", filters={"chat_id": row.chat_id}, pluck="name"):
+			territory.assign_rep(name)  # still unassigned: the territory's sales rep
 
 
 @frappe.whitelist(methods=["POST"])
@@ -564,7 +569,7 @@ def _customer_message(row, message: str):
 	if not msg or msg.chat_id != row.chat_id:
 		frappe.throw(_("That message is not in this chat."), frappe.PermissionError)
 	if msg.direction != "Incoming":
-		frappe.throw(_("Make the deal from the customer's message, not ours."))
+		frappe.throw(_("Use the customer's message, not ours."))
 	return msg
 
 

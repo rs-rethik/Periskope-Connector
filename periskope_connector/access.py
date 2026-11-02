@@ -66,24 +66,30 @@ def _owned(user: str, doctype: str, field: str) -> str:
 
 
 def chat_condition(user: str | None = None, table: str = "`tabPeriskope Chat`") -> str:
-	"""SQL that limits Periskope Chat rows to those the user may see ("" for all)."""
+	"""SQL that limits Periskope Chat rows to those the user may see ("" for all): the chats assigned
+	to them (or to their sales team, territory.py) on any number; and on their own numbers, their
+	team's chats (when the team shares) and the chats of leads and deals they own."""
 	user = user or frappe.session.user
 	numbers = allowed_numbers(user)
 	if numbers is None:
 		return ""
+	from periskope_connector.territory import team_of
+
+	# Assigned to the user, or (a territory's sales rep) to a sales person under them: on any number.
+	assigned = " or ".join(
+		f"{table}._assign like {frappe.db.escape(assigned_like(u))}" for u in [user, *team_of(user)]
+	)
 	if not numbers:
-		return "1=0"
+		return f"({assigned})"
 	listed = ", ".join(frappe.db.escape(n) for n in numbers)
-	assigned = frappe.db.escape(assigned_like(user))
 	open_teams = [t.name for t in teams_of(user) if t.team_can_see_team_chats]
 	team = f" or {table}.team in ({', '.join(frappe.db.escape(t) for t in open_teams)})" if open_teams else ""
 	return (
-		f"({table}.whatsapp_number in ({listed}) and ("
-		f"{table}._assign like {assigned}"
+		f"({assigned} or ({table}.whatsapp_number in ({listed}) and (1=0"
 		f"{team}"
 		f" or {table}.crm_lead in ({_owned(user, 'CRM Lead', 'lead_owner')})"
 		f" or {table}.crm_deal in ({_owned(user, 'CRM Deal', 'deal_owner')})"
-		"))"
+		")))"
 	)
 
 

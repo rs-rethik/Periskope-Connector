@@ -409,12 +409,40 @@ def _meta_chat(chat: str) -> frappe._dict:
 	return row
 
 
+def _may_send_from(number: str):
+	"""The user may write from this company number (active, and one of theirs)."""
+	allowed = access.allowed_numbers()
+	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or (
+		allowed is not None and number not in allowed
+	):
+		frappe.throw(_("You cannot send from that number."), frappe.PermissionError)
+
+
 @frappe.whitelist()
-def meta_templates(chat: str) -> list[dict]:
-	"""The approved templates a Meta WhatsApp chat can be sent (any time, also after 24 hours)."""
+def meta_templates(chat: str | None = None, number: str | None = None) -> list[dict]:
+	"""The approved templates a Meta WhatsApp chat can be sent (any time, also after 24 hours): for
+	an open chat, or for a new chat from one of the user's Meta numbers."""
 	access.require_inbox_user()
-	_meta_chat(chat)
+	if number:
+		_may_send_from(number)
+		if not meta.is_meta(number):
+			frappe.throw(_("Templates are sent only from a Meta WhatsApp number."))
+	else:
+		_meta_chat(chat)
 	return meta.templates()
+
+
+def _template_values(template: str, params) -> tuple[dict, list[str]]:
+	"""The approved template and its values, one for each {{n}} of its body (all required)."""
+	found = next((t for t in meta.templates() if t["name"] == template), None)
+	if not found:
+		frappe.throw(_("Choose one of the approved templates."))
+	values = [
+		str(p or "").strip() for p in (frappe.parse_json(params) if isinstance(params, str) else params or [])
+	][: found["params"]]
+	if len(values) < found["params"] or not all(values):
+		frappe.throw(_("Fill in every value of the template."))
+	return found, values
 
 
 @frappe.whitelist(methods=["POST"])
@@ -423,15 +451,8 @@ def send_template(chat: str, template: str, params: str | list | None = None) ->
 	Returns the saved message."""
 	access.require_inbox_user()
 	row = _meta_chat(chat)
-	found = next((t for t in meta.templates() if t["name"] == template), None)
-	if not found:
-		frappe.throw(_("Choose one of the approved templates."))
-	params = [
-		str(p or "").strip() for p in (frappe.parse_json(params) if isinstance(params, str) else params or [])
-	]
-	if len(params) < found["params"] or not all(params[: found["params"]]):
-		frappe.throw(_("Fill in every value of the template."))
-	text = meta.template_text(template, frappe.as_json(params[: found["params"]]))
+	_found, params = _template_values(template, params)
+	text = meta.template_text(template, frappe.as_json(params))
 	try:
 		result = send_whatsapp(
 			row.chat_id,
@@ -439,7 +460,7 @@ def send_template(chat: str, template: str, params: str | list | None = None) ->
 			row.whatsapp_number or row.org_phone,
 			origin="Inbox",
 			template=template,
-			params=params[: found["params"]],
+			params=params,
 			detail={"user": frappe.session.user, "template": template},
 		)
 	except safety.SendNotAllowed:
@@ -457,15 +478,33 @@ def send_template(chat: str, template: str, params: str | list | None = None) ->
 
 
 @frappe.whitelist(methods=["POST"])
-def start_chat(number: str, phone: str, text: str) -> dict:
-	"""Write first to a customer: from one of the user's numbers, to a 1-to-1 WhatsApp number.
-	The chat is assigned to the user who started it."""
+def start_chat(
+	number: str,
+	phone: str,
+	text: str = "",
+	file: str | None = None,
+	template: str | None = None,
+	params: str | list | None = None,
+) -> dict:
+	"""Write first to a customer: from one of the user's numbers, to a 1-to-1 WhatsApp number, with a
+	text and/or a file, or from a Meta WhatsApp number with an approved template (Meta takes nothing
+	else before the customer has written). The chat is assigned to the user who started it. What is
+	sent is checked before the chat is made, so a refused send leaves no empty chat behind."""
 	access.require_inbox_user()
-	allowed = access.allowed_numbers()
-	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or (
-		allowed is not None and number not in allowed
-	):
-		frappe.throw(_("You cannot send from that number."), frappe.PermissionError)
+	_may_send_from(number)
+	is_meta = meta.is_meta(number)
+	if is_meta:
+		if not template:
+			frappe.throw(_("A Meta WhatsApp number can start a chat only with an approved template."))
+		_template_values(template, params)
+	else:
+		text = (text or "").strip()
+		if not text and not file:
+			frappe.throw(_("Type a message or attach a file."))
+		if len(text) > MAX_TEXT:
+			frappe.throw(_("The message is longer than {0} characters.").format(MAX_TEXT))
+		if file:
+			_own_file(file)
 	digits = re.sub(r"\D", "", phone or "")
 	if len(digits) < 10:
 		frappe.throw(_("Enter the customer's WhatsApp number with the country code."))
@@ -499,7 +538,7 @@ def start_chat(number: str, phone: str, text: str) -> dict:
 
 		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
 	frappe.db.commit()
-	result = send(name, text)
+	result = send_template(name, template, params) if is_meta else send(name, text, file=file)
 	return {"chat": name, "message": result}
 
 

@@ -77,8 +77,31 @@ def after_migrate():
 	setup()
 
 
+# ERPNext's doctypes get fields only on a site that has ERPNext.
+ERPNEXT_CUSTOM_FIELDS = {
+	"Sales Order": [
+		# the WhatsApp message a rep made this order from (api/sales_order.py)
+		dict(
+			fieldname="periskope_message",
+			label="From WhatsApp Message",
+			fieldtype="Link",
+			options="Periskope Message",
+			insert_after="customer",
+			read_only=1,
+			no_copy=1,
+			print_hide=1,
+			search_index=1,
+		),
+	],
+}
+
+
+def _erpnext_fields() -> dict:
+	return {dt: fields for dt, fields in ERPNEXT_CUSTOM_FIELDS.items() if frappe.db.exists("DocType", dt)}
+
+
 def _ensure_custom_fields():
-	create_custom_fields(CUSTOM_FIELDS, ignore_validate=True, update=True)
+	create_custom_fields({**CUSTOM_FIELDS, **_erpnext_fields()}, ignore_validate=True, update=True)
 
 
 def setup():
@@ -112,7 +135,7 @@ def before_uninstall():
 		from frappe.custom.doctype.custom_field.custom_field import delete_custom_fields
 
 		# Frappe's own helper takes the same {doctype: [fields]} shape the install uses.
-		delete_custom_fields(CUSTOM_FIELDS)
+		delete_custom_fields({**CUSTOM_FIELDS, **_erpnext_fields()})
 	except Exception:
 		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
 	try:
