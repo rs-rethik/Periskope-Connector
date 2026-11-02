@@ -145,7 +145,7 @@ SECTIONS = [
 		"key": "test_mode",
 		"title": "Test mode",
 		"confirm": True,
-		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails"],
+		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails", "test_hold_all_emails"],
 	},
 	{
 		"key": "meta",

@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, get_url_to_form
 
+from periskope_connector import safety
 from periskope_connector.reminders import get_config
 
 # The message fields the alert email reads.
@@ -73,7 +74,7 @@ def escalate(message: str) -> bool:
 			else ""
 		)
 
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=emails,
 			subject=subject,
 			message=(

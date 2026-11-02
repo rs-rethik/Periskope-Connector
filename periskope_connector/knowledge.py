@@ -3,12 +3,12 @@
 Entries are question and answer pairs, arranged as a tree on the Knowledge Base canvas: Topic nodes
 (Delivery) branch into Condition nodes (Customer is in Chennai, Otherwise) and end in Answer nodes.
 An answer with no parent hangs straight under "Customer asks". The agent mines answers from
-conversations where a rep answered a customer's question and places each one in the tree: under the
-topic or condition it belongs to, or under a new topic it proposes. The team can also draw the tree by
-hand on the canvas. A mined entry, a changed answer and the retiring of a stale one are applied at once,
-no approval needed (suggestions.AUTOMATIC_KINDS); the Periskope Suggestion row records each change, and
-the team corrects the tree on the canvas. Repeats of the same question add to the entry instead of
-making a new one.
+conversations where a rep answered a customer's question (kept only when the rep's own messages say
+it, rep_said) and places each one in the tree: under the topic or condition it belongs to, or under a
+new topic it proposes. The team can also draw the tree by hand on the canvas. A mined entry, a changed
+answer and the retiring of a stale one are applied at once, no approval needed
+(suggestions.AUTOMATIC_KINDS); the Periskope Suggestion row records each change, and the team corrects
+the tree on the canvas. Repeats of the same question add to the entry instead of making a new one.
 """
 
 import re
@@ -24,6 +24,8 @@ SAME_QUESTION = 0.6  # word overlap above which two questions are the same
 CHANGED_ANSWER = 0.4  # answer overlap below which a repeat gives a different answer
 SAME_ANSWER = 0.8  # answer overlap from which two answers say the same thing
 MIN_CONFIDENCE = 60
+SAID_BY_REP = 0.6  # share of a mined answer's words that the rep's own messages must contain
+REP_LOOKBACK_DAYS = 2  # rep messages this long before the customer's question still count
 MAX_OUTLINE_ANSWERS = 150  # existing answers shown to the AI, so it can tell new from changed
 STALE_DAYS = 90
 STOP = {
@@ -324,10 +326,47 @@ def mine(transcript: str, chats: dict[int, list[str]]) -> dict:
 		evidence = (chats.get(item.get("evidence_chat")) or [])[:5]
 		if not evidence:
 			continue  # not from a conversation in this batch
+		if not rep_said(item.get("answer"), evidence):
+			continue  # the AI's wording, or the customer's: only what a rep really wrote is learned
 		outcome = record(item, evidence, nodes)
 		if outcome:
 			counts[outcome] += 1
 	return counts
+
+
+def rep_said(answer: str | None, evidence: list[str]) -> bool:
+	"""Whether a rep's own messages (not the customer's, not the AI's replies) in the conversation of
+	`evidence` say this answer: most of its words and every one of its numbers. A mined answer is
+	used for auto replies at once, so a customer must not be able to plant one ("Yes, 50% off")."""
+	need = words(answer or "")
+	if not need:
+		return False
+	asked = frappe.get_all(
+		"Periskope Message",
+		filters={"name": ["in", evidence]},
+		fields=["chat_id", "message_timestamp"],
+	)
+	if not asked:
+		return False
+	since = add_days(
+		min(m.message_timestamp for m in asked if m.message_timestamp) or now_datetime(), -REP_LOOKBACK_DAYS
+	)
+	said = " ".join(
+		(m.body or "") + " " + (m.transcript or "")
+		for m in frappe.get_all(
+			"Periskope Message",
+			filters=[
+				["chat_id", "in", list({m.chat_id for m in asked})],
+				["direction", "=", "Outgoing"],
+				["agent_reply", "is", "not set"],
+				["is_deleted", "=", 0],
+				["message_timestamp", ">=", since],
+			],
+			fields=["body", "transcript"],
+			limit=200,
+		)
+	)
+	return len(need & words(said)) / len(need) >= SAID_BY_REP and _numbers(answer) <= _numbers(said)
 
 
 def flag_stale() -> int:

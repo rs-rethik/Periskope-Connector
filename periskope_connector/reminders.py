@@ -25,6 +25,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, get_datetime, get_time, get_url_to_form, now_datetime, today
 
+from periskope_connector import safety
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import NOT_ANSWERS, is_acknowledgement
@@ -254,7 +255,7 @@ def _send_email(subject: str, message: str, recipients: list[str], reminder) -> 
 	if not recipients:
 		return False
 	try:
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=recipients,
 			subject=subject,
 			message=message,

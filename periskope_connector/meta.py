@@ -279,7 +279,7 @@ def _media(wm) -> dict:
 
 def phone_number(value: str | None) -> str:
 	"""A number as WhatsApp writes it (country code, digits only). Old rows keep numbers as typed
-	("+91-6374955805", "9600471989"); a 10-digit one gets the company's country code."""
+	("+91-9000012345", "9600471989"); a 10-digit one gets the company's country code."""
 	number = digits(value)
 	if len(number) == 10:
 		number = _country_code() + number

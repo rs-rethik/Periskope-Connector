@@ -9,6 +9,7 @@ Admins set the display name, the default rep and whether the number is active.
 import frappe
 from frappe.utils import now_datetime
 
+from periskope_connector import safety
 from periskope_connector.periskope_connector.doctype.whatsapp_number.whatsapp_number import digits
 from periskope_connector.system import insert_as_system
 
@@ -181,7 +182,7 @@ def _alert_dropped(rows: list):
 			_bell(managers, chat, subject)
 	emails = reminders.get_config().emails
 	if emails:
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=emails,
 			subject=subject,
 			message=_(

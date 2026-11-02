@@ -157,17 +157,12 @@ def _ensure_assistant_defaults():
 	# New numbers are welcomed once "Reply to Customers" is on (welcome.py).
 	if not _stored("welcome_new_numbers"):
 		frappe.db.set_single_value("Periskope Settings", "welcome_new_numbers", 1)
-	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
-	# once: an admin who switches it off later is not overridden by the next migrate.
+	# Test mode starts on with empty allow lists: no WhatsApp message and no email of this app leaves
+	# the site until an admin lists who may get them (or switches test mode off). Other apps' emails
+	# are not held unless the admin asks for it (test_hold_all_emails). Seeded once: an admin who
+	# switches it off later is not overridden by the next migrate.
 	if not _stored("test_mode"):
-		frappe.db.set_single_value(
-			"Periskope Settings",
-			{
-				"test_mode": 1,
-				"test_allowed_chats": "916374955805",
-				"test_allowed_emails": "rethik@praneraservices.com\npriyadharshini@agamnext.com",
-			},
-		)
+		frappe.db.set_single_value("Periskope Settings", "test_mode", 1)
 
 
 def _ensure_phone_fields():
