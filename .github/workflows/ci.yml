@@ -89,10 +89,6 @@ jobs:
           bench --site test.local install-app erpnext crm periskope_connector
           bench --site test.local set-config allow_tests true
           bench build --app periskope_connector
-      - name: Periskope Settings before the tests
-        run: |
-          cd ~/frappe-bench
-          bench --site test.local execute frappe.db.get_singles_dict --args '["Periskope Settings"]'
       - name: Run tests
         run: |
           cd ~/frappe-bench

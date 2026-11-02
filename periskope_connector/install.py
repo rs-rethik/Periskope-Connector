@@ -229,11 +229,25 @@ def _ensure_tags():
 
 
 def _ensure_working_hours():
-	"""A Time field's default is not applied to a new single doctype: the form fills in the current
-	time instead, which made the working window zero-length. Store the usual hours up front."""
-	for field, value in (("working_hours_start", "09:00:00"), ("working_hours_end", "19:00:00")):
-		if not frappe.db.get_single_value("Periskope Settings", field):
-			frappe.db.set_single_value("Periskope Settings", field, value)
+	"""A Time field's default is not applied to a new single doctype: Frappe stores the install time
+	in both fields instead, a window of a split second, so the settings could not be saved and the
+	reply reminders never ran. Store the usual hours when the window is missing or that short; a
+	window an admin set is kept."""
+	from frappe.utils import get_time
+
+	from periskope_connector.periskope_connector.doctype.periskope_settings.periskope_settings import (
+		MIN_WORKING_MINUTES,
+	)
+
+	start = frappe.db.get_single_value("Periskope Settings", "working_hours_start")
+	end = frappe.db.get_single_value("Periskope Settings", "working_hours_end")
+	if start and end:
+		start, end = get_time(start), get_time(end)
+		if (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute) >= MIN_WORKING_MINUTES:
+			return
+	frappe.db.set_single_value(
+		"Periskope Settings", {"working_hours_start": "09:00:00", "working_hours_end": "19:00:00"}
+	)
 
 
 # On a CRM lead or deal: open its WhatsApp chat in the inbox (the newest, on whichever number).
