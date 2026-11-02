@@ -36,7 +36,12 @@
 							</a>
 						</div>
 					</div>
-					<Button variant="ghost" title="Close" @click="show = false">
+					<Button
+						variant="ghost"
+						tooltip="Close"
+						aria-label="Close"
+						@click="show = false"
+					>
 						<template #icon><LucideX class="size-4" /></template>
 					</Button>
 				</div>

@@ -88,6 +88,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Button, Dialog, ErrorMessage, call, toast } from "frappe-ui";
 import FieldInput from "@/components/settings/FieldInput.vue";
+import { ask as confirmAction } from "@/utils/confirm";
 
 const props = defineProps({
 	sectionKey: { type: String, required: true },
@@ -128,6 +129,15 @@ const ACTIONS = {
 		},
 	],
 	ai: [{ action: "test_ai", label: "Test AI" }],
+	meta: [
+		{ action: "meta_connect", label: "Connect" },
+		{
+			action: "meta_import",
+			label: "Import history",
+			confirm:
+				"This copies every earlier message of the account into the WhatsApp app, in the background. No AI, auto reply or alert runs on them. Continue?",
+		},
+	],
 };
 const actions = computed(() => ACTIONS[props.sectionKey] || []);
 const hint = computed(
@@ -142,6 +152,7 @@ const hint = computed(
 			test_mode:
 				"While testing, messages and emails go only to the listed numbers and addresses.",
 			voice: "Google Gemini turns customers' voice notes into text.",
+			meta: "A WhatsApp Business account connected through Meta (the frappe_whatsapp app). Its chats show beside the Periskope numbers and replies go out through it. Save, then Connect.",
 			branding:
 				"Your company's name, logo and colour in the app, and how it looks when installed on a phone.",
 		}[props.sectionKey] || "")
@@ -203,7 +214,12 @@ async function save() {
 }
 
 async function run(a) {
-	if (running.value || (a.confirm && !window.confirm(a.confirm))) return;
+	if (running.value) return;
+	if (
+		a.confirm &&
+		!(await confirmAction(a.confirm, { title: `${a.label}?`, confirmLabel: a.label }))
+	)
+		return;
 	running.value = a.action;
 	error.value = "";
 	try {

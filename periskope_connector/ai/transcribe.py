@@ -3,7 +3,7 @@ them. Optional: only when a Gemini key is set in Periskope Settings > Advanced.
 
 The audio comes from the Periskope media link (a redirect to a signed download, no key needed),
 at most MAX_BYTES. The transcript is stored on the message; then the message goes on as if it had
-arrived as text: tagged, copied to the CRM WhatsApp tab, and answered by the auto reply. The tokens
+arrived as text: tagged and answered by the auto reply. The tokens
 count in the same monthly budget as every other AI call.
 """
 
@@ -108,7 +108,7 @@ def transcribe(audio: bytes, mime: str, message: str = "") -> str:
 
 def run(message: str) -> str:
 	"""Background job for one voice note. Returns the transcript ("" when nothing was done)."""
-	from periskope_connector import health, mirror
+	from periskope_connector import health
 	from periskope_connector.ai import assistant
 	from periskope_connector.autoreply import on_message
 	from periskope_connector.setup_status import agent_on
@@ -133,7 +133,6 @@ def run(message: str) -> str:
 		values.update(classification_status="Pending", classification_error="", classification_attempts=0)
 	frappe.db.set_value("Periskope Message", message, values, update_modified=False)
 	doc.transcript = text
-	mirror.upsert(message)
 	if values.get("classification_status") == "Pending":
 		from periskope_connector.ai import classifier
 

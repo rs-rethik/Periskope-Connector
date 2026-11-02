@@ -151,10 +151,9 @@
 										<div class="text-sm font-medium text-ink-gray-8">
 											Move to
 										</div>
-										<input
+										<DateTimePicker
 											v-model="moveTo"
-											type="datetime-local"
-											class="rounded-lg border border-outline-gray-2 bg-surface-base px-2 py-1.5 text-sm text-ink-gray-8"
+											placeholder="Pick a date and time"
 										/>
 										<div class="flex flex-wrap gap-1">
 											<button
@@ -361,11 +360,12 @@
 										:style="{ background: dotColor(r.color) }"
 									/>
 									{{ r.status }} · {{ r.name }}
-									<LucideMessageSquareQuote
+									<Tooltip
 										v-if="r.from_message"
-										class="size-3 shrink-0 text-ink-violet-6"
-										title="Made from a message in this chat"
-									/>
+										text="Made from a message in this chat"
+										><LucideMessageSquareQuote
+											class="size-3 shrink-0 text-ink-violet-6"
+									/></Tooltip>
 								</span>
 							</a>
 							<Tooltip text="Make this chat follow it">
@@ -434,29 +434,29 @@
 						<div class="min-w-0 flex-1">
 							<div class="text-sm font-medium text-ink-gray-8">{{ t.title }}</div>
 							<div class="mt-1 flex flex-wrap items-center gap-1">
-								<span
+								<Tooltip
 									v-if="t.due_date"
-									class="cp-chip"
-									:class="dueChip(t)"
-									:title="dayjs(t.due_date).format('D MMM YYYY, h:mm A')"
+									:text="dayjs(t.due_date).format('D MMM YYYY, h:mm A')"
+									><span class="cp-chip" :class="dueChip(t)">
+										<LucideCalendar class="size-3" />{{ dueDay(t)
+										}}<template v-if="dueTime(t)">
+											· {{ dueTime(t) }}</template
+										>
+									</span></Tooltip
 								>
-									<LucideCalendar class="size-3" />{{ dueDay(t)
-									}}<template v-if="dueTime(t)"> · {{ dueTime(t) }}</template>
-								</span>
 								<span
 									class="cp-chip"
 									:class="priorityTone[t.priority] || priorityTone.Medium"
 									>{{ t.priority }}</span
 								>
-								<span
-									v-if="t.assigned_to"
-									class="cp-chip bg-surface-gray-2 text-ink-gray-7"
-									:title="t.assigned_to"
+								<Tooltip v-if="t.assigned_to" :text="t.assigned_to"
+									><span class="cp-chip bg-surface-gray-2 text-ink-gray-7">
+										<InitialsAvatar
+											size="xs"
+											:name="person(t.assigned_to)"
+										/>{{ person(t.assigned_to).split(" ")[0] }}
+									</span></Tooltip
 								>
-									<InitialsAvatar size="xs" :name="person(t.assigned_to)" />{{
-										person(t.assigned_to).split(" ")[0]
-									}}
-								</span>
 							</div>
 						</div>
 					</div>
@@ -491,10 +491,10 @@
 							<div class="min-w-0 flex-1 text-sm font-medium text-ink-gray-8">
 								{{ n.title }}
 							</div>
-							<span
-								class="shrink-0 text-xs text-ink-gray-5"
-								:title="dayjs(n.creation).format('D MMM YYYY, h:mm A')"
-								>{{ fromNow(n.creation) }}</span
+							<Tooltip :text="dayjs(n.creation).format('D MMM YYYY, h:mm A')"
+								><span class="shrink-0 text-xs text-ink-gray-5">{{
+									fromNow(n.creation)
+								}}</span></Tooltip
 							>
 						</div>
 						<div
@@ -508,15 +508,17 @@
 
 			<PanelSection v-if="ctx && ctx.tags.length" id="tags" title="AI tags">
 				<div class="flex flex-wrap gap-1.5">
-					<span
+					<Tooltip
 						v-for="t in ctx.tags"
 						:key="t.tag"
-						class="cp-chip bg-surface-blue-1 text-ink-blue-7"
-						:title="`${t.count} message${t.count === 1 ? '' : 's'}`"
+						:text="`${t.count} message${t.count === 1 ? '' : 's'}`"
+						><span class="cp-chip bg-surface-blue-1 text-ink-blue-7">
+							<LucideSparkles class="size-3" />{{ t.tag
+							}}<span v-if="t.count > 1" class="text-ink-blue-5"
+								>· {{ t.count }}</span
+							>
+						</span></Tooltip
 					>
-						<LucideSparkles class="size-3" />{{ t.tag
-						}}<span v-if="t.count > 1" class="text-ink-blue-5">· {{ t.count }}</span>
-					</span>
 				</div>
 			</PanelSection>
 
@@ -764,6 +766,7 @@ import {
 	Dialog,
 	Dropdown,
 	ErrorMessage,
+	DateTimePicker,
 	FormControl,
 	LoadingIndicator,
 	Popover,
@@ -1040,13 +1043,13 @@ function openUrl(url) {
 }
 
 const moveTo = ref("");
-const toInput = (value) => (value ? dayjs(value).format("YYYY-MM-DDTHH:mm") : "");
-const at = (days, hour) => () =>
-	dayjs().add(days, "day").hour(hour).minute(0).format("YYYY-MM-DDTHH:mm");
+const PICKED = "YYYY-MM-DD HH:mm:ss"; // DateTimePicker's value
+const toInput = (value) => (value ? dayjs(value).format(PICKED) : "");
+const at = (days, hour) => () => dayjs().add(days, "day").hour(hour).minute(0).format(PICKED);
 const quickDates = [
 	{
 		label: "Later today",
-		value: () => dayjs().add(2, "hour").minute(0).format("YYYY-MM-DDTHH:mm"),
+		value: () => dayjs().add(2, "hour").minute(0).format(PICKED),
 	},
 	{ label: "Tomorrow 10 AM", value: at(1, 10) },
 	{ label: "In 3 days", value: at(3, 10) },

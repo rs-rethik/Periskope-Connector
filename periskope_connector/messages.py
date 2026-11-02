@@ -98,7 +98,10 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# A group is saved once, with its name and type, so its messages can be linked to the CRM.
 	chat_name = (ensure_group(chat_id, org_phone).group_name or "") if is_group else ""
 
-	classify = agent_on()
+	# An imported earlier message (meta.import_history) is saved and linked, and nothing else runs on
+	# it: no AI, auto reply, welcome, contact queue, file copy, alert or SLA clock.
+	history = bool(frappe.flags.periskope_history)
+	classify = agent_on() and not history
 	# A text, an image or PDF the AI can read, or an attachment with a caption is analysed; a voice
 	# note waits for its transcript.
 	kind = normalise_type(data.get("message_type"))
@@ -148,7 +151,9 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			"customer_phone": number_key(data.get("sender_phone") if is_group else chat_id),
 			# In a 1-to-1 chat the Periskope chat name is the contact's WhatsApp name. The webhook
 			# carries no sender name, so a group message has none.
-			"sender_name": "" if (is_group or from_me) else fetch_chat_name(chat_id, org_phone),
+			"sender_name": ""
+			if (is_group or from_me)
+			else (data["sender_name"] if "sender_name" in data else fetch_chat_name(chat_id, org_phone)),
 			"is_group": 1 if is_group else 0,
 			"sender_phone": _digits(data.get("sender_phone")),
 			"body": data.get("body"),
@@ -184,6 +189,8 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	# Linked now by number or group name. A team group's messages are linked again once the AI has
 	# found the customer name in the text.
 	status = link_message(doc.name)
+	if history:
+		return doc.name
 
 	# An unknown 1-to-1 number joins the contact queue (guarded: it may never break the saving).
 	if status == "No Match":
@@ -235,7 +242,7 @@ def process_webhook_log(log: str):
 
 def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	"""message.updated / message.deleted: the customer edited or deleted a message, or its delivery
-	ticks changed. The stored message follows, so does its copy in the CRM WhatsApp tab; an edited
+	ticks changed. The stored message follows; an edited
 	customer message is tagged again, and a deleted one no longer waits for a reply."""
 	data = payload.get("data") or {}
 	message_id = data.get("message_id")
@@ -264,10 +271,9 @@ def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	if not values:
 		return name
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
-	from periskope_connector import chat, mirror
+	from periskope_connector import chat
 	from periskope_connector.linking import CHAT_FIELDS
 
-	mirror.upsert(name)
 	# The inbox shows the edit or the deletion at once (its list preview too).
 	chat.ensure(frappe.db.get_value("Periskope Message", name, CHAT_FIELDS, as_dict=True))
 	if values.get("classification_status") == "Pending":
@@ -317,9 +323,6 @@ def update_ack(payload: dict) -> str | None:
 	if not values:
 		return name
 	frappe.db.set_value("Periskope Message", name, values, update_modified=False)
-	from periskope_connector import mirror
-
-	mirror.upsert(name)
 	_changed(name, "ack")
 	return name
 

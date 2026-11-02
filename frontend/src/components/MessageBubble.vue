@@ -3,14 +3,14 @@
 		class="group flex items-center gap-1 px-4 py-0.5"
 		:class="outgoing ? 'justify-end' : 'justify-start'"
 	>
-		<button
-			v-if="outgoing && canReply"
-			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
-			title="Reply to this message"
-			@click="$emit('reply', message)"
-		>
-			<LucideReply class="size-4" />
-		</button>
+		<Tooltip v-if="outgoing && canReply" text="Reply to this message"
+			><button
+				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+				aria-label="Reply to this message"
+				@click="$emit('reply', message)"
+			>
+				<LucideReply class="size-4" /></button
+		></Tooltip>
 		<div
 			class="relative max-w-[75%] rounded-2xl px-3.5 py-2 shadow-[0_1px_2px_rgb(0_0_0/0.06),0_6px_16px_-10px_rgb(0_0_0/0.18)]"
 			:class="[
@@ -187,13 +187,9 @@
 			<div class="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-ink-gray-5">
 				<span v-if="message.edited_on && !message.is_deleted">Edited</span>
 				<span>{{ messageTime(message.message_timestamp) }}</span>
-				<component
-					:is="tick.icon"
-					v-if="outgoing && tick"
-					class="size-3.5"
-					:class="tick.class"
-					:title="tick.title"
-				/>
+				<Tooltip v-if="outgoing && tick" :text="tick.title"
+					><component :is="tick.icon" class="size-3.5" :class="tick.class"
+				/></Tooltip>
 			</div>
 			<div v-if="unsent" class="mt-1 flex items-center gap-2 text-xs text-ink-red-8">
 				<LucideCircleAlert class="size-3.5 shrink-0" />
@@ -211,50 +207,54 @@
 				/>
 			</div>
 			<div v-if="message.deals?.length" class="mt-1.5 flex flex-wrap gap-1">
-				<a
+				<Tooltip
 					v-for="d in message.deals"
 					:key="d"
-					:href="`/crm/deals/${d}`"
-					target="_blank"
-					class="inline-flex items-center gap-1 rounded-full bg-surface-violet-1 px-2 py-0.5 text-xs font-medium text-ink-violet-7 hover:bg-surface-violet-2"
-					title="A deal was created from this message"
+					text="A deal was created from this message"
+					><a
+						:href="`/crm/deals/${d}`"
+						target="_blank"
+						class="inline-flex items-center gap-1 rounded-full bg-surface-violet-1 px-2 py-0.5 text-xs font-medium text-ink-violet-7 hover:bg-surface-violet-2"
+						aria-label="A deal was created from this message"
+					>
+						<LucideHandshake class="size-3" />{{ d }}
+					</a></Tooltip
 				>
-					<LucideHandshake class="size-3" />{{ d }}
-				</a>
 			</div>
-			<div
-				v-if="hasReactions"
-				class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-base px-1.5 py-0.5 text-sm shadow-sm"
-				:class="outgoing ? 'right-2' : 'left-2'"
-				:title="reactionTitle"
+			<Tooltip v-if="hasReactions" :text="reactionTitle"
+				><div
+					class="absolute -bottom-3 flex gap-0.5 rounded-full border border-outline-gray-1 bg-surface-base px-1.5 py-0.5 text-sm shadow-sm"
+					:class="outgoing ? 'right-2' : 'left-2'"
+				>
+					<span v-for="(n, e) in reactionCounts" :key="e"
+						>{{ e
+						}}<span v-if="n > 1" class="text-xs text-ink-gray-5">{{ n }}</span></span
+					>
+				</div></Tooltip
 			>
-				<span v-for="(n, e) in reactionCounts" :key="e"
-					>{{ e }}<span v-if="n > 1" class="text-xs text-ink-gray-5">{{ n }}</span></span
-				>
-			</div>
 		</div>
-		<button
-			v-if="!outgoing && canReply"
-			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
-			title="Reply to this message"
-			@click="$emit('reply', message)"
-		>
-			<LucideReply class="size-4" />
-		</button>
-		<button
-			v-if="!outgoing && canCreateDeal"
-			class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-violet-7 group-hover:visible"
-			title="Create a deal from the customer's message"
-			@click="$emit('create-deal', message)"
-		>
-			<LucideHandshake class="size-4" />
-		</button>
+		<Tooltip v-if="!outgoing && canReply" text="Reply to this message"
+			><button
+				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
+				aria-label="Reply to this message"
+				@click="$emit('reply', message)"
+			>
+				<LucideReply class="size-4" /></button
+		></Tooltip>
+		<Tooltip v-if="!outgoing && canCreateDeal" text="Create a deal from the customer's message"
+			><button
+				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-violet-7 group-hover:visible"
+				aria-label="Create a deal from the customer's message"
+				@click="$emit('create-deal', message)"
+			>
+				<LucideHandshake class="size-4" /></button
+		></Tooltip>
 	</div>
 </template>
 
 <script setup>
 import { computed, ref } from "vue";
-import { Avatar, Button, call } from "frappe-ui";
+import { Avatar, Button, Tooltip, call } from "frappe-ui";
 import LucideBot from "~icons/lucide/bot";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideBan from "~icons/lucide/ban";

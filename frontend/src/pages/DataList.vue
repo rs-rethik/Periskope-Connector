@@ -66,20 +66,20 @@
 						:key="r.name"
 						class="h-11 border-b border-outline-gray-1 hover:bg-surface-gray-1"
 					>
-						<td
+						<Tooltip
 							v-for="c in shownColumns"
 							:key="c.fieldname"
-							class="max-w-[24rem] truncate px-4 py-2 text-ink-gray-8"
-							:title="String(r[c.fieldname] ?? '')"
+							:text="String(r[c.fieldname] ?? '')"
+							><td class="max-w-[24rem] truncate px-4 py-2 text-ink-gray-8">
+								<template v-if="c.fieldtype === 'Check'">{{
+									r[c.fieldname] ? "Yes" : "No"
+								}}</template>
+								<template v-else-if="c.fieldtype === 'Datetime'">{{
+									r[c.fieldname] ? fromNow(r[c.fieldname]) : ""
+								}}</template>
+								<template v-else>{{ r[c.fieldname] }}</template>
+							</td></Tooltip
 						>
-							<template v-if="c.fieldtype === 'Check'">{{
-								r[c.fieldname] ? "Yes" : "No"
-							}}</template>
-							<template v-else-if="c.fieldtype === 'Datetime'">{{
-								r[c.fieldname] ? fromNow(r[c.fieldname]) : ""
-							}}</template>
-							<template v-else>{{ r[c.fieldname] }}</template>
-						</td>
 						<td
 							v-if="hasActions"
 							class="sticky right-0 whitespace-nowrap bg-surface-base px-4 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"
@@ -248,6 +248,7 @@ import {
 	FormControl,
 	Select,
 	TextInput,
+	Tooltip,
 	call,
 	toast,
 } from "frappe-ui";

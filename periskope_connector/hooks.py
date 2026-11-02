@@ -61,10 +61,14 @@ doc_events = {
 		"after_insert": "periskope_connector.linking.update_phone_fields",
 		"on_update": "periskope_connector.linking.update_phone_fields",
 	},
+	# Meta WhatsApp (meta.py): read the connected account's messages from frappe_whatsapp, never change
+	# them. Nothing runs unless a WhatsApp Account is connected in Periskope Settings.
+	"WhatsApp Message": {
+		"after_insert": "periskope_connector.meta.on_insert",
+		"on_update": "periskope_connector.meta.on_update",
+	},
 }
 
-# The CRM's WhatsApp tab sends through Periskope for the Periskope account (frappe_whatsapp is optional:
-# the override is only loaded when its doctype exists).
 # The WhatsApp inbox: a sales user sees only the chats on their numbers that are theirs (access.py).
 permission_query_conditions = {
 	"Periskope Chat": "periskope_connector.access.chat_query",
@@ -73,10 +77,6 @@ permission_query_conditions = {
 has_permission = {
 	"Periskope Chat": "periskope_connector.access.chat_permission",
 	"Periskope Message": "periskope_connector.access.message_permission",
-}
-
-override_doctype_class = {
-	"WhatsApp Message": "periskope_connector.overrides.whatsapp_message.PeriskopeWhatsAppMessage",
 }
 
 # Scheduled Tasks

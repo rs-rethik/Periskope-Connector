@@ -13,7 +13,7 @@ import frappe
 from frappe import _
 from frappe.utils import cint
 
-from periskope_connector import access, attachments, branding, numbers, shared_items
+from periskope_connector import access, attachments, branding, meta, numbers, shared_items
 from periskope_connector.ai import festival
 
 PAGE = 50
@@ -185,7 +185,9 @@ def _decorate(rows: list[dict]) -> list[dict]:
 			as_list=True,
 		)
 	)
-	labels = {n.name: n.display_name or n.number for n in numbers.all_numbers()}
+	rows_of_numbers = numbers.all_numbers()
+	labels = {n.name: n.display_name or n.number for n in rows_of_numbers}
+	sources = {n.name: n.source or "Periskope" for n in rows_of_numbers}
 	chat_labels = {}
 	for row in frappe.get_all(
 		"Periskope Chat Label",
@@ -208,6 +210,13 @@ def _decorate(rows: list[dict]) -> list[dict]:
 		row.deal_title = deals.get(row.crm_deal) if row.crm_deal else None
 		row.title = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.chat_id)
 		row.labels = chat_labels.get(row.name, [])
+		row.source = sources.get(row.whatsapp_number, "Periskope")
+		if row.source == meta.SOURCE:
+			# Meta takes free text only within 24 hours of the customer's last message
+			closes = row.last_incoming_at and frappe.utils.add_to_date(
+				row.last_incoming_at, hours=meta.WINDOW_HOURS
+			)
+			row.window = {"open": bool(closes and closes > now), "closes_at": str(closes) if closes else None}
 		row.update(sla.state(row, now))
 	return rows
 

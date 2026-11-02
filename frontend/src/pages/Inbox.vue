@@ -77,7 +77,12 @@
 			>
 				<!-- collapsed: a slim rail with the contact and a way back -->
 				<div v-if="crmCollapsed" class="flex h-full flex-col items-center gap-3 py-3">
-					<Button variant="ghost" title="Show the CRM panel" @click="toggleCrm">
+					<Button
+						variant="ghost"
+						tooltip="Show the CRM panel"
+						aria-label="Show the CRM panel"
+						@click="toggleCrm"
+					>
 						<template #icon><LucidePanelRightOpen class="size-4" /></template>
 					</Button>
 					<InitialsAvatar
@@ -96,7 +101,8 @@
 					<Button
 						class="absolute right-2 top-2 z-10 !bg-surface-base shadow-sm"
 						variant="ghost"
-						title="Hide the CRM panel"
+						tooltip="Hide the CRM panel"
+						aria-label="Hide the CRM panel"
 						@click="toggleCrm"
 					>
 						<template #icon><LucidePanelRightClose class="size-4" /></template>
@@ -119,7 +125,8 @@
 						<Button
 							class="ml-auto"
 							variant="ghost"
-							title="Close"
+							tooltip="Close"
+							aria-label="Close"
 							@click="panelOpen = false"
 						>
 							<template #icon><LucideX class="size-4" /></template>

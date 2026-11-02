@@ -132,9 +132,15 @@
 					</svg>
 				</div>
 				<div class="absolute bottom-3 left-3 flex gap-1.5">
-					<Button title="Zoom in" @click.stop="zoom(1.2)">+</Button>
-					<Button title="Zoom out" @click.stop="zoom(1 / 1.2)">−</Button>
-					<Button title="Fit to view" @click.stop="fit">⤢</Button>
+					<Button tooltip="Zoom in" aria-label="Zoom in" @click.stop="zoom(1.2)"
+						>+</Button
+					>
+					<Button tooltip="Zoom out" aria-label="Zoom out" @click.stop="zoom(1 / 1.2)"
+						>−</Button
+					>
+					<Button tooltip="Fit to view" aria-label="Fit to view" @click.stop="fit"
+						>⤢</Button
+					>
 				</div>
 			</div>
 

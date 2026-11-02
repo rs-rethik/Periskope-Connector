@@ -100,22 +100,37 @@
 				/>
 			</div>
 			<div v-else-if="field.fieldtype === 'Color'" class="flex items-center gap-2">
-				<label
-					class="relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-outline-gray-2"
-					:style="{ background: modelValue || 'transparent' }"
-					title="Pick a colour"
-				>
-					<input
-						type="color"
-						class="absolute inset-0 cursor-pointer opacity-0"
-						:value="modelValue || '#2f6f5e'"
-						@input="(e) => emit('update:modelValue', e.target.value)"
-					/>
-					<LucidePipette
-						v-if="!modelValue"
-						class="absolute inset-0 m-auto size-4 text-ink-gray-5"
-					/>
-				</label>
+				<!-- swatches in an in-app popover (not the browser's colour box), or any hex code beside -->
+				<Popover>
+					<template #target="{ togglePopover }">
+						<button
+							class="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg border border-outline-gray-2"
+							:style="{ background: modelValue || 'transparent' }"
+							aria-label="Pick a colour"
+							@click="togglePopover()"
+						>
+							<LucidePipette v-if="!modelValue" class="size-4 text-ink-gray-5" />
+						</button>
+					</template>
+					<template #body="{ close }">
+						<div
+							class="mt-1 grid w-56 grid-cols-6 gap-1.5 rounded-xl border border-outline-gray-2 bg-surface-base p-2.5 shadow-xl"
+						>
+							<button
+								v-for="c in SWATCHES"
+								:key="c"
+								class="size-7 rounded-lg ring-offset-1 ring-offset-surface-base transition hover:scale-110"
+								:class="modelValue === c ? 'ring-2 ring-outline-gray-5' : ''"
+								:style="{ background: c }"
+								:aria-label="c"
+								@click="
+									emit('update:modelValue', c);
+									close();
+								"
+							/>
+						</div>
+					</template>
+				</Popover>
 				<FormControl
 					class="w-32"
 					placeholder="#2f6f5e"
@@ -153,7 +168,7 @@
 <script setup>
 import { computed } from "vue";
 import dayjs from "dayjs";
-import { Button, FileUploader, FormControl } from "frappe-ui";
+import { Button, FileUploader, FormControl, Popover } from "frappe-ui";
 import LucideImage from "~icons/lucide/image";
 import LucidePipette from "~icons/lucide/pipette";
 import { fromNow } from "@/utils/format";
@@ -165,9 +180,31 @@ const props = defineProps({
 });
 const emit = defineEmits(["update:modelValue"]);
 
+// Brand colours that keep white text on the main buttons readable
+const SWATCHES = [
+	"#1d5fa8",
+	"#2563eb",
+	"#0e7490",
+	"#0f766e",
+	"#2f6f5e",
+	"#15803d",
+	"#4d7c0f",
+	"#a16207",
+	"#c2410c",
+	"#b91c1c",
+	"#be185d",
+	"#9333ea",
+	"#6d28d9",
+	"#4338ca",
+	"#334155",
+	"#57534e",
+	"#7c2d12",
+	"#111827",
+];
+
 const inputType = computed(
 	() =>
-		({ Int: "number", Float: "number", Time: "time", Datetime: "text", Date: "date" }[
+		({ Int: "number", Float: "number", Time: "time", Datetime: "datetime", Date: "date" }[
 			props.field.fieldtype
 		] || "text")
 );

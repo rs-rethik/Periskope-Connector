@@ -12,30 +12,41 @@
 					</h1>
 				</div>
 				<div class="flex items-center gap-2">
-					<div
-						class="flex items-center gap-2 rounded-full border border-outline-gray-1 bg-surface-base px-3 py-1.5 text-sm shadow-sm"
-						:title="officeTitle"
+					<Tooltip :text="officeTitle"
+						><div
+							class="flex items-center gap-2 rounded-full border border-outline-gray-1 bg-surface-base px-3 py-1.5 text-sm shadow-sm"
+						>
+							<span class="relative grid size-2 place-items-center">
+								<span
+									v-if="office.open"
+									class="absolute size-2 animate-ping rounded-full bg-surface-green-6 opacity-60"
+								/>
+								<span
+									class="size-2 rounded-full"
+									:class="
+										office.open ? 'bg-surface-green-6' : 'bg-surface-gray-5'
+									"
+								/>
+							</span>
+							<span class="font-medium tabular-nums text-ink-gray-9">{{
+								clock
+							}}</span>
+							<span class="text-ink-gray-5">{{
+								office.open === undefined
+									? ""
+									: office.open
+									? "Office open"
+									: "Office closed"
+							}}</span>
+						</div></Tooltip
 					>
-						<span class="relative grid size-2 place-items-center">
-							<span
-								v-if="office.open"
-								class="absolute size-2 animate-ping rounded-full bg-surface-green-6 opacity-60"
-							/>
-							<span
-								class="size-2 rounded-full"
-								:class="office.open ? 'bg-surface-green-6' : 'bg-surface-gray-5'"
-							/>
-						</span>
-						<span class="font-medium tabular-nums text-ink-gray-9">{{ clock }}</span>
-						<span class="text-ink-gray-5">{{
-							office.open === undefined
-								? ""
-								: office.open
-								? "Office open"
-								: "Office closed"
-						}}</span>
-					</div>
-					<Button variant="ghost" :loading="loading" title="Refresh" @click="load">
+					<Button
+						variant="ghost"
+						:loading="loading"
+						tooltip="Refresh"
+						aria-label="Refresh"
+						@click="load"
+					>
 						<template #icon><LucideRefreshCw class="size-4" /></template>
 					</Button>
 				</div>
@@ -144,13 +155,14 @@
 					@more="goTo('/crm/tasks')"
 				>
 					<div v-for="t in data?.tasks.rows" :key="t.name" class="row">
-						<button
-							class="grid size-5 shrink-0 place-items-center rounded-full border border-outline-gray-3 text-transparent transition hover:border-outline-green-3 hover:bg-surface-green-2 hover:text-ink-green-7"
-							:title="'Mark done'"
-							@click="done(t)"
-						>
-							<LucideCheck class="size-3" />
-						</button>
+						<Tooltip :text="'Mark done'"
+							><button
+								class="grid size-5 shrink-0 place-items-center rounded-full border border-outline-gray-3 text-transparent transition hover:border-outline-green-3 hover:bg-surface-green-2 hover:text-ink-green-7"
+								:aria-label="'Mark done'"
+								@click="done(t)"
+							>
+								<LucideCheck class="size-3" /></button
+						></Tooltip>
 						<button
 							class="min-w-0 flex-1 text-left"
 							@click="openRecord(t.reference_doctype, t.reference_docname)"
@@ -269,7 +281,7 @@
 import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import dayjs from "dayjs";
-import { Button, call } from "frappe-ui";
+import { Button, Tooltip, call } from "frappe-ui";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
 import LucideListChecks from "~icons/lucide/list-checks";

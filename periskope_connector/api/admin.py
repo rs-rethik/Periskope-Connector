@@ -147,6 +147,11 @@ SECTIONS = [
 		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails"],
 	},
 	{
+		"key": "meta",
+		"title": "Meta WhatsApp",
+		"fields": ["meta_enabled", "meta_account", "meta_number", "meta_name", "meta_import_status"],
+	},
+	{
 		"key": "branding",
 		"title": "Branding",
 		"fields": ["brand_name", "brand_logo", "brand_color", "app_name", "app_icon", "festival_themes"],
@@ -198,6 +203,9 @@ def _field_meta(doctype: str, fieldnames: list[str]) -> list[dict]:
 			"read_only": df.read_only,
 			"default": df.default,
 		}
+		if name == "meta_account" and frappe.db.exists("DocType", "WhatsApp Account"):
+			# a Data field (frappe_whatsapp is optional), picked from the WhatsApp Accounts
+			row.update(fieldtype="Link", options="WhatsApp Account")
 		if df.fieldtype in ("Table MultiSelect", "Table"):
 			child = frappe.get_meta(df.options)
 			link = next((f for f in child.fields if f.fieldtype in ("Link", "Select")), None)
@@ -426,6 +434,7 @@ def run_action(action: str) -> dict:
 	test the AI. Each keeps its own admin check (api/settings.py)."""
 	access.require_inbox_user()
 	_require(ADMIN)
+	from periskope_connector import meta
 	from periskope_connector.api import settings as settings_api
 
 	actions = {
@@ -433,6 +442,8 @@ def run_action(action: str) -> dict:
 		"sync_numbers": settings_api.sync_phones,
 		"setup_webhooks": settings_api.setup_webhooks,
 		"test_ai": settings_api.test_ai_connection,
+		"meta_connect": meta.connect,
+		"meta_import": meta.queue_import,
 	}
 	if action not in actions:
 		frappe.throw(_("Unknown action {0}").format(action))

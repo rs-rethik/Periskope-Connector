@@ -3,21 +3,26 @@
 		<SlaBadge :chat="chat" />
 
 		<Dropdown :options="labelOptions">
-			<Button size="sm" variant="ghost" title="Labels">
+			<Button size="sm" variant="ghost" tooltip="Labels" aria-label="Labels">
 				<template #prefix><LucideTag class="size-3.5" /></template>
 				{{ chat.labels?.length ? chat.labels.join(", ") : "Label" }}
 			</Button>
 		</Dropdown>
 
 		<Dropdown v-if="boot.is_manager" :options="teamOptions">
-			<Button size="sm" variant="ghost" :label="chat.team || 'No team'" title="Team">
+			<Button size="sm" variant="ghost" :label="chat.team || 'No team'" tooltip="Team">
 				<template #prefix><LucideUsersRound class="size-3.5" /></template>
 			</Button>
 		</Dropdown>
 		<Badge v-else-if="chat.team" :label="chat.team" variant="subtle" />
 
 		<Dropdown :options="assignOptions" @update:open="(o) => o && loadPeople()">
-			<Button size="sm" variant="ghost" title="Assign (a: to me)">
+			<Button
+				size="sm"
+				variant="ghost"
+				tooltip="Assign (a: to me)"
+				aria-label="Assign (a: to me)"
+			>
 				<template #prefix><LucideUserPlus class="size-3.5" /></template>
 				{{ assigneeLabel }}
 			</Button>
@@ -30,7 +35,8 @@
 				variant="subtle"
 				:class="chat.status === 'Pending' ? '!bg-surface-amber-2 !text-ink-amber-8' : ''"
 				:loading="busy"
-				title="Status (e: resolve)"
+				tooltip="Status (e: resolve)"
+				aria-label="Status (e: resolve)"
 			>
 				{{ chat.status }}
 				<template #suffix><LucideChevronDown class="size-3.5" /></template>

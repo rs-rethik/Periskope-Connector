@@ -368,7 +368,7 @@ def link_message(message: str) -> str:
 		if status in ("Linked", "Ambiguous"):
 			values["attachment_not_on_crm"] = ""  # the file goes on the record now
 		frappe.db.set_value("Periskope Message", message, values, update_modified=False)
-		if status in ("Linked", "Ambiguous"):
+		if status in ("Linked", "Ambiguous") and not frappe.flags.periskope_history:
 			add_comment(message)
 			from periskope_connector.attachments import attach_to_record
 
@@ -404,13 +404,12 @@ CHAT_FIELDS = [
 
 
 def _after_link(message: str):
-	"""Keep the chat row and the CRM WhatsApp tab in step with the message's link."""
-	from periskope_connector import chat, mirror
+	"""Keep the chat row in step with the message's link."""
+	from periskope_connector import chat
 
 	row = frappe.db.get_value("Periskope Message", message, CHAT_FIELDS, as_dict=True)
 	if row and row.chat_id:
 		chat.ensure(row)
-		mirror.upsert(message)
 
 
 def link_unlinked(limit: int = 5000) -> int:

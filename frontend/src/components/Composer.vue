@@ -17,10 +17,33 @@
 				{{
 					mode === "note"
 						? "Only your team sees notes. Type @ to mention someone."
-						: `Sends from ${chat.number_label}`
+						: `Sends from ${chat.number_label}${isMeta ? " (Meta)" : ""}`
 				}}
 			</span>
 		</div>
+
+		<!-- Meta WhatsApp: free text only within 24 hours of the customer's last message -->
+		<div
+			v-if="isMeta && mode === 'reply'"
+			class="mx-3 mt-2 flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs"
+			:class="
+				windowOpen
+					? 'bg-surface-gray-1 text-ink-gray-6'
+					: 'bg-surface-amber-1 text-ink-amber-8'
+			"
+		>
+			<LucideClock class="size-3.5 shrink-0" />
+			<span class="min-w-0 flex-1 truncate">{{ windowText }}</span>
+			<Button size="sm" variant="subtle" label="Send a template" @click="templates = true">
+				<template #prefix><LucideFileText class="size-3.5" /></template>
+			</Button>
+		</div>
+		<TemplateDialog
+			v-if="isMeta"
+			v-model="templates"
+			:chat="chat"
+			@sent="(m) => emit('sent', m)"
+		/>
 
 		<div
 			v-if="replyTo && mode === 'reply'"
@@ -39,13 +62,14 @@
 					{{ replyTo.body || "[" + replyTo.message_type + "]" }}
 				</div>
 			</div>
-			<button
-				class="text-ink-gray-5 hover:text-ink-gray-8"
-				title="Cancel reply"
-				@click="$emit('clear-reply')"
-			>
-				<LucideX class="size-4" />
-			</button>
+			<Tooltip text="Cancel reply"
+				><button
+					class="text-ink-gray-5 hover:text-ink-gray-8"
+					aria-label="Cancel reply"
+					@click="$emit('clear-reply')"
+				>
+					<LucideX class="size-4" /></button
+			></Tooltip>
 		</div>
 
 		<div
@@ -55,28 +79,29 @@
 			<LucidePaperclip class="size-4 text-ink-gray-6" />
 			<span class="truncate text-ink-gray-8">{{ file.file_name }}</span>
 			<span v-if="uploading" class="text-xs text-ink-gray-5">uploading…</span>
-			<button
-				class="ml-auto text-ink-gray-5 hover:text-ink-gray-8"
-				title="Remove file"
-				@click="removeFile"
-			>
-				<LucideX class="size-4" />
-			</button>
+			<Tooltip text="Remove file"
+				><button
+					class="ml-auto text-ink-gray-5 hover:text-ink-gray-8"
+					aria-label="Remove file"
+					@click="removeFile"
+				>
+					<LucideX class="size-4" /></button
+			></Tooltip>
 		</div>
 
 		<div
 			v-if="mode === 'reply' && quick.length"
 			class="flex gap-1.5 overflow-x-auto px-3 pt-2 [scrollbar-width:none]"
 		>
-			<button
-				v-for="q in quick.slice(0, 6)"
-				:key="q.name || q.title"
-				class="flex shrink-0 items-center gap-1 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 py-1 text-sm text-ink-gray-7 transition hover:border-outline-gray-3 hover:bg-surface-gray-1"
-				:title="q.body"
-				@click="insert(q.body, true)"
+			<Tooltip v-for="q in quick.slice(0, 6)" :key="q.name || q.title" :text="q.body"
+				><button
+					class="flex shrink-0 items-center gap-1 rounded-full border border-outline-gray-2 bg-surface-base px-2.5 py-1 text-sm text-ink-gray-7 transition hover:border-outline-gray-3 hover:bg-surface-gray-1"
+					:aria-label="q.body"
+					@click="insert(q.body, true)"
+				>
+					<LucideZap class="size-3 text-ink-amber-6" />{{ q.title }}
+				</button></Tooltip
 			>
-				<LucideZap class="size-3 text-ink-amber-6" />{{ q.title }}
-			</button>
 		</div>
 		<div class="relative px-3 pb-3 pt-2">
 			<div
@@ -108,15 +133,22 @@
 					:placeholder="
 						mode === 'note'
 							? 'Write a note for your team…'
+							: locked
+							? 'The 24-hour window is closed. Send a template to reach the customer.'
 							: 'Type a message. / for quick replies'
 					"
+					:disabled="locked"
 					@input="onInput"
 					@keydown="onKey"
 				/>
 				<div class="flex items-center gap-1">
 					<Popover v-if="mode === 'reply'">
 						<template #target="{ togglePopover }">
-							<Button variant="ghost" title="Emoji" @click="togglePopover()"
+							<Button
+								variant="ghost"
+								tooltip="Emoji"
+								aria-label="Emoji"
+								@click="togglePopover()"
 								><template #icon><LucideSmile class="size-4" /></template
 							></Button>
 						</template>
@@ -141,14 +173,15 @@
 					<Button
 						v-if="mode === 'reply'"
 						variant="ghost"
-						title="Attach a file"
+						tooltip="Attach a file"
+						aria-label="Attach a file"
 						@click="$refs.picker.click()"
 					>
 						<template #icon><LucidePaperclip class="size-4" /></template>
 					</Button>
 					<input ref="picker" type="file" class="hidden" @change="onFile" />
 					<Dropdown v-if="mode === 'reply'" :options="quickOptions">
-						<Button variant="ghost" title="Quick replies"
+						<Button variant="ghost" tooltip="Quick replies" aria-label="Quick replies"
 							><template #icon><LucideZap class="size-4" /></template
 						></Button>
 					</Dropdown>
@@ -198,12 +231,16 @@
 
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { Button, Dialog, Dropdown, FormControl, Popover, call } from "frappe-ui";
+import dayjs from "dayjs";
+import { Button, Dialog, Dropdown, FormControl, Popover, Tooltip, call } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideSmile from "~icons/lucide/smile";
 import LucideZap from "~icons/lucide/zap";
 import LucideSendHorizontal from "~icons/lucide/send-horizontal";
+import LucideClock from "~icons/lucide/clock";
+import LucideFileText from "~icons/lucide/file-text";
+import TemplateDialog from "@/components/TemplateDialog.vue";
 import { boot } from "@/boot";
 import { drafts } from "@/stores/inbox";
 import { errorText, showError } from "@/utils/errors";
@@ -213,6 +250,20 @@ const props = defineProps({
 	replyTo: { type: Object, default: null },
 });
 const emit = defineEmits(["sent", "noted", "clear-reply"]);
+
+// A Meta WhatsApp chat (meta.py): free text only within 24 hours of the customer's last message,
+// an approved template any time.
+const isMeta = computed(() => props.chat.source === "Meta");
+const windowOpen = computed(() => !!props.chat.window?.open);
+const locked = computed(() => isMeta.value && !windowOpen.value && mode.value === "reply");
+const templates = ref(false);
+const windowText = computed(() => {
+	if (!windowOpen.value)
+		return props.chat.window?.closes_at
+			? "Window closed: templates only"
+			: "The customer has not written yet: templates only";
+	return `Free reply until ${dayjs(props.chat.window.closes_at).format("D MMM, h:mm A")}`;
+});
 
 const EMOJI = [
 	"😀",
@@ -271,6 +322,7 @@ const canSubmit = computed(
 	() =>
 		!uploading.value &&
 		!sending.value &&
+		!locked.value &&
 		(mode.value === "note" ? !!text.value.trim() : !!text.value.trim() || !!file.value)
 );
 
