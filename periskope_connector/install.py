@@ -104,7 +104,10 @@ def setup():
 
 
 def before_uninstall():
-	"""Remove what the app added to other doctypes. Data doctypes are left for the admin."""
+	"""Remove what the app added to other apps' doctypes: its custom fields, the CRM's "Open WhatsApp
+	inbox" form scripts (their page goes with the app) and the WhatsApp Manager role when no other
+	app uses it (frappe_whatsapp does). The app's own doctypes, and their rows, go with the app. The
+	"WhatsApp" lead source stays: leads keep it as their source."""
 	try:
 		from frappe.custom.doctype.custom_field.custom_field import delete_custom_fields
 
@@ -112,6 +115,24 @@ def before_uninstall():
 		delete_custom_fields(CUSTOM_FIELDS)
 	except Exception:
 		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
+	try:
+		if frappe.db.exists("DocType", "CRM Form Script"):
+			for dt in ("CRM Lead", "CRM Deal"):
+				for name in (f"Periskope Inbox ({dt})", f"Periskope AI ({dt})"):
+					if frappe.db.exists("CRM Form Script", name):
+						frappe.delete_doc("CRM Form Script", name, ignore_permissions=True, force=True)
+		if frappe.db.exists("Role", ROLE) and not _role_used_elsewhere():
+			frappe.delete_doc("Role", ROLE, ignore_permissions=True, force=True)
+	except Exception:
+		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
+
+
+def _role_used_elsewhere() -> bool:
+	"""Whether a doctype of another app gives the role any permission."""
+	ours = set(frappe.get_all("DocType", filters={"module": "Periskope Connector"}, pluck="name"))
+	used = set(frappe.get_all("DocPerm", filters={"role": ROLE}, pluck="parent"))
+	used |= set(frappe.get_all("Custom DocPerm", filters={"role": ROLE}, pluck="parent"))
+	return bool(used - ours)
 
 
 def _ensure_role():

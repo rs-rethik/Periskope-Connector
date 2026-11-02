@@ -166,8 +166,9 @@ class TestContextAndAnalysis(CrmCase):
 		):
 			answer.build("What is the MOQ?", NUMBER, chat_id=CHAT)
 		self.assertIn("CRM CONTEXT (internal, never quote)", seen["user"])
-		self.assertIn("Unhappy with the last shade", seen["user"])
 		self.assertIn("status New", seen["user"])
+		# the team's own words never reach a prompt whose answer goes to the customer
+		self.assertNotIn("Unhappy with the last shade", seen["user"])
 		context = crm_context.build(CHAT)
 		self.assertEqual(crm_context.customer_sources(context), [])  # a lead has no quotation or stage
 

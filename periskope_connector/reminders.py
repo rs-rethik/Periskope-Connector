@@ -464,9 +464,24 @@ def _run(now: datetime | None) -> dict:
 	if not is_working_time(now, cfg):
 		return {**stats, "skipped": "outside working hours"}
 
+	since = now - timedelta(days=LOOKBACK_DAYS)
+	# Only chats that can need a step are read in full: a customer message nobody answered yet, or a
+	# reminder still open (to close it). The rest of the week's traffic is left alone.
+	waiting = frappe.get_all(
+		"Periskope Message",
+		filters={"message_timestamp": [">=", since], "direction": "Incoming", "replied": 0},
+		pluck="chat_id",
+		distinct=True,
+	)
+	open_reminders = frappe.get_all(
+		"Periskope Reply Reminder", filters={"status": ["in", ["Open", "Escalated"]]}, pluck="chat_id"
+	)
+	candidates = list({c for c in waiting + open_reminders if c})
+	if not candidates:
+		return stats
 	rows = frappe.get_all(
 		"Periskope Message",
-		filters={"message_timestamp": [">=", now - timedelta(days=LOOKBACK_DAYS)]},
+		filters={"message_timestamp": [">=", since], "chat_id": ["in", candidates]},
 		fields=[
 			"name",
 			"chat_id",

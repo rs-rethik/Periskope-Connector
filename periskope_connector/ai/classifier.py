@@ -411,13 +411,38 @@ Jarvis only accepts a JSON string as the reply. Reply with ONLY one JSON string 
 """
 
 
+CHARS_PER_TOKEN = 4  # Jarvis gives no token count: the text length stands in for it
+
+
 def jarvis_complete(prompt: str, user: str, timeout: int = 60) -> str:
-	"""Send one request to the model configured in Jarvis and return its reply text."""
+	"""Send one request to the model configured in Jarvis and return its reply text. The call counts
+	in the monthly token budget like any other (estimated from the text, as Jarvis reports none)."""
 	llm_task_complete, LLMTaskError = _jarvis_llm_task()
+	started = time.monotonic()
 	try:
-		return llm_task_complete(prompt, user, timeout=timeout)
+		reply = llm_task_complete(prompt, user, timeout=timeout)
 	except LLMTaskError as e:
 		frappe.throw(_("Jarvis could not complete the request: {0}").format(str(e)[:200]))
+	_record_jarvis_usage(len(prompt or "") + len(user or ""), len(reply or ""), started)
+	return reply
+
+
+def _record_jarvis_usage(sent_chars: int, reply_chars: int, started: float):
+	"""Save the estimated tokens of one Jarvis call. Never raises."""
+	try:
+		insert_as_system(
+			{
+				"doctype": "Periskope AI Usage",
+				"provider": PROVIDER_JARVIS,
+				"model": "jarvis",
+				"input_tokens": -(-sent_chars // CHARS_PER_TOKEN),
+				"output_tokens": -(-reply_chars // CHARS_PER_TOKEN),
+				"duration_ms": int((time.monotonic() - started) * 1000),
+				"status": "OK",
+			}
+		)
+	except Exception:
+		frappe.log_error(title="Periskope: could not save the AI usage row")
 
 
 def is_claude(model: str) -> bool:

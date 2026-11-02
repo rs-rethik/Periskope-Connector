@@ -74,22 +74,28 @@ import { Badge, Button, Popover, SidebarItem, call } from "frappe-ui";
 import LucideBell from "~icons/lucide/bell";
 import { inbox, loadBell } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
+import { loadFailed } from "@/utils/load";
 
 defineProps({ collapsed: { type: Boolean, default: false } });
 const router = useRouter();
 const kinds = { Assignment: "Assigned to you", Mention: "Mentioned you", Alert: "SLA alert" };
 
-async function open(n, close) {
-	if (!n.read) {
-		await call("periskope_connector.api.notifications.mark_read", { name: n.name });
-		loadBell();
-	}
+// The chat opens at once; marking the notification read happens beside it and never holds it up.
+function open(n, close) {
+	if (!n.read)
+		call("periskope_connector.api.notifications.mark_read", { name: n.name })
+			.then(loadBell)
+			.catch((e) => loadFailed(e, "Could not mark the notification read."));
 	close();
 	router.push({ name: "Inbox", params: { chat: n.document_name } });
 }
 
 async function readAll() {
-	await call("periskope_connector.api.notifications.mark_read");
-	loadBell();
+	try {
+		await call("periskope_connector.api.notifications.mark_read");
+		loadBell();
+	} catch (e) {
+		loadFailed(e, "Could not mark the notifications read.");
+	}
 }
 </script>

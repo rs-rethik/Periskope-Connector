@@ -156,6 +156,13 @@
 				<LoadingIndicator class="size-5" />
 			</div>
 			<div
+				v-else-if="failed && !chats.length"
+				class="flex flex-col items-center gap-2 p-6 text-center text-sm text-ink-gray-5"
+			>
+				Could not load the chats.
+				<Button size="sm" label="Retry" @click="load()" />
+			</div>
+			<div
 				v-else-if="!chats.length && !loading"
 				class="p-6 text-center text-sm text-ink-gray-5"
 			>
@@ -178,6 +185,7 @@ import NewChatDialog from "@/components/NewChatDialog.vue";
 import SlaBadge from "@/components/SlaBadge.vue";
 import { boot, numberLabel } from "@/boot";
 import { listTime } from "@/utils/format";
+import { loadFailed } from "@/utils/load";
 
 defineProps({ selected: { type: String, default: "" } });
 const emit = defineEmits(["select"]);
@@ -208,6 +216,7 @@ const loading = ref(false);
 const scroller = ref(null);
 const PAGE = 50;
 const appending = ref(false);
+const failed = ref(false); // the first load failed (not "no chats")
 const switching = ref(false); // a filter changed: dim the old rows until the new ones come
 let latest = 0; // only the newest request may fill the list (fast typing, quick filter changes)
 
@@ -241,6 +250,11 @@ async function load(append = false) {
 		if (ticket !== latest) return;
 		chats.value = append ? [...chats.value, ...r.chats] : r.chats;
 		total.value = r.total;
+		failed.value = false;
+	} catch (e) {
+		if (ticket !== latest) return;
+		failed.value = !chats.value.length; // rows already shown stay; an empty list says why
+		loadFailed(e, "Could not load the chats.");
 	} finally {
 		if (ticket === latest) loading.value = appending.value = switching.value = false;
 	}

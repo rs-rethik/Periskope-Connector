@@ -2,6 +2,10 @@
 // It makes the app installable and quick to start: the built files (hashed, so they never change) are
 // kept after the first use, pages always come from the server, and an offline page shows when there
 // is no network. Chats and messages are never cached: they come live from the API.
+//
+// A new version waits until the open tabs are closed (or the app asks it to take over), and the
+// previous version's files are kept one release longer: a tab still running the old code can load
+// its remaining pages from them after a deploy removed them from the server.
 
 const VERSION = "__VERSION__";
 const CACHE = `whatsapp-inbox-${VERSION}`;
@@ -36,20 +40,20 @@ self.addEventListener("install", (event) => {
 			])
 		)
 	);
-	self.skipWaiting();
+});
+self.addEventListener("message", (event) => {
+	if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
 	event.waitUntil(
 		caches
 			.keys()
-			.then((keys) =>
-				Promise.all(
-					keys
-						.filter((k) => k.startsWith("whatsapp-inbox-") && k !== CACHE)
-						.map((k) => caches.delete(k))
-				)
-			)
+			.then((keys) => {
+				// keys come oldest first: keep this version's cache and the one before it
+				const older = keys.filter((k) => k.startsWith("whatsapp-inbox-") && k !== CACHE);
+				return Promise.all(older.slice(0, -1).map((k) => caches.delete(k)));
+			})
 			.then(() => self.clients.claim())
 	);
 });
@@ -67,7 +71,7 @@ self.addEventListener("fetch", (event) => {
 	if (!KEEP.some((prefix) => url.pathname.startsWith(prefix))) return;
 	event.respondWith(
 		caches.open(CACHE).then(async (cache) => {
-			const hit = await cache.match(request);
+			const hit = await caches.match(request); // this version's files or the previous one's
 			if (hit) return hit;
 			const response = await fetch(request);
 			if (response.ok) cache.put(request, response.clone());

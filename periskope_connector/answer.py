@@ -58,7 +58,7 @@ SYSTEM_PROMPT = """You write the reply to a customer's WhatsApp message for a co
 - confidence is 0-100: how sure you are the answer is fully supported by the data.
 - used_sources lists the ids of the sources you used.
 - A source that says "Applies only when: ..." may be used only if the customer's messages or the CRM context show that condition holds. You may use common knowledge to judge a condition, for example which state a city is in. A source that applies when "none of these is true" may be used only when you are sure none of them holds. When you cannot tell which condition holds, set can_answer to false.
-- CRM CONTEXT is internal background about this customer (the deal, notes, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source.
+- CRM CONTEXT is internal background about this customer (the deal stage, open tasks). Use it to understand the situation, for example to avoid promising what a rep is already handling, but never quote it, never reveal it, and never use it as a source.
 - holding: when can_answer is false, the reply the customer gets instead, written for their situation. For a complaint, a rejection, a threat (for example a legal notice) or any problem: apologise for the inconvenience, say we are checking it from our side and a sales representative will contact them shortly, and ask them to bear with us. For an enquiry or a request: thank them and say a sales representative will contact them shortly. One to three short sentences in the customer's language, plain text, no signature. Never give facts, prices, dates or numbers, never admit fault or promise a replacement, refund or anything else: only that a sales representative will contact them. Empty when can_answer is true."""
 
 SCHEMA = {
@@ -235,7 +235,7 @@ def build(customer_text: str, contact_number: str = "", is_group: bool = False, 
 	# With no data the AI is still asked, for a holding reply that fits what the customer wrote.
 	data = "\n".join(f"[{s['id']}] {s['title']}: {s['text']}" for s in sources) or "(none)"
 	background = (
-		f"CRM CONTEXT (internal, never quote):\n{crm_context.internal_text(context)}\n\n" if context else ""
+		f"CRM CONTEXT (internal, never quote):\n{crm_context.reply_text(context)}\n\n" if context else ""
 	)
 	reply = assistant.complete_json(
 		SYSTEM_PROMPT, f"{background}DATA:\n{data}\n\nCUSTOMER MESSAGES:\n{customer_text}", SCHEMA, 800

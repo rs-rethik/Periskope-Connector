@@ -1,6 +1,7 @@
 import { reactive, watch } from "vue";
 import { call } from "frappe-ui";
 import { onInboxUpdate, onNotification } from "@/socket";
+import { loadFailed } from "@/utils/load";
 
 export const QUICK_FILTERS = [
 	{ key: "all", label: "All open", filters: { status: "active" } },
@@ -32,15 +33,27 @@ export const chatCache = new Map();
 export const drafts = new Map();
 
 export async function loadViews() {
-	inbox.views = await call("periskope_connector.api.views.list_views");
+	try {
+		inbox.views = await call("periskope_connector.api.views.list_views");
+	} catch (e) {
+		loadFailed(e, "Could not load the saved views.");
+	}
 }
 
 export async function loadBell() {
-	inbox.bell = await call("periskope_connector.api.notifications.get_notifications");
+	try {
+		inbox.bell = await call("periskope_connector.api.notifications.get_notifications");
+	} catch (e) {
+		loadFailed(e, "Could not load the notifications.");
+	}
 }
 
 export async function loadTeams() {
-	inbox.teams = await call("periskope_connector.api.chat_actions.teams");
+	try {
+		inbox.teams = await call("periskope_connector.api.chat_actions.teams");
+	} catch (e) {
+		loadFailed(e, "Could not load the teams.");
+	}
 }
 
 onNotification(() => loadBell());
@@ -51,7 +64,11 @@ export function currentFilters(extra = {}) {
 }
 
 export async function loadCounts() {
-	inbox.counts = await call("periskope_connector.api.inbox.counts");
+	try {
+		inbox.counts = await call("periskope_connector.api.inbox.counts");
+	} catch (e) {
+		loadFailed(e, "Could not load the counts.");
+	}
 }
 
 let timer;

@@ -14,3 +14,5 @@ def on_doctype_update():
 	frappe.db.add_index("Periskope Message", ["chat_id", "message_timestamp"])
 	# The inbox loads one chat row's history (one number), newest first, a page at a time.
 	frappe.db.add_index("Periskope Message", ["periskope_chat", "message_timestamp"])
+	# The reply reminder check (every 10 minutes) looks for customer messages nobody answered yet.
+	frappe.db.add_index("Periskope Message", ["replied", "direction", "message_timestamp"])

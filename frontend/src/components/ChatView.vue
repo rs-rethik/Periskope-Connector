@@ -273,7 +273,9 @@ async function load({ keepPosition = false } = {}) {
 		if (stick) scrollToBottom();
 		error.value = "";
 		remember();
-		call("periskope_connector.api.inbox.mark_seen", { chat: name }).then(loadCounts);
+		call("periskope_connector.api.inbox.mark_seen", { chat: name })
+			.then(loadCounts)
+			.catch(() => {}); // the chat is open either way; it is marked read on the next visit
 		if (!keepPosition && hasPendingTicks()) refreshTicks();
 	} catch (e) {
 		error.value =

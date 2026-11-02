@@ -19,6 +19,13 @@ from periskope_connector.periskope_connector.doctype.periskope_team.periskope_te
 INBOX_ROLES = (*MANAGER_ROLES, "Sales User")
 
 
+def assigned_like(user: str) -> str:
+	"""A LIKE pattern for the user in a document's _assign (a JSON list of users): the quotes make it
+	the whole email, and "_" / "%" in it are taken literally (in a LIKE they match any character)."""
+	literal = (user or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+	return f'%"{literal}"%'
+
+
 def is_manager(user: str | None = None) -> bool:
 	user = user or frappe.session.user
 	return user == "Administrator" or bool(set(MANAGER_ROLES) & set(frappe.get_roles(user)))
@@ -67,7 +74,7 @@ def chat_condition(user: str | None = None, table: str = "`tabPeriskope Chat`") 
 	if not numbers:
 		return "1=0"
 	listed = ", ".join(frappe.db.escape(n) for n in numbers)
-	assigned = frappe.db.escape(f'%"{user}"%')
+	assigned = frappe.db.escape(assigned_like(user))
 	open_teams = [t.name for t in teams_of(user) if t.team_can_see_team_chats]
 	team = f" or {table}.team in ({', '.join(frappe.db.escape(t) for t in open_teams)})" if open_teams else ""
 	return (
