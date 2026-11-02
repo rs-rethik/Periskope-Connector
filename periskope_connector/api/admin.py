@@ -90,7 +90,8 @@ KINDS = {
 	},
 }
 # The doctypes a form may pick a value from (Link fields and the rows of a Table MultiSelect).
-PICKABLE = {"User", "WhatsApp Number", "Periskope Team", "Sales Person", "Holiday List"}
+# "WhatsApp Account" is frappe_whatsapp's, picked in Settings > Meta WhatsApp (when it is installed)
+PICKABLE = {"User", "WhatsApp Number", "Periskope Team", "Sales Person", "Holiday List", "WhatsApp Account"}
 
 SECTIONS = [
 	{
@@ -301,7 +302,8 @@ def delete_record(kind: str, name: str) -> None:
 
 @frappe.whitelist()
 def pick(doctype: str, query: str = "") -> list[dict]:
-	"""Values to choose from in a form: users, numbers, teams, sales persons, holiday lists."""
+	"""Values to choose from in a form: users, numbers, teams, sales persons, holiday lists, Meta
+	WhatsApp accounts."""
 	access.require_inbox_user()
 	_require(MANAGER)
 	if doctype not in PICKABLE or not frappe.db.exists("DocType", doctype):
