@@ -4,7 +4,10 @@ The deal comes first (it is the sales record); a lead is used when there is no d
 - customer_sources(): facts that may be quoted to the customer (the last quotation, the deal stage).
   They join the answer's DATA, so their figures pass the number check in answer.grounded.
 - internal_text(): the rest (owner, notes, open tasks, recent activity), for the agent's own
-  judgement only. It is never quoted to the customer.
+  judgement only (ai/analyse.py). It is never put in a prompt whose output goes to the customer.
+- reply_text(): what the auto reply may know of that background: facts only (stage, how many open
+  tasks and when the next is due, the last quotation's status), no free text written by the team,
+  so a customer cannot talk the AI into repeating a note.
 """
 
 import re
@@ -161,6 +164,26 @@ def customer_sources(context) -> list[dict]:
 			{"id": f"DEAL:{context.name}", "title": "Order stage", "text": cstr(context.info.status)}
 		)
 	return sources
+
+
+def reply_text(context) -> str:
+	"""The CRM background for the auto reply: facts, no notes, task titles, comments or names."""
+	if not context:
+		return "No CRM lead or deal is linked to this chat yet."
+	v = context.info
+	lines = [
+		f"{'Deal' if context.doctype == 'CRM Deal' else 'Lead'}: status {v.status or '-'} ({v.status_type or '-'})"
+	]
+	if context.tasks:
+		due = sorted(str(t.due_date) for t in context.tasks if t.due_date)
+		lines.append(
+			f"A rep has {len(context.tasks)} open task(s) on this customer"
+			+ (f", the next due {due[0]}" if due else "")
+			+ ": do not promise what the rep is handling."
+		)
+	if context.quotation:
+		lines.append(f"Last quotation: {context.quotation.status}")
+	return "\n".join(lines)
 
 
 def internal_text(context) -> str:

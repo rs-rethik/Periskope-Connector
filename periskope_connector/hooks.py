@@ -116,6 +116,8 @@ scheduler_events = {
 		"5 * * * *": ["periskope_connector.ai.festival.refresh"],
 	},
 	"daily": [
+		# Delete the public copies of files sent to Meta WhatsApp, once Meta has fetched them.
+		"periskope_connector.meta.remove_shared_files",
 		# Yesterday's unmatched contacts to the sales head, ranked by activity.
 		"periskope_connector.contacts.send_digest",
 		# Per-phone message counts: alert when a linked number goes silent.

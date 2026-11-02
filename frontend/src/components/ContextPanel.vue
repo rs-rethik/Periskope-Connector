@@ -824,10 +824,10 @@ const statusOptions = computed(() =>
 	}))
 );
 
+// The text of a note's HTML. DOMParser makes an inert document: nothing in it loads or runs
+// (innerHTML on an element would fire an <img onerror> even off the page).
 function plain(html) {
-	const div = document.createElement("div");
-	div.innerHTML = html || "";
-	return div.textContent || "";
+	return new DOMParser().parseFromString(html || "", "text/html").body.textContent || "";
 }
 
 function money(value, currency) {

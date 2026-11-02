@@ -223,7 +223,8 @@
    "in_standard_filter": 1,
    "label": "Classification Status",
    "options": "\nPending\nDone\nSkipped\nFailed",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "severity",
@@ -430,7 +431,8 @@
    "fieldtype": "Link",
    "label": "Webhook Log",
    "options": "Periskope Webhook Log",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "raw_payload",
@@ -471,7 +473,8 @@
    "options": "\nLinked\nAmbiguous\nNo Match\nInternal",
    "read_only": 1,
    "in_standard_filter": 1,
-   "description": "Ambiguous: several leads or deals matched and the newest was used. Internal: a team group where no customer could be identified."
+   "description": "Ambiguous: several leads or deals matched and the newest was used. Internal: a team group where no customer could be identified.",
+   "search_index": 1
   },
   {
    "fieldname": "link_method",
@@ -707,7 +710,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-02 10:00:00.000000",
+ "modified": "2026-11-02 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

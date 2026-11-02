@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, escape_html, get_url, now_datetime
 
+from periskope_connector import safety
 from periskope_connector.linking import link_message, number_key, phone_e164
 from periskope_connector.system import insert_as_system
 
@@ -325,7 +326,7 @@ def send_digest() -> int:
 		+ "</tr>"
 		for r in rows
 	)
-	frappe.sendmail(
+	safety.sendmail(
 		recipients=emails,
 		subject=_("WhatsApp numbers waiting to be added to the CRM ({0})").format(len(rows)),
 		message=(

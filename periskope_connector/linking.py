@@ -41,6 +41,26 @@ def phone_e164(value: str | None) -> str:
 	return re.sub(r"\D", "", value or "")
 
 
+def home_code() -> str:
+	"""The country code of the company's country (System Settings), for numbers typed without one."""
+	if "periskope_home_code" not in frappe.local.cache:
+		from frappe.geo.country_info import get_country_info
+
+		country = frappe.db.get_single_value("System Settings", "country") or "India"
+		isd = (get_country_info(country) or {}).get("isd") or "+91"
+		frappe.local.cache["periskope_home_code"] = re.sub(r"\D", "", isd) or "91"
+	return frappe.local.cache["periskope_home_code"]
+
+
+def with_country_code(value: str | None) -> str:
+	"""A number as WhatsApp writes it: digits with the country code. A local number (10 digits, or 11
+	with a leading 0) gets the company's country code."""
+	digits = re.sub(r"\D", "", value or "")
+	if len(digits) == NUMBER_LENGTH + 1 and digits.startswith("0"):
+		digits = digits[1:]
+	return home_code() + digits if len(digits) == NUMBER_LENGTH else digits
+
+
 def name_key(value: str | None) -> str:
 	words = re.sub(r"[^a-z0-9 ]", " ", (value or "").lower()).split()
 	return " ".join(w for w in words if w not in COMPANY_WORDS)
@@ -74,23 +94,22 @@ def _from_leads(rows) -> list[tuple]:
 
 
 def by_mobile(number: str | None) -> list[tuple]:
-	"""Leads and deals whose phone matches, found through the indexed normalised fields
-	(periskope_phone_e164 / periskope_phone_key) that the app maintains on every lead and deal.
-	The full number is tried first, so a foreign buyer never falls back to the last-10 key."""
-	full = phone_e164(number)
+	"""Leads and deals whose phone matches, found through the indexed normalised field
+	periskope_phone_e164 that the app maintains on every lead and deal. The full number matches as it
+	is; a number of the company's own country also matches where the CRM saved it without the country
+	code ("9876543210", "09876543210"). Nothing else is compared by its last digits, so a foreign buyer
+	never meets a local lead that shares them."""
+	full = with_country_code(number)
 	if not full:
 		return []
-	for field, value in (
-		("periskope_phone_e164", full),
-		("periskope_phone_key", number_key(number)),
-	):
-		if not value:
-			continue
-		deals = frappe.get_all("CRM Deal", filters={field: value}, fields=["name", "lead"], limit=50)
-		leads = frappe.get_all("CRM Lead", filters={field: value}, fields=["name", "converted"], limit=50)
-		if deals or leads:
-			return _from_deals(deals) + _from_leads(leads)
-	return []
+	forms = [full]
+	local = full[len(home_code()) :] if full.startswith(home_code()) else ""
+	if len(local) == NUMBER_LENGTH:
+		forms += [local, "0" + local, "0" + full]
+	filters = {"periskope_phone_e164": ["in", forms]}
+	deals = frappe.get_all("CRM Deal", filters=filters, fields=["name", "lead"], limit=50)
+	leads = frappe.get_all("CRM Lead", filters=filters, fields=["name", "converted"], limit=50)
+	return _from_deals(deals) + _from_leads(leads)
 
 
 def update_phone_fields(doc, method: str | None = None):

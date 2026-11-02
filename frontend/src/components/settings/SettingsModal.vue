@@ -195,6 +195,7 @@ import { boot } from "@/boot";
 import { loadCounts, loadTeams } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
 import { discardChanges } from "@/utils/confirm";
+import { loadFailed } from "@/utils/load";
 
 const open = defineModel({ type: Boolean, default: false });
 const page = ref("teams");
@@ -263,7 +264,12 @@ const menu = computed(() => [
 ]);
 
 async function loadSettings() {
-	if (my.value.admin) settings.value = await call("periskope_connector.api.admin.get_settings");
+	if (!my.value.admin) return;
+	try {
+		settings.value = await call("periskope_connector.api.admin.get_settings");
+	} catch (e) {
+		loadFailed(e, "Could not load the settings.");
+	}
 }
 
 async function settingsSaved(data) {
@@ -326,7 +332,11 @@ async function sendInvite() {
 
 watch(open, async (o) => {
 	if (!o) return;
-	my.value = await call("periskope_connector.api.admin.my_access");
+	try {
+		my.value = await call("periskope_connector.api.admin.my_access");
+	} catch (e) {
+		return loadFailed(e, "Could not open the settings.");
+	}
 	loadSettings();
 });
 watch(page, (p) => sectionKeys.includes(p) && !settings.value && loadSettings());

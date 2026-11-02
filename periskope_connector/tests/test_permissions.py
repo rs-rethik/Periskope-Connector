@@ -87,3 +87,20 @@ class TestEveryEndpointChecks(FrappeTestCase):
 					ast.unparse(n.func).split(".")[-1] for n in ast.walk(node) if isinstance(n, ast.Call)
 				}
 				self.assertTrue(called & CHECKS, f"{rel}:{node.name} has no role check")
+
+
+class TestAssignedMatch(FrappeTestCase):
+	def _matches(self, assign: str, user: str) -> bool:
+		import frappe
+
+		from periskope_connector.access import assigned_like
+
+		return bool(frappe.db.sql("select %s like %s", (assign, assigned_like(user)))[0][0])
+
+	def test_a_chat_is_matched_to_the_whole_email_only(self):
+		self.assertTrue(self._matches('["x@y.com", "anne@x.com"]', "anne@x.com"))
+		self.assertFalse(self._matches('["joanne@x.com"]', "anne@x.com"))
+		# "_" and "%" in an email are literal, not LIKE wildcards
+		self.assertTrue(self._matches('["ravi_k@x.com"]', "ravi_k@x.com"))
+		self.assertFalse(self._matches('["ravisk@x.com"]', "ravi_k@x.com"))
+		self.assertFalse(self._matches('["ab@x.com"]', "a%@x.com"))

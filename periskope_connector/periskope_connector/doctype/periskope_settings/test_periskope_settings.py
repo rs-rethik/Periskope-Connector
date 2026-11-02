@@ -178,20 +178,37 @@ class TestPeriskopeSettings(FrappeTestCase):
 
 
 class TestWorkingHoursSettings(FrappeTestCase):
+	def setUp(self):
+		frappe.db.savepoint("periskope_hours_test")
+		self.addCleanup(frappe.db.rollback, save_point="periskope_hours_test")
+
+	def _hours(self):
+		return tuple(
+			str(frappe.db.get_single_value("Periskope Settings", f))
+			for f in ("working_hours_start", "working_hours_end")
+		)
+
 	def test_install_stores_the_usual_working_hours_once(self):
 		from periskope_connector import install
 
 		frappe.db.set_single_value("Periskope Settings", "working_hours_start", None)
 		frappe.db.set_single_value("Periskope Settings", "working_hours_end", None)
 		install._ensure_working_hours()
-		self.assertEqual(
-			str(frappe.db.get_single_value("Periskope Settings", "working_hours_start")), "9:00:00"
-		)
+		self.assertEqual(self._hours(), ("9:00:00", "19:00:00"))
 		frappe.db.set_single_value("Periskope Settings", "working_hours_end", "18:30:00")
-		install._ensure_working_hours()  # an existing value is kept
-		self.assertEqual(
-			str(frappe.db.get_single_value("Periskope Settings", "working_hours_end")), "18:30:00"
+		install._ensure_working_hours()  # a window an admin set is kept
+		self.assertEqual(self._hours(), ("9:00:00", "18:30:00"))
+
+	def test_the_install_time_frappe_stores_on_a_new_site_is_repaired(self):
+		from periskope_connector import install
+
+		frappe.db.set_single_value(
+			"Periskope Settings",
+			{"working_hours_start": "13:50:43.098679", "working_hours_end": "13:50:43.098750"},
 		)
+		install._ensure_working_hours()
+		self.assertEqual(self._hours(), ("9:00:00", "19:00:00"))
+		frappe.get_doc("Periskope Settings").validate_reminders()  # the settings can be saved again
 
 	def test_a_failing_install_step_does_not_skip_the_others(self):
 		# A site whose saved settings no longer validate made _ensure_webhook_events fail, and the old

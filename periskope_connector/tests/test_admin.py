@@ -126,16 +126,16 @@ class TestSettings(AdminCase):
 	def test_a_section_saves_only_its_own_fields(self):
 		admin.save_settings(
 			"test_mode",
-			{"test_mode": 1, "test_allowed_chats": "916374955805", "enable_auto_reply": 1},
+			{"test_mode": 1, "test_allowed_chats": "919000012345", "enable_auto_reply": 1},
 		)
 		self.assertEqual(
-			frappe.db.get_single_value("Periskope Settings", "test_allowed_chats"), "916374955805"
+			frappe.db.get_single_value("Periskope Settings", "test_allowed_chats"), "919000012345"
 		)
 		self.assertEqual(frappe.db.get_single_value("Periskope Settings", "test_mode"), 1)
 		section = next(s for s in admin.get_settings()["sections"] if s["key"] == "test_mode")
 		self.assertEqual(
 			[f["fieldname"] for f in section["fields"]],
-			["test_mode", "test_allowed_chats", "test_allowed_emails"],
+			["test_mode", "test_allowed_chats", "test_allowed_emails", "test_hold_all_emails"],
 		)
 
 	def test_unknown_actions_and_sections_are_refused(self):

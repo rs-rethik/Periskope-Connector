@@ -25,6 +25,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, get_datetime, get_time, get_url_to_form, now_datetime, today
 
+from periskope_connector import safety
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import NOT_ANSWERS, is_acknowledgement
@@ -254,7 +255,7 @@ def _send_email(subject: str, message: str, recipients: list[str], reminder) -> 
 	if not recipients:
 		return False
 	try:
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=recipients,
 			subject=subject,
 			message=message,
@@ -463,9 +464,24 @@ def _run(now: datetime | None) -> dict:
 	if not is_working_time(now, cfg):
 		return {**stats, "skipped": "outside working hours"}
 
+	since = now - timedelta(days=LOOKBACK_DAYS)
+	# Only chats that can need a step are read in full: a customer message nobody answered yet, or a
+	# reminder still open (to close it). The rest of the week's traffic is left alone.
+	waiting = frappe.get_all(
+		"Periskope Message",
+		filters={"message_timestamp": [">=", since], "direction": "Incoming", "replied": 0},
+		pluck="chat_id",
+		distinct=True,
+	)
+	open_reminders = frappe.get_all(
+		"Periskope Reply Reminder", filters={"status": ["in", ["Open", "Escalated"]]}, pluck="chat_id"
+	)
+	candidates = list({c for c in waiting + open_reminders if c})
+	if not candidates:
+		return stats
 	rows = frappe.get_all(
 		"Periskope Message",
-		filters={"message_timestamp": [">=", now - timedelta(days=LOOKBACK_DAYS)]},
+		filters={"message_timestamp": [">=", since], "chat_id": ["in", candidates]},
 		fields=[
 			"name",
 			"chat_id",

@@ -189,7 +189,7 @@ class TestChatTasks(FrappeTestCase):
 		self.assertEqual(chat_tasks.due_on("2031-09-02"), get_datetime("2031-09-02 19:00:00"))
 
 	def test_test_mode_keeps_tasks_out_of_the_crm(self):
-		settings(test_mode=1, test_allowed_chats="916374955805")
+		settings(test_mode=1, test_allowed_chats="919000012345")
 		name = self._message()
 		self._classify(name)
 		self.assertEqual(self._tasks(), [])

@@ -43,7 +43,7 @@ def _chat_filter(number=None, team=None, rep=None, table="c") -> tuple[str, dict
 		values["team"] = team
 	if rep:
 		conditions.append(f"{table}._assign like %(rep_like)s")
-		values["rep_like"] = f'%"{rep}"%'
+		values["rep_like"] = access.assigned_like(rep)
 	return (" and " + " and ".join(conditions)) if conditions else "", values
 
 
@@ -434,7 +434,7 @@ def _breaches(where, values) -> list[dict]:
 	rows = frappe.db.sql(
 		f"""select c.name, c.chat_name, c.contact_number, c.whatsapp_number, c._assign, c.team, c.status,
 			c.waiting_since, c.response_due, c.opened_on, c.resolution_due, c.resolved_on
-		from `tabPeriskope Chat` c where {sla.breached_condition('c')} {where}
+		from `tabPeriskope Chat` c where {sla.breached_condition("c")} {where}
 		order by least(ifnull(c.response_due, c.resolution_due), ifnull(c.resolution_due, c.response_due)) asc
 		limit {BREACH_LIMIT}""",
 		{**values, "sla_now": now_datetime()},

@@ -106,6 +106,7 @@ class TestAgent(FrappeTestCase):
 
 	def test_a_pass_that_only_learned_knowledge_emails_nobody(self):
 		_message("What is the minimum order quantity?")
+		_message("It is 100 pieces.", direction="Outgoing", minutes_ago=170)  # the rep's answer
 		reply = {
 			"entries": [
 				{

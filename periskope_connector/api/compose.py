@@ -469,8 +469,9 @@ def start_chat(number: str, phone: str, text: str) -> dict:
 	digits = re.sub(r"\D", "", phone or "")
 	if len(digits) < 10:
 		frappe.throw(_("Enter the customer's WhatsApp number with the country code."))
-	if len(digits) == 10:
-		digits = "91" + digits  # a local Indian number
+	from periskope_connector.linking import with_country_code
+
+	digits = with_country_code(digits)  # a local number gets the company's country code
 	chat_id = f"{digits}@c.us"
 	name = chat.name_of(number, chat_id)
 	if not name:
