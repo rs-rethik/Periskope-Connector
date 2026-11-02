@@ -19,7 +19,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, escape_html, get_datetime, now_datetime
 
-from periskope_connector import query
+from periskope_connector import query, safety
 from periskope_connector.api.permission import require_manager
 from periskope_connector.system import insert_as_system, save_as_system
 
@@ -418,7 +418,7 @@ def send_digest(force: bool = False) -> int:
 			f"<a href='{reject_link}' style='background:#c62828;color:#fff;padding:8px 14px;"
 			f"border-radius:4px;text-decoration:none'>{_('Reject')}</a></p></div>"
 		)
-	frappe.sendmail(
+	safety.sendmail(
 		recipients=recipients,
 		subject=_("Periskope assistant: {0} suggested change(s) to approve").format(len(rows)),
 		message=(

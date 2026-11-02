@@ -47,6 +47,25 @@ def set_status(chats, status: str) -> dict:
 	return _done(chats)
 
 
+@frappe.whitelist(methods=["POST"])
+def set_ai_off(chats, off: int | str = 1) -> dict:
+	"""Keep these customers' chats away from the AI (or let it back): every chat row of the customer,
+	on any of our numbers. A waiting auto reply is cancelled."""
+	access.require_inbox_user()
+	chats = _chats(chats)
+	off = 1 if frappe.utils.cint(off) else 0
+	from periskope_connector import autoreply
+
+	for chat in chats:
+		chat_id = frappe.db.get_value("Periskope Chat", chat, "chat_id")
+		for row in frappe.get_all("Periskope Chat", filters={"chat_id": chat_id}, pluck="name"):
+			frappe.db.set_value("Periskope Chat", row, "ai_off", off, update_modified=False)
+		if off:
+			autoreply.cancel(chat_id, _("AI is off for this chat"))
+		workflow.log(chat, _("AI off") if off else _("AI on"), user=frappe.session.user)
+	return _done(chats)
+
+
 def assignable(chat: str) -> list[str]:
 	"""Who can take a chat: whoever may work its number (managers, its agents and team members)."""
 	number = frappe.db.get_value("Periskope Chat", chat, "whatsapp_number")

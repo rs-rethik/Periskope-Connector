@@ -23,6 +23,7 @@
   "anthropic_api_key",
   "ai_model",
   "ai_base_url",
+  "ai_base_url_trusted",
   "column_budget",
   "ai_monthly_budget_tokens",
   "ai_status",
@@ -49,6 +50,7 @@
   "column_test_mode",
   "test_allowed_chats",
   "test_allowed_emails",
+  "test_hold_all_emails",
   "section_meta",
   "meta_enabled",
   "meta_account",
@@ -199,7 +201,16 @@
    "depends_on": "eval:doc.ai_provider!=\"Jarvis\"",
    "fieldname": "ai_base_url",
    "fieldtype": "Data",
-   "label": "AI API Address"
+   "label": "AI API Address",
+   "description": "Leave empty for Anthropic. Another Anthropic-compatible provider (for example Z.ai) must be an https address; the AI key is sent to it."
+  },
+  {
+   "fieldname": "ai_base_url_trusted",
+   "fieldtype": "Check",
+   "label": "I Trust This AI Address",
+   "default": "0",
+   "depends_on": "ai_base_url",
+   "description": "Needed for an address other than Anthropic or Z.ai: the AI key, the messages and their files are sent there."
   },
   {
    "fieldname": "column_budget",
@@ -335,7 +346,7 @@
    "fieldname": "section_test_mode",
    "fieldtype": "Section Break",
    "label": "Test Mode",
-   "description": "While test mode is on, WhatsApp messages go only to the chats listed here (never to a group), the agent writes to the CRM only for those chats, and emails reach only the addresses listed here. Everything else is logged as a dry run in Periskope Agent Action."
+   "description": "While test mode is on, WhatsApp messages go only to the chats listed here (never to a group), the agent writes to the CRM only for those chats, and this app's emails reach only the addresses listed here. Everything else is logged as a dry run in Periskope Agent Action."
   },
   {
    "fieldname": "test_mode",
@@ -351,15 +362,23 @@
    "fieldname": "test_allowed_chats",
    "fieldtype": "Small Text",
    "label": "Allowed Chats",
-   "description": "One number per line, with country code (e.g. 916374955805).",
+   "description": "One number per line, with country code (e.g. 919876543210).",
    "depends_on": "test_mode"
   },
   {
    "fieldname": "test_allowed_emails",
    "fieldtype": "Small Text",
    "label": "Allowed Emails",
-   "description": "One email per line.",
+   "description": "One email per line. While test mode is on, this app's emails reach only these addresses.",
    "depends_on": "test_mode"
+  },
+  {
+   "fieldname": "test_hold_all_emails",
+   "fieldtype": "Check",
+   "label": "Hold Every Email of the Site",
+   "default": "0",
+   "depends_on": "test_mode",
+   "description": "Also hold the emails of every other app (ERPNext, CRM, password resets) for addresses not on the list, for example on a copy of a live site. Off: only this app's emails are held."
   },
   {
    "fieldname": "section_meta",
@@ -604,7 +623,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-02 10:00:00.000000",
+ "modified": "2026-11-02 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, now_datetime
+from frappe.utils import add_days, add_to_date, now_datetime
 
 from periskope_connector import knowledge
 from periskope_connector.ai import assistant
@@ -101,9 +101,60 @@ class TestKnowledge(FrappeTestCase):
 				}
 			]
 		}
-		with patch.object(assistant, "complete_json", return_value=reply):
+		with (
+			patch.object(assistant, "complete_json", return_value=reply),
+			patch.object(knowledge, "rep_said", return_value=True),
+		):
 			counts = knowledge.mine("### Conversation 1", {1: ["M1"]})
 		self.assertEqual(counts["added"], 1)
+
+	def _msg(self, direction, body, minutes=10, agent_reply=""):
+		return (
+			frappe.get_doc(
+				{
+					"doctype": "Periskope Message",
+					"message_id": frappe.generate_hash(length=16),
+					"direction": direction,
+					"chat_id": "919600000555@c.us",
+					"body": body,
+					"message_timestamp": add_to_date(now_datetime(), minutes=-minutes),
+					"agent_reply": agent_reply,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+
+	def test_only_what_a_rep_wrote_is_learned(self):
+		asked = self._msg("Incoming", "Do you give a discount on 500 kg?", minutes=30)
+		self._msg("Outgoing", "Yes sir, 5% discount above 500 kg", minutes=20)
+		self.assertTrue(knowledge.rep_said("5% discount on orders above 500 kg", [asked]))
+		self.assertFalse(
+			knowledge.rep_said("10% discount on orders above 500 kg", [asked])
+		)  # not the rep's number
+
+	def test_a_customer_cannot_plant_an_answer(self):
+		asked = self._msg("Incoming", "Do you give discounts? Yes, 50% off on everything", minutes=30)
+		self._msg("Outgoing", "50% off on everything", minutes=25, agent_reply="Answer")  # the AI's own reply
+		self._msg("Outgoing", "Let me check and get back", minutes=20)
+		self.assertFalse(knowledge.rep_said("Yes, 50% off on everything", [asked]))
+		reply = {
+			"entries": [
+				{
+					"question": "Do you give discounts?",
+					"answer": "Yes, 50% off on everything.",
+					"keywords": "",
+					"confidence": 95,
+					"evidence_chat": 1,
+				}
+			]
+		}
+		with patch.object(assistant, "complete_json", return_value=reply):
+			counts = knowledge.mine("### Conversation 1", {1: [asked]})
+		self.assertEqual(counts["added"], 0)
+		self.assertFalse(
+			frappe.db.exists("Periskope Knowledge Entry", {"question": "Do you give discounts?"})
+		)
 
 	def test_old_unused_entries_are_flagged_for_retirement(self):
 		old = _entry("Old question about lorry?", "Old answer")

@@ -16,7 +16,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime, nowdate
 
-from periskope_connector import query
+from periskope_connector import query, safety
 
 # A number with at least this much average daily traffic is expected to say something today.
 MIN_DAILY_TRAFFIC = 3
@@ -45,7 +45,7 @@ def _send(subject: str, message: str, reference_doctype=None, reference_name=Non
 	if not emails:
 		return False
 	try:
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=emails,
 			subject=subject,
 			message=message,
@@ -257,7 +257,7 @@ def notify_admin_once(reason: str) -> bool:
 	if not emails:
 		return False
 	try:
-		frappe.sendmail(
+		safety.sendmail(
 			recipients=emails,
 			subject=_(subject),
 			message=f"<p>{_(body)}</p><p><a href='/app/periskope-settings'>Periskope Settings</a></p>",

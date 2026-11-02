@@ -124,7 +124,10 @@ class TestKnowledgeCanvas(FrappeTestCase):
 			seen.append(user)
 			return {"entries": entries}
 
-		with patch.object(knowledge.assistant, "complete_json", side_effect=fake):
+		with (
+			patch.object(knowledge.assistant, "complete_json", side_effect=fake),
+			patch.object(knowledge, "rep_said", return_value=True),  # tested on its own in the entry tests
+		):
 			counts = knowledge.mine("### Conversation 1\nCustomer: hi", {1: ["M1"]})
 		return counts, seen[0]
 

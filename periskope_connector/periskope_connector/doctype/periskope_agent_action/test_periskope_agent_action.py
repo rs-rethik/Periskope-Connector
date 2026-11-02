@@ -8,7 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 from periskope_connector import client, outbound, safety
 from periskope_connector.tests.utils import isolate, settings
 
-ALLOWED = "916374955805@c.us"
+ALLOWED = "919000012345@c.us"
 OTHER = "919600000123@c.us"
 GROUP = "120363000000000001@g.us"
 
@@ -26,7 +26,7 @@ class TestSendGuard(FrappeTestCase):
 	def setUp(self):
 		isolate(self, "periskope_safety_test")
 		settings(
-			test_mode=1, test_allowed_chats="916374955805\n" + GROUP, test_allowed_emails="ok@example.com"
+			test_mode=1, test_allowed_chats="919000012345\n" + GROUP, test_allowed_emails="ok@example.com"
 		)
 		frappe.db.delete("Periskope Agent Action")
 		self.http = patch.object(client.requests, "request").start()
@@ -37,7 +37,7 @@ class TestSendGuard(FrappeTestCase):
 
 	def test_modes(self):
 		self.assertEqual(safety.send_mode(ALLOWED), safety.LIVE)
-		self.assertEqual(safety.send_mode("+91 63749 55805"), safety.LIVE)
+		self.assertEqual(safety.send_mode("+91 90000 12345"), safety.LIVE)
 		self.assertEqual(safety.send_mode(OTHER), safety.DRY_RUN)
 		self.assertEqual(safety.send_mode(GROUP), safety.BLOCKED)  # listed, still blocked
 		self.assertEqual(safety.send_mode(""), safety.BLOCKED)
@@ -116,7 +116,7 @@ class TestEmailGuard(FrappeTestCase):
 		self.addCleanup(frappe.db.rollback, save_point="periskope_email_guard")
 		settings(test_mode=1, test_allowed_emails="ok@example.com")
 
-	def _queue(self, *recipients):
+	def _queue(self, *recipients, ours=True):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Email Queue",
@@ -125,8 +125,26 @@ class TestEmailGuard(FrappeTestCase):
 				"recipients": [{"recipient": r} for r in recipients],
 			}
 		)
-		safety.filter_email_queue(doc)
+		frappe.flags.periskope_email = ours  # as safety.sendmail marks this app's own emails
+		try:
+			safety.filter_email_queue(doc)
+		finally:
+			frappe.flags.periskope_email = False
 		return doc
+
+	def test_another_apps_email_is_held_only_when_asked(self):
+		settings(test_hold_all_emails=0)
+		doc = self._queue("customer@example.com", ours=False)
+		self.assertEqual([r.recipient for r in doc.recipients], ["customer@example.com"])
+		settings(test_hold_all_emails=1)
+		self.assertEqual(self._queue("customer@example.com", ours=False).recipients, [])
+
+	def test_sendmail_marks_this_apps_emails(self):
+		seen = []
+		with patch.object(frappe, "sendmail", lambda **kw: seen.append(frappe.flags.periskope_email)):
+			safety.sendmail(recipients=["x@example.com"], subject="Hi", message="Hi")
+		self.assertEqual(seen, [True])
+		self.assertFalse(frappe.flags.periskope_email)
 
 	def test_only_allowed_recipients_stay(self):
 		doc = self._queue("ok@example.com", "customer@example.com")

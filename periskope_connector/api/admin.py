@@ -117,6 +117,7 @@ SECTIONS = [
 			"anthropic_api_key",
 			"ai_model",
 			"ai_base_url",
+			"ai_base_url_trusted",
 			"ai_monthly_budget_tokens",
 			"ai_status",
 			"ai_business_context",
@@ -145,7 +146,7 @@ SECTIONS = [
 		"key": "test_mode",
 		"title": "Test mode",
 		"confirm": True,
-		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails"],
+		"fields": ["test_mode", "test_allowed_chats", "test_allowed_emails", "test_hold_all_emails"],
 	},
 	{
 		"key": "meta",

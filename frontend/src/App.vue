@@ -2,6 +2,15 @@
 	<FrappeUIProvider>
 		<div class="flex h-full w-full overflow-hidden bg-surface-base">
 			<FestivalLights />
+			<!-- no live updates (socket down): the app refreshes itself every 30 s meanwhile -->
+			<div
+				v-if="live.paused"
+				class="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-amber-2 px-3 py-1.5 text-xs font-medium text-ink-amber-8 shadow-md"
+				role="status"
+			>
+				<LucideWifiOff class="size-3.5" />
+				Live updates paused. Refreshing every 30 seconds.
+			</div>
 			<AppSidebar v-if="!isMobile" />
 			<main class="app-canvas flex min-w-0 flex-1 flex-col">
 				<div
@@ -60,6 +69,8 @@ import { Button, FrappeUIProvider, useTheme } from "frappe-ui";
 import LucideMenu from "~icons/lucide/menu";
 import AppSidebar from "@/components/AppSidebar.vue";
 import FestivalLights from "@/components/FestivalLights.vue";
+import LucideWifiOff from "~icons/lucide/wifi-off";
+import { live } from "@/socket";
 import { inbox } from "@/stores/inbox";
 import { boot } from "@/boot";
 import "@/utils/brand";

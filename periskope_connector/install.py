@@ -104,7 +104,10 @@ def setup():
 
 
 def before_uninstall():
-	"""Remove what the app added to other doctypes. Data doctypes are left for the admin."""
+	"""Remove what the app added to other apps' doctypes: its custom fields, the CRM's "Open WhatsApp
+	inbox" form scripts (their page goes with the app) and the WhatsApp Manager role when no other
+	app uses it (frappe_whatsapp does). The app's own doctypes, and their rows, go with the app. The
+	"WhatsApp" lead source stays: leads keep it as their source."""
 	try:
 		from frappe.custom.doctype.custom_field.custom_field import delete_custom_fields
 
@@ -112,6 +115,24 @@ def before_uninstall():
 		delete_custom_fields(CUSTOM_FIELDS)
 	except Exception:
 		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
+	try:
+		if frappe.db.exists("DocType", "CRM Form Script"):
+			for dt in ("CRM Lead", "CRM Deal"):
+				for name in (f"Periskope Inbox ({dt})", f"Periskope AI ({dt})"):
+					if frappe.db.exists("CRM Form Script", name):
+						frappe.delete_doc("CRM Form Script", name, ignore_permissions=True, force=True)
+		if frappe.db.exists("Role", ROLE) and not _role_used_elsewhere():
+			frappe.delete_doc("Role", ROLE, ignore_permissions=True, force=True)
+	except Exception:
+		frappe.log_error(title="Periskope: before-uninstall cleanup failed")
+
+
+def _role_used_elsewhere() -> bool:
+	"""Whether a doctype of another app gives the role any permission."""
+	ours = set(frappe.get_all("DocType", filters={"module": "Periskope Connector"}, pluck="name"))
+	used = set(frappe.get_all("DocPerm", filters={"role": ROLE}, pluck="parent"))
+	used |= set(frappe.get_all("Custom DocPerm", filters={"role": ROLE}, pluck="parent"))
+	return bool(used - ours)
 
 
 def _ensure_role():
@@ -157,17 +178,12 @@ def _ensure_assistant_defaults():
 	# New numbers are welcomed once "Reply to Customers" is on (welcome.py).
 	if not _stored("welcome_new_numbers"):
 		frappe.db.set_single_value("Periskope Settings", "welcome_new_numbers", 1)
-	# Test mode starts on, with only the owner's own number and the approvers allowed. It is seeded
-	# once: an admin who switches it off later is not overridden by the next migrate.
+	# Test mode starts on with empty allow lists: no WhatsApp message and no email of this app leaves
+	# the site until an admin lists who may get them (or switches test mode off). Other apps' emails
+	# are not held unless the admin asks for it (test_hold_all_emails). Seeded once: an admin who
+	# switches it off later is not overridden by the next migrate.
 	if not _stored("test_mode"):
-		frappe.db.set_single_value(
-			"Periskope Settings",
-			{
-				"test_mode": 1,
-				"test_allowed_chats": "916374955805",
-				"test_allowed_emails": "rethik@praneraservices.com\npriyadharshini@agamnext.com",
-			},
-		)
+		frappe.db.set_single_value("Periskope Settings", "test_mode", 1)
 
 
 def _ensure_phone_fields():
@@ -213,11 +229,25 @@ def _ensure_tags():
 
 
 def _ensure_working_hours():
-	"""A Time field's default is not applied to a new single doctype: the form fills in the current
-	time instead, which made the working window zero-length. Store the usual hours up front."""
-	for field, value in (("working_hours_start", "09:00:00"), ("working_hours_end", "19:00:00")):
-		if not frappe.db.get_single_value("Periskope Settings", field):
-			frappe.db.set_single_value("Periskope Settings", field, value)
+	"""A Time field's default is not applied to a new single doctype: Frappe stores the install time
+	in both fields instead, a window of a split second, so the settings could not be saved and the
+	reply reminders never ran. Store the usual hours when the window is missing or that short; a
+	window an admin set is kept."""
+	from frappe.utils import get_time
+
+	from periskope_connector.periskope_connector.doctype.periskope_settings.periskope_settings import (
+		MIN_WORKING_MINUTES,
+	)
+
+	start = frappe.db.get_single_value("Periskope Settings", "working_hours_start")
+	end = frappe.db.get_single_value("Periskope Settings", "working_hours_end")
+	if start and end:
+		start, end = get_time(start), get_time(end)
+		if (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute) >= MIN_WORKING_MINUTES:
+			return
+	frappe.db.set_single_value(
+		"Periskope Settings", {"working_hours_start": "09:00:00", "working_hours_end": "19:00:00"}
+	)
 
 
 # On a CRM lead or deal: open its WhatsApp chat in the inbox (the newest, on whichever number).

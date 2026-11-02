@@ -279,18 +279,10 @@ def _media(wm) -> dict:
 
 def phone_number(value: str | None) -> str:
 	"""A number as WhatsApp writes it (country code, digits only). Old rows keep numbers as typed
-	("+91-6374955805", "9600471989"); a 10-digit one gets the company's country code."""
-	number = digits(value)
-	if len(number) == 10:
-		number = _country_code() + number
-	return number
+	("+91-9000012345", "9600471989"); a local one gets the company's country code."""
+	from periskope_connector.linking import with_country_code
 
-
-def _country_code() -> str:
-	from frappe.geo.country_info import get_country_info
-
-	country = frappe.db.get_single_value("System Settings", "country") or "India"
-	return digits((get_country_info(country) or {}).get("isd")) or "91"
+	return with_country_code(value)
 
 
 def template_text(template: str | None, parameters: str | None = None) -> str:
@@ -384,9 +376,14 @@ def _content_type(mimetype: str | None) -> str:
 	return kind if kind in ("image", "video", "audio") else "document"
 
 
+SHARE_PREFIX = "meta-share-"
+SHARE_HOURS = 24  # Meta downloads a file when the message is sent; the public copy goes after this
+
+
 def public_link(file_name: str) -> str:
 	"""Meta fetches a file from a link, so a private file is sent as a public copy under a random
-	name (the private one stays as it is)."""
+	name (the private one stays as it is). The copy is deleted after SHARE_HOURS
+	(remove_shared_files)."""
 	file = frappe.get_doc("File", file_name)
 	if not file.is_private:
 		return get_url(file.file_url)
@@ -394,12 +391,31 @@ def public_link(file_name: str) -> str:
 	copy = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": frappe.generate_hash(length=32) + ext,
+			"file_name": SHARE_PREFIX + frappe.generate_hash(length=32) + ext,
 			"is_private": 0,
 			"content": file.get_content(),
 		}
 	).insert(ignore_permissions=True)
 	return get_url(copy.file_url)
+
+
+def remove_shared_files() -> int:
+	"""Daily: delete the public copies made for Meta once Meta has had them (SHARE_HOURS)."""
+	old = frappe.get_all(
+		"File",
+		filters={
+			"file_name": ["like", SHARE_PREFIX + "%"],
+			"is_private": 0,
+			"creation": ["<", add_to_date(now_datetime(), hours=-SHARE_HOURS)],
+		},
+		pluck="name",
+	)
+	for name in old:
+		try:
+			frappe.delete_doc("File", name, ignore_permissions=True, force=True)
+		except Exception:
+			frappe.log_error(title=f"Periskope: could not delete the shared file {name}")
+	return len(old)
 
 
 def templates() -> list[dict]:

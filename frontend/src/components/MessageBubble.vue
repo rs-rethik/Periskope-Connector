@@ -290,7 +290,8 @@ const mapsUrl = computed(() => {
 	const s = shared.value;
 	if (s.latitude != null && s.longitude != null)
 		return `https://www.google.com/maps/search/?api=1&query=${s.latitude},${s.longitude}`;
-	if (s.url) return s.url;
+	// a link from the customer's own message: only a web address, never javascript: or data:
+	if (s.url && /^https?:\/\//i.test(s.url)) return s.url;
 	const q = [s.name, s.address].filter(Boolean).join(", ");
 	return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : "";
 });

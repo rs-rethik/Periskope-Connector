@@ -102,6 +102,10 @@ def on_message(doc) -> str:
 	try:
 		if doc.direction != "Incoming" or doc.is_group or not doc.contact_number:
 			return ""
+		from periskope_connector.chat import ai_off
+
+		if ai_off(doc.chat_id):
+			return ""
 		if welcome_row(doc.chat_id):
 			if _capturing(doc.chat_id):
 				_enqueue("capture", f"periskope_welcome_capture::{doc.chat_id}", chat_id=doc.chat_id)
@@ -222,7 +226,9 @@ def send(message: str) -> str:
 	"""Welcome the number of `message` (a background job). Returns the row's status, or "" when the
 	number is no longer new or welcomes were switched off."""
 	doc = frappe.db.get_value("Periskope Message", message, [*MESSAGE_FIELDS, "creation"], as_dict=True)
-	if not doc or not is_on() or not _unknown(doc.contact_number):
+	from periskope_connector.chat import ai_off
+
+	if not doc or not is_on() or not _unknown(doc.contact_number) or ai_off(doc.chat_id):
 		return ""
 	# Still the number's first message (the customer may have written more since; those are read
 	# below), and nobody has written to them yet.
@@ -291,6 +297,10 @@ def extract(welcome_text: str, customer_text: str) -> dict:
 def capture(chat_id: str) -> dict:
 	"""Read the customer's messages since the welcome and put what is new on the lead (a background
 	job). Returns what was written."""
+	from periskope_connector.chat import ai_off
+
+	if ai_off(chat_id):
+		return {}
 	row = welcome_row(chat_id)
 	if not row or not _capturing(chat_id) or not assistant.is_ready():
 		return {}

@@ -25,6 +25,12 @@ class PeriskopeSettings(Document):
 			self.ai_provider = PROVIDER_API
 
 		self.base_url = (self.base_url or "").strip().rstrip("/")
+		from periskope_connector.ai.classifier import ai_address_problem
+
+		self.ai_base_url = (self.ai_base_url or "").strip().rstrip("/")
+		problem = ai_address_problem(self.ai_base_url, bool(self.get("ai_base_url_trusted")))
+		if problem:
+			frappe.throw(problem)
 		self.validate_reminders()
 		self.validate_assistant()
 

@@ -18,7 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime, now_datetime
 
-from periskope_connector import reminders
+from periskope_connector import reminders, safety
 
 DUE_SOON = 0.2  # the last fifth of the time is "due soon"
 FIELDS = ["name", "status", "waiting_since", "response_due", "opened_on", "resolution_due", "resolved_on"]
@@ -159,7 +159,7 @@ def check_breaches() -> int:
 		assignees = frappe.parse_json(row._assign or "[]") or []
 		_bell(sorted(set(assignees + managers)), row.name, subject)
 		if cfg.emails:
-			frappe.sendmail(
+			safety.sendmail(
 				recipients=cfg.emails,
 				subject=subject,
 				message=_("{0} has been waiting for a reply since before {1}. Open the chat: {2}").format(

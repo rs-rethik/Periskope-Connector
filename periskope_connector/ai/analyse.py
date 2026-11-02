@@ -109,8 +109,20 @@ def queue(chat_id: str):
 	)
 
 
+def _hours(value) -> int:
+	"""The AI's "due in hours" as a whole number; 4 when it gave none or something else ("tomorrow")."""
+	try:
+		return int(float(value))
+	except (TypeError, ValueError):
+		return 4
+
+
 def run(chat_id: str, force: bool = False) -> dict:
 	"""Analyse one chat and write the result into its CRM record. Returns what was done."""
+	from periskope_connector.chat import ai_off
+
+	if ai_off(chat_id):
+		return {"skipped": "AI is off for this chat"}
 	context = crm_context.build(chat_id)
 	if not context and not safety.is_group(chat_id):
 		return {"skipped": "no CRM record"}
@@ -128,7 +140,13 @@ def run(chat_id: str, force: bool = False) -> dict:
 		f"Possible statuses: {', '.join(statuses) or 'none'}\n\n"
 		f"Conversation:\n{_transcript(chat_id)}"
 	)
-	result = assistant.complete_json(SYSTEM_PROMPT, user, SCHEMA, 1200)
+	try:
+		result = assistant.complete_json(SYSTEM_PROMPT, user, SCHEMA, 1200)
+	except Exception:
+		# not counted as done: the chat's next message runs it again (the throttle is lifted)
+		cache.delete_value(key)
+		frappe.log_error(title=f"Periskope: could not analyse chat {chat_id}")
+		return {"skipped": "the AI call failed"}
 	done = {"summary": None, "notes": 0, "task": None, "status": "", "organization": None}
 	if context:
 		s = result.get("summary") or {}
@@ -140,7 +158,7 @@ def run(chat_id: str, force: bool = False) -> dict:
 				done["notes"] += 1
 		follow = result.get("follow_up") or {}
 		if follow.get("needed") and (follow.get("title") or "").strip():
-			hours = min(max(int(follow.get("due_in_hours") or 4), 1), 72)
+			hours = min(max(_hours(follow.get("due_in_hours")), 1), 72)
 			done["task"] = writeback.upsert_task(
 				chat_id,
 				"follow_up",

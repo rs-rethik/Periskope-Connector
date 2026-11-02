@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, escape_html, get_url, today
 
+from periskope_connector import safety
 from periskope_connector.linking import by_mobile
 
 UNMATCHED = ("No Match", "Internal")
@@ -104,7 +105,7 @@ def send_weekly_report():
 		)
 	)
 	more = f"<p>{_('and {0} more').format(len(rows) - len(shown))}</p>" if len(rows) > len(shown) else ""
-	frappe.sendmail(
+	safety.sendmail(
 		recipients=emails,
 		subject=_("WhatsApp numbers not in the CRM this week ({0})").format(len(rows)),
 		message=(

@@ -114,6 +114,10 @@ def run(message: str) -> str:
 	from periskope_connector.setup_status import agent_on
 
 	doc = frappe.get_doc("Periskope Message", message)
+	from periskope_connector.chat import ai_off
+
+	if ai_off(doc.chat_id):
+		return ""
 	if doc.transcript or doc.message_type != "audio" or not doc.media_path or not configured():
 		return ""
 	ready, reason = assistant.readiness()

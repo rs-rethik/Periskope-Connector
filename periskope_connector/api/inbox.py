@@ -32,7 +32,7 @@ STATUSES = ("Open", "Pending", "Resolved", "Closed")
 CHAT_COLUMNS = """c.name, c.chat_id, c.chat_name, c.is_group, c.contact_number, c.whatsapp_number,
 	c.status, c.last_message_at, c.last_message_preview, c.last_message_direction, c.last_incoming_at,
 	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign, c.team, c.waiting_since,
-	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached,
+	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached, c.ai_off,
 	(select m.ai_category from `tabPeriskope Message` m where m.periskope_chat = c.name
 		and ifnull(m.ai_category, '') != '' order by m.message_timestamp desc limit 1) as ai_tag"""
 MESSAGE_FIELDS = [
@@ -78,7 +78,7 @@ def _parse(value):
 def _where(filters: dict) -> tuple[list[str], dict]:
 	"""SQL conditions and values for the chat list filters. Unknown keys are ignored."""
 	user = frappe.session.user
-	conditions, values = [], {"user": user, "assign": f'%"{user}"%'}
+	conditions, values = [], {"user": user, "assign": access.assigned_like(user)}
 	condition = access.chat_condition(user, "c")
 	if condition:
 		conditions.append(condition)
@@ -117,7 +117,7 @@ def _where(filters: dict) -> tuple[list[str], dict]:
 		conditions.append(f"c.team in ({', '.join(frappe.db.escape(t) for t in mine)})" if mine else "1=0")
 	if filters.get("assigned_to"):
 		conditions.append("c._assign like %(assigned_to)s")
-		values["assigned_to"] = f'%"{filters["assigned_to"]}"%'
+		values["assigned_to"] = access.assigned_like(filters["assigned_to"])
 	if filters.get("label"):
 		conditions.append(
 			"""exists (select 1 from `tabPeriskope Chat Label` l where l.parent = c.name

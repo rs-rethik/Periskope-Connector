@@ -5,8 +5,9 @@ While test mode is on (the default until an admin switches it off in Periskope S
   run: the reply is still prepared and logged, but nothing is sent. A group is always blocked, even
   when it is listed.
 - the agent writes to the CRM only for allow-listed chats; for the rest it logs what it would do.
-- an email reaches only the allow-listed addresses. The others are dropped from every queued email
-  on the site, whatever app sent it.
+- an email of this app (sent through safety.sendmail) reaches only the allow-listed addresses. With
+  "Hold Every Email of the Site" on, the others are dropped from every queued email on the site,
+  whatever app sent it (for a copy of a live site).
 
 Everything that is sent, dropped or only simulated is a Periskope Agent Action row, so it is always
 possible to say exactly what left the site.
@@ -141,11 +142,23 @@ def _subject(doc) -> str:
 		return ""
 
 
+def sendmail(**kwargs):
+	"""frappe.sendmail for this app's own emails: test mode holds them (filter_email_queue)."""
+	frappe.flags.periskope_email = True
+	try:
+		return frappe.sendmail(**kwargs)
+	finally:
+		frappe.flags.periskope_email = False
+
+
 def filter_email_queue(doc, method=None):
-	"""Email Queue before_insert: in test mode drop every recipient not on the allow list. An email
+	"""Email Queue before_insert: in test mode drop every recipient not on the allow list from this
+	app's emails, or from every email of the site when "Hold Every Email of the Site" is on. An email
 	left with nobody is kept as an Error row (never sent), so it is still visible."""
 	if not test_mode():
 		return
+	if not (frappe.flags.periskope_email or frappe.db.get_single_value(SETTINGS, "test_hold_all_emails")):
+		return  # another app's email: not this app's to hold
 	allowed = allowed_emails()
 	keep = [r for r in doc.recipients if (r.recipient or "").strip().lower() in allowed]
 	dropped = [r.recipient for r in doc.recipients if r not in keep]
