@@ -32,6 +32,8 @@ jobs:
     name: Tests (Frappe v15, ERPNext, CRM)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      CRM_V15_COMMIT: e2d0b47a3ed3c1f45e4d74b3afeb84bf20afacd9
     services:
       mariadb:
         image: mariadb:10.6
@@ -73,8 +75,11 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:11000
           bench set-config -g redis_socketio redis://127.0.0.1:13000
           bench get-app --skip-assets --branch version-15 erpnext
-          bench get-app --skip-assets whatsapp  # CRM requires it
-          bench get-app --skip-assets crm  # their frontends are not needed for these tests
+          # CRM main has moved to Frappe v16: use the commit the v15 sites run (before it required the
+          # whatsapp app). Its frontend is not needed for these tests.
+          git clone --quiet https://github.com/frappe/crm.git /tmp/crm
+          git -C /tmp/crm checkout --quiet "$CRM_V15_COMMIT"
+          bench get-app --skip-assets /tmp/crm
           bench get-app --skip-assets periskope_connector "$GITHUB_WORKSPACE/app"
           bench setup requirements --dev
       - name: Site
