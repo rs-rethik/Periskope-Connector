@@ -241,6 +241,7 @@ import LucideSendHorizontal from "~icons/lucide/send-horizontal";
 import LucideClock from "~icons/lucide/clock";
 import LucideFileText from "~icons/lucide/file-text";
 import TemplateDialog from "@/components/TemplateDialog.vue";
+import { MAX_UPLOAD_BYTES, uploadPrivate } from "@/utils/upload";
 import { boot } from "@/boot";
 import { drafts } from "@/stores/inbox";
 import { errorText, showError } from "@/utils/errors";
@@ -477,7 +478,7 @@ async function onFile(e) {
 	const picked = e.target.files?.[0];
 	e.target.value = "";
 	if (!picked) return;
-	if (picked.size > 15 * 1024 * 1024) {
+	if (picked.size > MAX_UPLOAD_BYTES) {
 		error.value = "The file is larger than 15 MB.";
 		return;
 	}
@@ -485,19 +486,9 @@ async function onFile(e) {
 	uploading.value = true;
 	file.value = { file_name: picked.name };
 	try {
-		const form = new FormData();
-		form.append("file", picked, picked.name);
-		form.append("is_private", "1");
-		form.append("folder", "Home/Attachments");
-		const r = await fetch("/api/method/upload_file", {
-			method: "POST",
-			body: form,
-			headers: { "X-Frappe-CSRF-Token": window.csrf_token },
-		});
-		const data = await r.json();
-		if (!r.ok || !data.message) throw new Error("upload failed");
+		const saved = await uploadPrivate(picked);
 		if (id !== uploadId) return;
-		file.value = { name: data.message.name, file_name: data.message.file_name };
+		file.value = saved;
 	} catch (err) {
 		if (id !== uploadId) return;
 		file.value = null;
