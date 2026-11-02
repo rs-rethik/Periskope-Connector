@@ -1,15 +1,16 @@
 <template>
-	<span
-		v-if="chat.sla"
-		class="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-		:class="classes[chat.sla]"
-		:title="title"
+	<Tooltip v-if="chat.sla" :text="title"
+		><span
+			class="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+			:class="classes[chat.sla]"
+		>
+			<LucideTimer class="size-3" />{{ text }}
+		</span></Tooltip
 	>
-		<LucideTimer class="size-3" />{{ text }}
-	</span>
 </template>
 
 <script setup>
+import { Tooltip } from "frappe-ui";
 import { computed } from "vue";
 import dayjs from "dayjs";
 import LucideTimer from "~icons/lucide/timer";

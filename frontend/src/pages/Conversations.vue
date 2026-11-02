@@ -84,7 +84,10 @@
 							<div class="flex gap-1">
 								<Select v-model="sortKey" class="flex-1" :options="sortOptions" />
 								<Button
-									:title="order === 'desc' ? 'Newest first' : 'Oldest first'"
+									:tooltip="order === 'desc' ? 'Newest first' : 'Oldest first'"
+									:aria-label="
+										order === 'desc' ? 'Newest first' : 'Oldest first'
+									"
 									@click="order = order === 'desc' ? 'asc' : 'desc'"
 								>
 									<template #icon>

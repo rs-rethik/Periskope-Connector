@@ -102,14 +102,16 @@
 						class="out-port absolute -right-2 top-1/2 size-4 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-[var(--card)] bg-[var(--port)]"
 						data-out=""
 					/>
-					<button
-						class="plus absolute -right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 hover:text-ink-gray-9"
-						title="Add a node after this"
-						@pointerdown.stop
-						@click="openMenu(ROOT, ...outPoint(ROOT))"
+					<Tooltip text="Add a node after this"
+						><button
+							class="plus absolute -right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 hover:text-ink-gray-9"
+							aria-label="Add a node after this"
+							@pointerdown.stop
+							@click="openMenu(ROOT, ...outPoint(ROOT))"
+						>
+							+
+						</button></Tooltip
 					>
-						+
-					</button>
 					<span
 						v-if="!list.length"
 						class="absolute left-24 whitespace-nowrap text-sm text-ink-gray-5"
@@ -162,30 +164,32 @@
 							class="out-port absolute -right-2 top-1/2 size-4 -translate-y-1/2 cursor-crosshair rounded-full border-2 border-[var(--card)] bg-[var(--port)]"
 							:data-out="n.name"
 						/>
-						<button
-							class="plus absolute -right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 hover:text-ink-gray-9"
-							title="Add a node after this"
-							@pointerdown.stop
-							@click="openMenu(n.name, ...outPoint(n.name))"
+						<Tooltip text="Add a node after this"
+							><button
+								class="plus absolute -right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 hover:text-ink-gray-9"
+								aria-label="Add a node after this"
+								@pointerdown.stop
+								@click="openMenu(n.name, ...outPoint(n.name))"
+							>
+								+
+							</button></Tooltip
 						>
-							+
-						</button>
 					</template>
 				</div>
 
 				<!-- unhook a wire -->
-				<button
-					v-if="wire"
-					class="absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 shadow hover:text-ink-red-8"
-					:style="{ left: `${wire.x}px`, top: `${wire.y}px` }"
-					title="Disconnect"
-					@pointerdown.stop
-					@mouseenter="keepWire"
-					@mouseleave="wire = null"
-					@click="disconnect(wire.child)"
-				>
-					<LucideX class="size-3.5" />
-				</button>
+				<Tooltip v-if="wire" text="Disconnect"
+					><button
+						class="absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--card)] text-ink-gray-6 shadow hover:text-ink-red-8"
+						:style="{ left: `${wire.x}px`, top: `${wire.y}px` }"
+						aria-label="Disconnect"
+						@pointerdown.stop
+						@mouseenter="keepWire"
+						@mouseleave="wire = null"
+						@click="disconnect(wire.child)"
+					>
+						<LucideX class="size-3.5" /></button
+				></Tooltip>
 			</div>
 
 			<!-- Add a node -->
@@ -219,9 +223,11 @@
 			</div>
 
 			<div class="absolute bottom-3 left-3 flex gap-1.5" @pointerdown.stop>
-				<Button title="Zoom in" @click="zoomAt(1.2)">+</Button>
-				<Button title="Zoom out" @click="zoomAt(1 / 1.2)">−</Button>
-				<Button title="Fit to view" @click="fit">⤢</Button>
+				<Button tooltip="Zoom in" aria-label="Zoom in" @click="zoomAt(1.2)">+</Button>
+				<Button tooltip="Zoom out" aria-label="Zoom out" @click="zoomAt(1 / 1.2)"
+					>−</Button
+				>
+				<Button tooltip="Fit to view" aria-label="Fit to view" @click="fit">⤢</Button>
 			</div>
 
 			<!-- Side panel: a node, or the gaps -->
@@ -388,10 +394,11 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
-import { Button, Dialog, ErrorMessage, FormControl, call, toast } from "frappe-ui";
+import { Button, Dialog, ErrorMessage, FormControl, Tooltip, call, toast } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 import { boot } from "@/boot";
 import { fromNow } from "@/utils/format";
+import { ask } from "@/utils/confirm";
 
 // The knowledge base the auto reply answers from, as a node graph. Every node is a Periskope Knowledge Entry and its
 // wire is its parent_entry; everything saves as it is made (knowledge_canvas.py).
@@ -886,10 +893,11 @@ async function remove(name) {
 	const n = nodes[name];
 	if (!n || n.draft) return closePanel();
 	const below = countBelow(name);
-	const ok = window.confirm(
+	const ok = await ask(
 		below
 			? `Delete "${n.question}" and the ${below} node(s) after it? The agent will stop using them.`
-			: `Delete "${n.question}"? The agent will stop using it.`
+			: `Delete "${n.question}"? The agent will stop using it.`,
+		{ title: "Delete this node?", confirmLabel: "Delete", danger: true }
 	);
 	if (!ok) return;
 	try {

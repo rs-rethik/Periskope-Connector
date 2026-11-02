@@ -115,6 +115,7 @@ import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideCheck from "~icons/lucide/check";
 import FieldInput from "@/components/settings/FieldInput.vue";
 import { fromNow } from "@/utils/format";
+import { ask, discardChanges } from "@/utils/confirm";
 
 const props = defineProps({
 	kind: { type: String, required: true },
@@ -149,8 +150,8 @@ watch(dirty, (d) => emit("dirty", d));
 onBeforeUnmount(() => emit("dirty", false));
 
 // Back to the list; unsaved changes are only dropped when the user says so.
-function leave() {
-	if (dirty.value && !window.confirm("Discard your changes?")) return;
+async function leave() {
+	if (dirty.value && !(await discardChanges())) return;
 	editing.value = null;
 }
 
@@ -217,7 +218,13 @@ async function save() {
 }
 
 async function remove() {
-	if (deleting.value || !window.confirm(`Delete this ${props.singular.toLowerCase()}?`)) return;
+	if (deleting.value) return;
+	const ok = await ask("This cannot be undone.", {
+		title: `Delete this ${props.singular.toLowerCase()}?`,
+		confirmLabel: "Delete",
+		danger: true,
+	});
+	if (!ok) return;
 	deleting.value = true;
 	try {
 		await call("periskope_connector.api.admin.delete_record", {

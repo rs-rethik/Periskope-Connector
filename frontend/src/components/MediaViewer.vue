@@ -15,49 +15,51 @@
 						{{ messageTime(current.message_timestamp) }}
 					</div>
 				</div>
-				<a
-					:href="url(current)"
-					:download="current.media_filename || current.name"
-					class="rounded-full p-2 hover:bg-white/10"
-					title="Download"
-				>
-					<LucideDownload class="size-5" />
-				</a>
-				<button
-					class="rounded-full p-2 hover:bg-white/10"
-					title="Close (Esc)"
-					@click="close"
-				>
-					<LucideX class="size-5" />
-				</button>
+				<Tooltip text="Download"
+					><a
+						:href="url(current)"
+						:download="current.media_filename || current.name"
+						class="rounded-full p-2 hover:bg-white/10"
+						aria-label="Download"
+					>
+						<LucideDownload class="size-5" /> </a
+				></Tooltip>
+				<Tooltip text="Close (Esc)"
+					><button
+						class="rounded-full p-2 hover:bg-white/10"
+						aria-label="Close (Esc)"
+						@click="close"
+					>
+						<LucideX class="size-5" /></button
+				></Tooltip>
 			</div>
 
 			<div
 				class="relative flex min-h-0 flex-1 items-center justify-center px-14"
 				@click.self="close"
 			>
-				<button
-					v-if="index > 0"
-					class="absolute left-3 rounded-full bg-white/10 p-2 hover:bg-white/20"
-					title="Previous (←)"
-					@click="index--"
-				>
-					<LucideChevronLeft class="size-6" />
-				</button>
+				<Tooltip v-if="index > 0" text="Previous (←)"
+					><button
+						class="absolute left-3 rounded-full bg-white/10 p-2 hover:bg-white/20"
+						aria-label="Previous (←)"
+						@click="index--"
+					>
+						<LucideChevronLeft class="size-6" /></button
+				></Tooltip>
 				<img
 					:key="current.name"
 					:src="url(current)"
 					class="max-h-full max-w-full select-none object-contain"
 					alt=""
 				/>
-				<button
-					v-if="index < images.length - 1"
-					class="absolute right-3 rounded-full bg-white/10 p-2 hover:bg-white/20"
-					title="Next (→)"
-					@click="index++"
-				>
-					<LucideChevronRight class="size-6" />
-				</button>
+				<Tooltip v-if="index < images.length - 1" text="Next (→)"
+					><button
+						class="absolute right-3 rounded-full bg-white/10 p-2 hover:bg-white/20"
+						aria-label="Next (→)"
+						@click="index++"
+					>
+						<LucideChevronRight class="size-6" /></button
+				></Tooltip>
 			</div>
 
 			<div
@@ -87,6 +89,7 @@
 </template>
 
 <script setup>
+import { Tooltip } from "frappe-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import LucideX from "~icons/lucide/x";
 import LucideDownload from "~icons/lucide/download";
