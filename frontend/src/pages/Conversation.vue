@@ -5,7 +5,8 @@
 				<template #actions>
 					<Button
 						variant="ghost"
-						title="Open in the chat view"
+						tooltip="Open in the chat view"
+						aria-label="Open in the chat view"
 						@click="
 							$router.push({ name: 'Inbox', params: { chat: $route.params.chat } })
 						"
@@ -14,7 +15,8 @@
 					</Button>
 					<Button
 						variant="ghost"
-						title="Back to the list"
+						tooltip="Back to the list"
+						aria-label="Back to the list"
 						@click="$router.push({ name: 'Conversations' })"
 					>
 						<template #icon><LucideList class="size-4" /></template>

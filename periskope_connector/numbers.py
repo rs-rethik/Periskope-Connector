@@ -1,4 +1,5 @@
-"""Our WhatsApp numbers: one WhatsApp Number row per number connected in Periskope.
+"""Our WhatsApp numbers: one WhatsApp Number row per number connected in Periskope, and the number of
+a Meta WhatsApp Account when one is connected (source "Meta", meta.py).
 
 The rows come from Periskope (sync_from_periskope, via Test Connection or Sync Numbers). A message on
 a number that is not saved yet adds it (ensure), so every chat and message can point to its number.
@@ -26,7 +27,9 @@ FIELDS = [
 	"disconnected_since",
 	"last_sync_on",
 	"last_message_on",
+	"source",
 ]
+NOT_META = ["source", "!=", "Meta"]  # Periskope's numbers (older rows have no source)
 
 
 def ensure(number: str | None) -> str | None:
@@ -60,8 +63,13 @@ def sales_person(number: str | None) -> str | None:
 
 
 def ready() -> list[str]:
-	"""The numbers Periskope says are connected and ready, for reading history and sending."""
-	return frappe.get_all(DOCTYPE, filters={"is_ready": 1, "is_active": 1}, pluck="name", order_by="name asc")
+	"""The Periskope numbers that are connected and ready, for reading history and sending."""
+	return frappe.get_all(
+		DOCTYPE,
+		filters=[["is_ready", "=", 1], ["is_active", "=", 1], NOT_META],
+		pluck="name",
+		order_by="name asc",
+	)
 
 
 def first_ready() -> str | None:
@@ -102,7 +110,9 @@ def sync_from_periskope(phones: list[dict]) -> list[frappe._dict]:
 		values["disconnected_since"] = None if is_ready else (row.disconnected_since or now)
 		frappe.db.set_value(DOCTYPE, name, values)
 	for row in frappe.get_all(
-		DOCTYPE, filters={"name": ["not in", list(seen) or [""]]}, fields=["name", "disconnected_since"]
+		DOCTYPE,
+		filters=[["name", "not in", list(seen) or [""]], NOT_META],
+		fields=["name", "disconnected_since"],
 	):
 		frappe.db.set_value(
 			DOCTYPE,

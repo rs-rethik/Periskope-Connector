@@ -1,19 +1,24 @@
 <template>
-	<span
-		class="inline-grid shrink-0 select-none place-items-center rounded-full font-semibold"
-		:class="[tone, sizes[size]]"
-		:title="name"
-		>{{ initials(name) }}</span
-	>
+	<Tooltip :text="tip || name">
+		<span
+			v-bind="$attrs"
+			class="inline-grid shrink-0 select-none place-items-center rounded-full font-semibold"
+			:class="[tone, sizes[size]]"
+			>{{ initials(name) }}</span
+		>
+	</Tooltip>
 </template>
 
 <script setup>
 import { computed } from "vue";
+import { Tooltip } from "frappe-ui";
 import { initials } from "@/utils/format";
 
+defineOptions({ inheritAttrs: false }); // class and the rest go on the avatar, inside the tooltip
 const props = defineProps({
 	name: { type: String, default: "" },
 	size: { type: String, default: "md" },
+	tip: { type: String, default: "" }, // the hover text; the name when empty
 });
 
 // The same name always gets the same soft colour.

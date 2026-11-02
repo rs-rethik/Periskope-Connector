@@ -17,7 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, cint, now_datetime
 
-from periskope_connector import access, attachments, chat, safety, shared_items
+from periskope_connector import access, attachments, chat, meta, safety, shared_items
 from periskope_connector.outbound import send as send_whatsapp
 from periskope_connector.setup_status import agent_on
 from periskope_connector.text_rules import skip_fields
@@ -144,7 +144,10 @@ def _save_outgoing(row, text: str, reply_to: str | None, upload) -> str:
 
 
 def _short_id(message_id: str | None) -> str | None:
-	"""The WhatsApp id inside Periskope's message id ("true_<chat>_<id>[_<participant>]")."""
+	"""The WhatsApp id inside Periskope's message id ("true_<chat>_<id>[_<participant>]") or a Meta
+	message's id ("meta_<id>")."""
+	if (message_id or "").startswith(meta.PREFIX):
+		return message_id[len(meta.PREFIX) :]
 	parts = (message_id or "").split("_")
 	return parts[2] if len(parts) >= 3 else None
 
@@ -171,12 +174,12 @@ def _deliver(name: str) -> str:
 	)
 	media = None
 	if m.attachment_file:
-		media = {
-			"type": media_type(m.media_mimetype),
-			"filedata": base64.b64encode(attachments._read(m.attachment_file)).decode(),
-			"mimetype": m.media_mimetype,
-			"filename": m.media_filename,
-		}
+		media = {"file": m.attachment_file, "mimetype": m.media_mimetype, "filename": m.media_filename}
+		if not meta.is_meta(m.org_phone):  # Periskope takes the file itself; Meta takes a link
+			media.update(
+				type=media_type(m.media_mimetype),
+				filedata=base64.b64encode(attachments._read(m.attachment_file)).decode(),
+			)
 	attempts = cint(m.send_attempts) + 1
 	try:
 		result = send_whatsapp(
@@ -223,8 +226,8 @@ def _set(name: str, **values):
 
 def _after_rep_reply(name: str):
 	"""The rep answered from the inbox: the same as a reply from their phone. The waiting AI reply
-	is cancelled, the customer's earlier messages count as replied, and the chat, CRM link and CRM
-	WhatsApp tab are brought up to date."""
+	is cancelled, the customer's earlier messages count as replied, and the chat and its CRM link
+	are brought up to date."""
 	from periskope_connector import autoreply
 	from periskope_connector.linking import link_message
 
@@ -343,6 +346,10 @@ def refresh_ticks(chat: str | None = None) -> int:
 		"ack": ["not in", ["4", "5"]],
 		"creation": [">", add_to_date(now_datetime(), days=-2)],
 	}
+	# Meta's ticks come through frappe_whatsapp (meta.on_update), not from Periskope
+	meta_numbers = frappe.get_all("WhatsApp Number", filters={"source": meta.SOURCE}, pluck="name")
+	if meta_numbers:
+		filters["whatsapp_number"] = ["not in", meta_numbers]
 	if chat:
 		filters["periskope_chat"] = chat
 	rows = frappe.get_all(
@@ -390,6 +397,60 @@ def _row(name: str) -> dict:
 	row.pop("media_path", None)
 	row.shared = shared_items.from_row(row)
 	return row
+
+
+# --- Meta WhatsApp templates ---------------------------------------------------------------------
+
+
+def _meta_chat(chat: str) -> frappe._dict:
+	row = _chat(chat)
+	if not meta.is_meta(row.whatsapp_number or row.org_phone):
+		frappe.throw(_("Templates are sent only in a Meta WhatsApp chat."))
+	return row
+
+
+@frappe.whitelist()
+def meta_templates(chat: str) -> list[dict]:
+	"""The approved templates a Meta WhatsApp chat can be sent (any time, also after 24 hours)."""
+	access.require_inbox_user()
+	_meta_chat(chat)
+	return meta.templates()
+
+
+@frappe.whitelist(methods=["POST"])
+def send_template(chat: str, template: str, params: str | list | None = None) -> dict:
+	"""Send an approved template in a Meta WhatsApp chat, with a value for each {{n}} of its body.
+	Returns the saved message."""
+	access.require_inbox_user()
+	row = _meta_chat(chat)
+	found = next((t for t in meta.templates() if t["name"] == template), None)
+	if not found:
+		frappe.throw(_("Choose one of the approved templates."))
+	params = [
+		str(p or "").strip() for p in (frappe.parse_json(params) if isinstance(params, str) else params or [])
+	]
+	if len(params) < found["params"] or not all(params[: found["params"]]):
+		frappe.throw(_("Fill in every value of the template."))
+	text = meta.template_text(template, frappe.as_json(params[: found["params"]]))
+	try:
+		result = send_whatsapp(
+			row.chat_id,
+			text,
+			row.whatsapp_number or row.org_phone,
+			origin="Inbox",
+			template=template,
+			params=params[: found["params"]],
+			detail={"user": frappe.session.user, "template": template},
+		)
+	except safety.SendNotAllowed:
+		frappe.throw(_("Test mode: messages go only to the test numbers."))
+	# Saved here at once (the WhatsApp Message hook would also do it, a moment later).
+	name = meta.ingest(result["whatsapp_message"])
+	if not name:
+		frappe.throw(_("The template was sent, but could not be shown here yet. Reload the chat."))
+	frappe.db.set_value("Periskope Message", name, "sent_by", frappe.session.user, update_modified=False)
+	_after_rep_reply(name)
+	return _row(name)
 
 
 # --- New chat ------------------------------------------------------------------------------------

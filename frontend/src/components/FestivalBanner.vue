@@ -39,18 +39,20 @@
 				</p>
 				<p class="mt-0.5 text-lg font-semibold leading-snug">{{ festival.greeting }}</p>
 			</div>
-			<button
-				class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/15 hover:text-white"
-				title="Hide for today"
-				@click="hide"
-			>
-				<LucideX class="size-4" />
-			</button>
+			<Tooltip text="Hide for today"
+				><button
+					class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/15 hover:text-white"
+					aria-label="Hide for today"
+					@click="hide"
+				>
+					<LucideX class="size-4" /></button
+			></Tooltip>
 		</div>
 	</div>
 </template>
 
 <script setup>
+import { Tooltip } from "frappe-ui";
 import { computed } from "vue";
 import LucideX from "~icons/lucide/x";
 import { LOOKS, festival, hideFestival as hide, motifs } from "@/utils/festival";

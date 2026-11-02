@@ -8,7 +8,12 @@
 					v-if="isMobile"
 					class="flex h-12 shrink-0 items-center gap-2 border-b border-outline-gray-1 px-2"
 				>
-					<Button variant="ghost" title="Menu" @click="menuOpen = true">
+					<Button
+						variant="ghost"
+						tooltip="Menu"
+						aria-label="Menu"
+						@click="menuOpen = true"
+					>
 						<template #icon><LucideMenu class="size-5" /></template>
 					</Button>
 					<img

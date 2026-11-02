@@ -9,3 +9,4 @@ periskope_connector.patches.whatsapp_numbers_and_chats
 periskope_connector.patches.retire_desk_screens
 periskope_connector.patches.type_videos_locations_contacts_polls
 periskope_connector.patches.festival_themes_on
+periskope_connector.patches.remove_crm_whatsapp_mirror

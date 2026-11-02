@@ -130,15 +130,16 @@
 					>
 						<template #prefix>
 							<!-- a 16px box, like the icons, so the number lines up with the rows above -->
-							<span
-								class="grid size-4 place-items-center"
-								:title="n.is_ready ? 'Connected' : n.wa_state || 'Not connected'"
-							>
-								<span
-									class="size-2 rounded-full"
-									:class="n.is_ready ? 'bg-surface-green-6' : 'bg-surface-red-6'"
-								/>
-							</span>
+							<Tooltip
+								:text="n.is_ready ? 'Connected' : n.wa_state || 'Not connected'"
+								><span class="grid size-4 place-items-center">
+									<span
+										class="size-2 rounded-full"
+										:class="
+											n.is_ready ? 'bg-surface-green-6' : 'bg-surface-red-6'
+										"
+									/> </span
+							></Tooltip>
 						</template>
 					</SidebarItem>
 					<div
@@ -186,7 +187,14 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel, useTheme } from "frappe-ui";
+import {
+	Sidebar,
+	SidebarCollapseToggle,
+	SidebarItem,
+	SidebarLabel,
+	Tooltip,
+	useTheme,
+} from "frappe-ui";
 import LucideMoon from "~icons/lucide/moon";
 import LucideSun from "~icons/lucide/sun";
 import LucideMessagesSquare from "~icons/lucide/messages-square";

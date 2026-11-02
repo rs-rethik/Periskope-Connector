@@ -74,11 +74,9 @@
 						>
 							{{ c.title }}
 						</span>
-						<span
-							v-if="waiting(c)"
-							class="size-1.5 shrink-0 rounded-full bg-surface-amber-6"
-							title="Waiting on us"
-						/>
+						<Tooltip v-if="waiting(c)" text="Waiting on us"
+							><span class="size-1.5 shrink-0 rounded-full bg-surface-amber-6"
+						/></Tooltip>
 						<span
 							class="ml-auto shrink-0 text-xs"
 							:class="c.unread ? 'font-medium text-ink-green-7' : 'text-ink-gray-5'"
@@ -102,7 +100,9 @@
 					<div class="mt-1 flex flex-wrap items-center gap-1">
 						<Badge
 							v-if="!inbox.number"
-							:label="c.number_label"
+							:label="
+								c.source === 'Meta' ? `${c.number_label} · Meta` : c.number_label
+							"
 							variant="outline"
 							size="sm"
 						/>
@@ -146,7 +146,7 @@
 							class="ml-auto"
 							size="xs"
 							:name="c.assigned_to[0].split('@')[0].replace(/[._]/g, ' ')"
-							:title="'Assigned to ' + c.assigned_to.join(', ')"
+							:tip="'Assigned to ' + c.assigned_to.join(', ')"
 						/>
 					</div>
 				</div>
@@ -167,7 +167,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { Badge, Button, LoadingIndicator, TextInput, call } from "frappe-ui";
+import { Badge, Button, LoadingIndicator, TextInput, Tooltip, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import LucideSearch from "~icons/lucide/search";
 import LucideUsers from "~icons/lucide/users";
