@@ -7,6 +7,8 @@
   "number",
   "display_name",
   "is_active",
+  "source",
+  "whatsapp_account",
   "periskope_phone_id",
   "phone_name",
   "column_team",
@@ -45,6 +47,23 @@
    "default": "1",
    "in_list_view": 1,
    "description": "An inactive number keeps its chats but is hidden from the number switcher."
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Periskope\nMeta",
+   "default": "Periskope",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Periskope numbers come from the Periskope account; a Meta number is the WhatsApp Account connected in Periskope Settings > Meta WhatsApp."
+  },
+  {
+   "fieldname": "whatsapp_account",
+   "fieldtype": "Data",
+   "label": "WhatsApp Account",
+   "read_only": 1,
+   "depends_on": "eval:doc.source=='Meta'"
   },
   {
    "fieldname": "periskope_phone_id",
@@ -126,7 +145,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 15:44:38.153562",
+ "modified": "2026-11-02 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "WhatsApp Number",

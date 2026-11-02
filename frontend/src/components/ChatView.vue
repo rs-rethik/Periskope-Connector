@@ -4,7 +4,13 @@
 			v-if="chat"
 			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-3"
 		>
-			<Button v-if="back" variant="ghost" title="Back to the chats" @click="emit('back')">
+			<Button
+				v-if="back"
+				variant="ghost"
+				tooltip="Back to the chats"
+				aria-label="Back to the chats"
+				@click="emit('back')"
+			>
 				<template #icon><LucideArrowLeft class="size-5" /></template>
 			</Button>
 			<InitialsAvatar :name="chat.chat_name || chat.contact_number || chat.title" />
@@ -17,13 +23,14 @@
 				</div>
 				<div class="truncate text-sm text-ink-gray-5">
 					<span v-if="chat.contact_number">+{{ chat.contact_number }} · </span>
-					on {{ chat.number_label }}
+					on {{ chat.number_label }}{{ chat.source === "Meta" ? " (Meta)" : "" }}
 				</div>
 			</div>
 			<ChatActions ref="actions" :chat="chat" @changed="load({ keepPosition: true })" />
 			<Button
 				v-if="chat.crm_lead || chat.crm_deal"
-				title="The lead, all its deals, quotations and sales orders"
+				tooltip="The lead, all its deals, quotations and sales orders"
+				aria-label="The lead, all its deals, quotations and sales orders"
 				@click="fullView = true"
 			>
 				<template #prefix><LucideLayoutDashboard class="size-4" /></template>

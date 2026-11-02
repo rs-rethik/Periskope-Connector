@@ -94,6 +94,7 @@ def ensure(message) -> str | None:
 			values.pop("last_message_at", None)  # an older message linked again
 		if message.direction == "Incoming" and newest:
 			values["last_incoming_at"] = message.message_timestamp
+		history = bool(frappe.flags.periskope_history)  # an imported earlier message: no SLA, no alerts
 		if name:
 			if frappe.db.get_value("Periskope Chat", name, "linked_by_hand"):
 				values.pop("crm_lead", None)  # chosen by hand in the inbox: kept as it is
@@ -103,8 +104,14 @@ def ensure(message) -> str | None:
 				values.pop("crm_deal", None)
 			frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
 		else:
-			name = _insert_chat({"chat_id": message.chat_id, "status": "Open", **values})
-			_lifecycle("new_chat", name, message.message_timestamp)
+			# On a Meta number our own sends (invoices, alerts, campaigns from other apps) start most
+			# chats: such a chat waits on the customer; their first reply opens it (workflow.py).
+			from periskope_connector import meta
+
+			status = "Pending" if message.direction == "Outgoing" and meta.is_meta(number) else "Open"
+			name = _insert_chat({"chat_id": message.chat_id, "status": status, **values})
+			if not history:
+				_lifecycle("new_chat", name, message.message_timestamp)
 		if message.get("name") and message.get("periskope_chat") != name:
 			frappe.db.set_value(
 				"Periskope Message", message.name, "periskope_chat", name, update_modified=False
@@ -116,6 +123,8 @@ def ensure(message) -> str | None:
 			frappe.db.count("Periskope Message", {"periskope_chat": name}),
 			update_modified=False,
 		)
+		if history:
+			return name
 		if newest:
 			_lifecycle("on_message", name, message)
 		from periskope_connector import inbox_realtime

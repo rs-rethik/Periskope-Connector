@@ -61,6 +61,12 @@ doc_events = {
 		"after_insert": "periskope_connector.linking.update_phone_fields",
 		"on_update": "periskope_connector.linking.update_phone_fields",
 	},
+	# Meta WhatsApp (meta.py): read the connected account's messages from frappe_whatsapp, never change
+	# them. Nothing runs unless a WhatsApp Account is connected in Periskope Settings.
+	"WhatsApp Message": {
+		"after_insert": "periskope_connector.meta.on_insert",
+		"on_update": "periskope_connector.meta.on_update",
+	},
 }
 
 # The WhatsApp inbox: a sales user sees only the chats on their numbers that are theirs (access.py).

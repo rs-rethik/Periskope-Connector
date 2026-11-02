@@ -281,6 +281,18 @@ New messages, ticks and changes arrive live. The AI still replies to an assigned
 
 **Manage** (managers): Contact queue, Groups, Suggestions, Knowledge base (admins), Reports, Health and flow, and Logs. **Settings** holds teams, agents, WhatsApp numbers, SLA policies, quick replies, labels and AI tags, and (admins) every section of Periskope Settings. Keys are write-only, and connection and test-mode changes ask for confirmation.
 
+#### Meta WhatsApp (frappe_whatsapp)
+
+A WhatsApp Business account connected through Meta with the **frappe_whatsapp** app can show in the inbox beside the Periskope numbers. frappe_whatsapp keeps its messages (WhatsApp Message) and is the only one that talks to Meta; this app reads them and never changes them.
+
+1. In **Settings > Meta WhatsApp**, turn on *Show Meta WhatsApp*, pick the **WhatsApp Account** and save.
+2. **Connect** reads the account's number and name from Meta and adds it to the WhatsApp numbers (marked *Meta*). Give it to agents or a team like any number.
+3. **Import history** (optional, in the background) copies the account's earlier messages. Nothing automatic runs on them: no AI, auto reply, welcome, alert or SLA clock. Imported chats are left resolved unless the customer wrote last within the past 24 hours.
+
+From then on every new message of the account shows at once, and the AI tags it, links it to the CRM, welcomes new numbers and auto-replies as on Periskope. A chat that starts with our own message (an invoice, an alert, a campaign) waits on the customer (*Pending*) until they reply.
+
+**Replying.** Meta takes a free message only within **24 hours** of the customer's last message. The composer shows until when; after that, **Send a template** picks an approved template (those without a header file) and asks for its values. Files sent to Meta go as a link, so a private file is sent as a public copy under a random name. Delivery ticks come from frappe_whatsapp. Test mode applies as for Periskope.
+
 ### Customise it
 
 What happens to a message is the AI's decision. What you can still shape is how messages are grouped in reports (tags) and how the AI is corrected.

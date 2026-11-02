@@ -368,7 +368,7 @@ def link_message(message: str) -> str:
 		if status in ("Linked", "Ambiguous"):
 			values["attachment_not_on_crm"] = ""  # the file goes on the record now
 		frappe.db.set_value("Periskope Message", message, values, update_modified=False)
-		if status in ("Linked", "Ambiguous"):
+		if status in ("Linked", "Ambiguous") and not frappe.flags.periskope_history:
 			add_comment(message)
 			from periskope_connector.attachments import attach_to_record
 

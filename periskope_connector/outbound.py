@@ -1,10 +1,11 @@
-"""The one way the app sends a WhatsApp message: the auto reply and a rep's reply from the CRM both
-come here. Every attempt is a Periskope Agent Action row: Live (sent, with Periskope's id), Dry Run
-(test mode, not an allowed chat: what would have been sent) or Blocked (a group in test mode)."""
+"""The one way the app sends a WhatsApp message: the auto reply, the welcome and a rep's reply all
+come here, through Periskope or, for a Meta WhatsApp number, through frappe_whatsapp (meta.py). Every
+attempt is a Periskope Agent Action row: Live (sent, with the message's id), Dry Run (test mode, not
+an allowed chat: what would have been sent) or Blocked (a group in test mode)."""
 
 import frappe
 
-from periskope_connector import client, numbers, safety
+from periskope_connector import client, meta, numbers, safety
 from periskope_connector.api.permission import require_admin
 
 
@@ -15,6 +16,8 @@ def send(
 	origin: str,
 	media: dict | None = None,
 	reply_to: str | None = None,
+	template: str | None = None,
+	params: list | None = None,
 	**values,
 ) -> dict:
 	"""Send `text` (or a file with `text` as its caption) to `chat_id` from the company number
@@ -25,7 +28,15 @@ def send(
 		detail = {**detail, "file": media.get("filename"), "mimetype": media.get("mimetype")}
 	where = {"chat_id": chat_id, "origin": origin, "message_text": text, **values}
 	try:
-		result = client.send_message(chat_id, text, phone, media=media, reply_to=reply_to)
+		if meta.is_meta(phone):
+			# a Meta WhatsApp number: frappe_whatsapp sends it (meta.py)
+			result = meta.send(
+				chat_id, text, phone, media=media, reply_to=reply_to, template=template, params=params
+			)
+		elif template:
+			frappe.throw(frappe._("Templates are sent only on a Meta WhatsApp number."))
+		else:
+			result = client.send_message(chat_id, text, phone, media=media, reply_to=reply_to)
 	except safety.SendNotAllowed as e:
 		verb = "Would send" if e.mode == safety.DRY_RUN else "Blocked"
 		safety.log("Send Message", e.mode, f"{verb} a WhatsApp message ({origin})", detail=detail, **where)

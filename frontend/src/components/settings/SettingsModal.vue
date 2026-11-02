@@ -187,20 +187,22 @@ import LucideBellRing from "~icons/lucide/bell-ring";
 import LucideClock from "~icons/lucide/clock";
 import LucideFlaskConical from "~icons/lucide/flask-conical";
 import LucidePalette from "~icons/lucide/palette";
+import LucideMessageCircle from "~icons/lucide/message-circle";
 import RecordsPage from "@/components/settings/RecordsPage.vue";
 import SettingsSection from "@/components/settings/SettingsSection.vue";
 import Picker from "@/components/settings/Picker.vue";
 import { boot } from "@/boot";
 import { loadCounts, loadTeams } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
+import { discardChanges } from "@/utils/confirm";
 
 const open = defineModel({ type: Boolean, default: false });
 const page = ref("teams");
 const dirty = ref(false); // the open record or section has unsaved changes
 
-function go(key) {
+async function go(key) {
 	if (key === page.value) return;
-	if (dirty.value && !window.confirm("Discard your changes?")) return;
+	if (dirty.value && !(await discardChanges())) return;
 	dirty.value = false;
 	page.value = key;
 }
@@ -212,7 +214,16 @@ const invite = ref({ email: "", first_name: "", numbers: [], send_welcome_email:
 const inviteError = ref("");
 let reloadAgents = null;
 
-const sectionKeys = ["connect", "ai", "voice", "team", "auto_reply", "test_mode", "branding"];
+const sectionKeys = [
+	"connect",
+	"ai",
+	"voice",
+	"team",
+	"auto_reply",
+	"test_mode",
+	"meta",
+	"branding",
+];
 const menu = computed(() => [
 	{
 		label: "Team",
@@ -238,6 +249,7 @@ const menu = computed(() => [
 					label: "System",
 					items: [
 						{ key: "connect", label: "Periskope connection", icon: LucidePlug },
+						{ key: "meta", label: "Meta WhatsApp", icon: LucideMessageCircle },
 						{ key: "ai", label: "AI", icon: LucideBot },
 						{ key: "voice", label: "Voice notes", icon: LucideMic },
 						{ key: "team", label: "Approvers and alerts", icon: LucideBellRing },
@@ -257,11 +269,13 @@ async function loadSettings() {
 async function settingsSaved(data) {
 	if (data) settings.value = data;
 	else loadSettings();
-	// the new name, logo, colour or festival switch shows at once
-	if (page.value === "branding") {
+	// the new name, logo, colour, festival switch or Meta number shows at once
+	if (["branding", "meta"].includes(page.value)) {
 		const fresh = await call("periskope_connector.api.inbox.get_boot");
 		boot.brand = fresh.brand;
 		boot.festival = fresh.festival;
+		boot.numbers = fresh.numbers;
+		refreshInbox();
 	}
 }
 

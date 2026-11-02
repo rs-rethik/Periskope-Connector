@@ -49,6 +49,13 @@
   "column_test_mode",
   "test_allowed_chats",
   "test_allowed_emails",
+  "section_meta",
+  "meta_enabled",
+  "meta_account",
+  "column_meta",
+  "meta_number",
+  "meta_name",
+  "meta_import_status",
   "section_branding",
   "brand_name",
   "brand_logo",
@@ -355,6 +362,48 @@
    "depends_on": "test_mode"
   },
   {
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Meta WhatsApp",
+   "description": "Show the chats of a WhatsApp Business account connected through Meta (the frappe_whatsapp app) in the WhatsApp app, beside the Periskope numbers. frappe_whatsapp keeps its messages and sends the replies; this app reads them, never changes them."
+  },
+  {
+   "fieldname": "meta_enabled",
+   "fieldtype": "Check",
+   "label": "Show Meta WhatsApp",
+   "default": "0"
+  },
+  {
+   "fieldname": "meta_account",
+   "fieldtype": "Data",
+   "label": "WhatsApp Account",
+   "description": "The WhatsApp Account (frappe_whatsapp) whose chats the WhatsApp app shows.",
+   "depends_on": "meta_enabled"
+  },
+  {
+   "fieldname": "column_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "meta_number",
+   "fieldtype": "Data",
+   "label": "Number",
+   "read_only": 1,
+   "description": "The account's WhatsApp number, read from Meta when connecting."
+  },
+  {
+   "fieldname": "meta_name",
+   "fieldtype": "Data",
+   "label": "Name on WhatsApp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "meta_import_status",
+   "fieldtype": "Small Text",
+   "label": "History Import",
+   "read_only": 1
+  },
+  {
    "fieldname": "section_branding",
    "fieldtype": "Section Break",
    "label": "Branding",
@@ -555,7 +604,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-29 18:00:00.000000",
+ "modified": "2026-11-02 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

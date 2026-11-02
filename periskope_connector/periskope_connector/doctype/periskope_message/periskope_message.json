@@ -5,6 +5,7 @@
  "engine": "InnoDB",
  "field_order": [
   "message_id",
+  "meta_message",
   "direction",
   "message_type",
   "periskope_type",
@@ -103,6 +104,15 @@
    "read_only": 1,
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "meta_message",
+   "fieldtype": "Data",
+   "label": "Meta WhatsApp Message",
+   "read_only": 1,
+   "search_index": 1,
+   "no_copy": 1,
+   "description": "For a message of the connected Meta WhatsApp account: the WhatsApp Message it was read from (frappe_whatsapp keeps the original)."
   },
   {
    "fieldname": "direction",
@@ -697,7 +707,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-10-30 10:00:00.000000",
+ "modified": "2026-11-02 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",
