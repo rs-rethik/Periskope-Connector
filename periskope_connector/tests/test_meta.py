@@ -141,6 +141,13 @@ class TestReading(MetaCase):
 		meta.ingest(self._wm(text="Received, thanks. Need 50 more", minutes_ago=1))
 		self.assertEqual(frappe.db.get_value("Periskope Chat", self._chat(), "status"), "Open")
 
+	def test_the_account_can_be_picked_in_settings(self):
+		from periskope_connector.api import admin
+
+		field = next(f for f in admin._field_meta("Periskope Settings", ["meta_account"]))
+		self.assertEqual((field["fieldtype"], field["options"]), ("Link", "WhatsApp Account"))
+		self.assertIn(ACCOUNT, [r.value for r in admin.pick("WhatsApp Account", "Meta Account")])
+
 	def test_numbers_typed_any_way_reach_one_chat(self):
 		self.assertEqual(meta.phone_number("+91-96000 71071"), CUSTOMER)
 		self.assertEqual(meta.phone_number("9600071071"), CUSTOMER)
