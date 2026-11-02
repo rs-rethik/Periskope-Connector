@@ -32,6 +32,11 @@ def latest(chat_id: str) -> str | None:
 	)
 
 
+def ai_off(chat_id: str | None) -> bool:
+	"""Whether the team kept this customer's chats away from the AI (on any of our numbers)."""
+	return bool(chat_id) and bool(frappe.db.exists("Periskope Chat", {"chat_id": chat_id, "ai_off": 1}))
+
+
 def number_of(chat_id: str) -> str | None:
 	"""The number this contact last wrote to (or we last wrote from): where a reply goes."""
 	return frappe.db.get_value(

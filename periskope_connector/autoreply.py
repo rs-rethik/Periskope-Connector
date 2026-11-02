@@ -75,6 +75,10 @@ def on_message(doc) -> str:
 				return "own"
 			# A human answered in time: the AI does not reply to what the rep has answered.
 			return "cancelled" if cancel(doc.chat_id, _("A rep replied")) else ""
+		from periskope_connector.chat import ai_off
+
+		if ai_off(doc.chat_id):
+			return ""
 		return schedule(doc)
 	except Exception:
 		frappe.log_error(title="Periskope: could not schedule the auto reply")
@@ -247,6 +251,10 @@ def process(name: str) -> str:
 
 	if not auto_reply_on(settings):
 		return end("Cancelled", _("Auto reply was switched off"))
+	from periskope_connector.chat import ai_off
+
+	if ai_off(row.chat_id):
+		return end("Cancelled", _("AI is off for this chat"))
 
 	messages = frappe.get_all(
 		"Periskope Message",

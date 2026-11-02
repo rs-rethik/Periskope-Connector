@@ -117,6 +117,7 @@ SECTIONS = [
 			"anthropic_api_key",
 			"ai_model",
 			"ai_base_url",
+			"ai_base_url_trusted",
 			"ai_monthly_budget_tokens",
 			"ai_status",
 			"ai_business_context",

@@ -120,7 +120,13 @@ def _pass(settings) -> dict:
 			fields=FIELDS,
 			order_by="message_timestamp asc",
 		)
-		rows = [r for r in rows if r.chat_id and ((r.body or "").strip() or r.message_type != "text")]
+		# chats kept away from the AI are not read for learning either
+		off = set(frappe.get_all("Periskope Chat", filters={"ai_off": 1}, pluck="chat_id"))
+		rows = [
+			r
+			for r in rows
+			if r.chat_id and r.chat_id not in off and ((r.body or "").strip() or r.message_type != "text")
+		]
 		chats: dict[str, list] = {}
 		for row in rows:
 			chats.setdefault(row.chat_id, []).append(row)

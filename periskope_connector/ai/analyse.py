@@ -119,6 +119,10 @@ def _hours(value) -> int:
 
 def run(chat_id: str, force: bool = False) -> dict:
 	"""Analyse one chat and write the result into its CRM record. Returns what was done."""
+	from periskope_connector.chat import ai_off
+
+	if ai_off(chat_id):
+		return {"skipped": "AI is off for this chat"}
 	context = crm_context.build(chat_id)
 	if not context and not safety.is_group(chat_id):
 		return {"skipped": "no CRM record"}

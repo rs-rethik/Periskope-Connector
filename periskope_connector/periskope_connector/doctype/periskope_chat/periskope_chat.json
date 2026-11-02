@@ -11,6 +11,7 @@
   "status",
   "team",
   "labels",
+  "ai_off",
   "chat_name",
   "is_group",
   "contact_number",
@@ -204,6 +205,13 @@
    "label": "Labels"
   },
   {
+   "fieldname": "ai_off",
+   "fieldtype": "Check",
+   "label": "Keep Away from the AI",
+   "default": "0",
+   "description": "Nothing of this customer's chats (on any of our numbers) is sent to the AI: no tags, auto reply, welcome, CRM summary, voice-note transcript or learning."
+  },
+  {
    "fieldname": "section_sla",
    "fieldtype": "Section Break",
    "label": "SLA",
@@ -273,7 +281,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 15:44:38.153562",
+ "modified": "2026-11-02 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

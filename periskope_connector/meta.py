@@ -376,9 +376,14 @@ def _content_type(mimetype: str | None) -> str:
 	return kind if kind in ("image", "video", "audio") else "document"
 
 
+SHARE_PREFIX = "meta-share-"
+SHARE_HOURS = 24  # Meta downloads a file when the message is sent; the public copy goes after this
+
+
 def public_link(file_name: str) -> str:
 	"""Meta fetches a file from a link, so a private file is sent as a public copy under a random
-	name (the private one stays as it is)."""
+	name (the private one stays as it is). The copy is deleted after SHARE_HOURS
+	(remove_shared_files)."""
 	file = frappe.get_doc("File", file_name)
 	if not file.is_private:
 		return get_url(file.file_url)
@@ -386,12 +391,31 @@ def public_link(file_name: str) -> str:
 	copy = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": frappe.generate_hash(length=32) + ext,
+			"file_name": SHARE_PREFIX + frappe.generate_hash(length=32) + ext,
 			"is_private": 0,
 			"content": file.get_content(),
 		}
 	).insert(ignore_permissions=True)
 	return get_url(copy.file_url)
+
+
+def remove_shared_files() -> int:
+	"""Daily: delete the public copies made for Meta once Meta has had them (SHARE_HOURS)."""
+	old = frappe.get_all(
+		"File",
+		filters={
+			"file_name": ["like", SHARE_PREFIX + "%"],
+			"is_private": 0,
+			"creation": ["<", add_to_date(now_datetime(), hours=-SHARE_HOURS)],
+		},
+		pluck="name",
+	)
+	for name in old:
+		try:
+			frappe.delete_doc("File", name, ignore_permissions=True, force=True)
+		except Exception:
+			frappe.log_error(title=f"Periskope: could not delete the shared file {name}")
+	return len(old)
 
 
 def templates() -> list[dict]:

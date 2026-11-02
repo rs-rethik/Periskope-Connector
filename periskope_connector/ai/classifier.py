@@ -22,6 +22,29 @@ from periskope_connector.text_rules import analysis_skip_reason, readable_text, 
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
+# AI addresses the key may go to without the admin's explicit trust (ai_base_url_trusted).
+KNOWN_AI_HOSTS = ("api.anthropic.com", "api.z.ai")
+
+
+def ai_address_problem(base_url: str | None, trusted: bool) -> str:
+	"""Why the AI key must not go to this address, or "" when it may: https only, and a host other
+	than a known AI provider only when the admin said it is trusted."""
+	from urllib.parse import urlparse
+
+	url = (base_url or "").strip()
+	if not url:
+		return ""
+	parts = urlparse(url)
+	if parts.scheme != "https" or not parts.hostname:
+		return _("The AI API Address must start with https:// (the key is sent to it).")
+	if parts.hostname not in KNOWN_AI_HOSTS and not trusted:
+		return _(
+			"The AI key and the messages would be sent to {0}, which is not a known AI provider. "
+			"Tick 'I Trust This AI Address' to use it."
+		).format(parts.hostname)
+	return ""
+
+
 MAX_ATTEMPTS = 3
 BATCH_SIZE = 20  # messages per run of the 5-minute catch-up job
 QUEUED_GRACE_MINUTES = 3  # the catch-up leaves a message this long to its own job
@@ -86,6 +109,10 @@ def skip_reason(doc, settings) -> str | None:
 	# voice note's transcript).
 	if doc.direction == "Outgoing":
 		return "Sent by the rep"
+	from periskope_connector.chat import ai_off
+
+	if ai_off(doc.chat_id):
+		return "AI is off for this chat"
 	if can_read_attachment(doc, settings):
 		return None
 	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE and not readable_text(doc):
@@ -376,6 +403,9 @@ def _client(settings):
 		# A GLM model can only be served by Z.ai; don't send its key to Anthropic by mistake.
 		base_url = ZAI_ANTHROPIC_URL
 	if base_url:
+		problem = ai_address_problem(base_url, bool(getattr(settings, "ai_base_url_trusted", 0)))
+		if problem:
+			frappe.throw(problem)
 		# Other providers with an Anthropic-compatible address (e.g. Z.ai GLM) may expect the
 		# key as a Bearer token; send it both ways.
 		kwargs["base_url"] = base_url

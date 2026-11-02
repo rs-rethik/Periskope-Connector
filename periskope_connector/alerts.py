@@ -3,6 +3,10 @@
 The AI decides (classifier: escalate and escalation_reason): "Managers" emails the Manager Emails,
 "MD" emails the Escalation Emails (the MD) and the managers. Sent once per message, by email and as a
 bell for those who are Frappe users. Nothing here sends WhatsApp messages.
+
+A flood of messages is not a flood of emails: one chat raises at most one alert every CHAT_GAP_MINUTES
+(a rise from Managers to MD still goes out), and the site at most HOURLY_CAP an hour. A message held
+back this way counts as handled; the alert already sent points the team to the chat.
 """
 
 import frappe
@@ -12,9 +16,14 @@ from frappe.utils import escape_html, get_url_to_form
 from periskope_connector import safety
 from periskope_connector.reminders import get_config
 
+CHAT_GAP_MINUTES = 60
+HOURLY_CAP = 20
+LEVEL_RANK = {"Managers": 1, "MD": 2}
+
 # The message fields the alert email reads.
 MESSAGE_FIELDS = [
 	"name",
+	"chat_id",
 	"high_alert_sent",
 	"escalation",
 	"escalation_reason",
@@ -48,6 +57,24 @@ def recipients(level: str) -> list[str]:
 	return list(dict.fromkeys(emails))
 
 
+def _may_alert(doc) -> bool:
+	"""Whether this escalation may email now (see the module notes); counts it when it may."""
+	cache = frappe.cache()
+	chat_key = f"periskope_escalated:{doc.chat_id}"
+	last = cache.get_value(chat_key, expires=True)
+	if last and LEVEL_RANK.get(doc.escalation, 0) <= LEVEL_RANK.get(last, 0):
+		return False
+	hour_key = f"periskope_escalations:{frappe.utils.now_datetime():%Y%m%d%H}"
+	if (cache.get_value(hour_key, expires=True) or 0) >= HOURLY_CAP:
+		from periskope_connector.health import log_once
+
+		log_once("Periskope: escalation emails paused for the rest of the hour (too many at once)")
+		return False
+	cache.set_value(chat_key, doc.escalation, expires_in_sec=CHAT_GAP_MINUTES * 60)
+	cache.set_value(hour_key, (cache.get_value(hour_key, expires=True) or 0) + 1, expires_in_sec=3600)
+	return True
+
+
 def escalate(message: str) -> bool:
 	"""Email and notify the people the AI's escalation names. Returns True when an alert went out.
 
@@ -58,6 +85,9 @@ def escalate(message: str) -> bool:
 			return False
 		emails = recipients(doc.escalation)
 		if not emails:
+			return False
+		if not _may_alert(doc):
+			frappe.db.set_value("Periskope Message", message, "high_alert_sent", 1, update_modified=False)
 			return False
 
 		reason = doc.escalation_reason or doc.ai_summary or ""

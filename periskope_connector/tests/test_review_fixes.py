@@ -83,3 +83,57 @@ class TestAnalyse(FrappeTestCase):
 		self.assertEqual(analyse._hours(2.5), 2)
 		self.assertEqual(analyse._hours("tomorrow"), 4)
 		self.assertEqual(analyse._hours(None), 4)
+
+
+class TestAiOff(FrappeTestCase):
+	def setUp(self):
+		isolate(self, "periskope_review_ai_off")
+		self.chat_id = "919876566666@c.us"
+		frappe.db.delete("Periskope Chat", {"chat_id": self.chat_id})
+
+	def test_a_chat_kept_away_from_the_ai_is_not_tagged_answered_or_analysed(self):
+		from periskope_connector import autoreply, chat
+		from periskope_connector.ai import analyse
+
+		row = frappe.get_doc(
+			{"doctype": "Periskope Chat", "chat_id": self.chat_id, "chat_key": self.chat_id, "ai_off": 1}
+		).insert(ignore_permissions=True)
+		self.assertTrue(chat.ai_off(self.chat_id))
+		message = frappe._dict(direction="Incoming", chat_id=self.chat_id, message_type="text", body="Hi")
+		self.assertEqual(classifier.skip_reason(message, frappe._dict()), "AI is off for this chat")
+		with patch.object(autoreply, "schedule") as schedule:
+			self.assertEqual(autoreply.on_message(message), "")
+			schedule.assert_not_called()
+		self.assertEqual(analyse.run(self.chat_id), {"skipped": "AI is off for this chat"})
+		frappe.db.set_value("Periskope Chat", row.name, "ai_off", 0)
+		self.assertFalse(chat.ai_off(self.chat_id))
+
+
+class TestSharedFilesAndAiAddress(FrappeTestCase):
+	def setUp(self):
+		isolate(self, "periskope_review_files")
+
+	def test_public_copies_for_meta_are_removed_after_a_day(self):
+		from frappe.utils import add_to_date, now_datetime
+
+		from periskope_connector import meta
+
+		old = frappe.get_doc(
+			{"doctype": "File", "file_name": meta.SHARE_PREFIX + "old.txt", "is_private": 0, "content": "a"}
+		).insert(ignore_permissions=True)
+		new = frappe.get_doc(
+			{"doctype": "File", "file_name": meta.SHARE_PREFIX + "new.txt", "is_private": 0, "content": "b"}
+		).insert(ignore_permissions=True)
+		self.addCleanup(new.delete_file_from_filesystem)  # the database rolls back, the disk does not
+		frappe.db.set_value("File", old.name, "creation", add_to_date(now_datetime(), days=-2))
+		meta.remove_shared_files()
+		self.assertFalse(frappe.db.exists("File", old.name))
+		self.assertTrue(frappe.db.exists("File", new.name))
+
+	def test_the_ai_key_goes_only_to_https_and_known_or_trusted_hosts(self):
+		check = classifier.ai_address_problem
+		self.assertEqual(check("", False), "")
+		self.assertEqual(check("https://api.z.ai/api/anthropic", False), "")
+		self.assertTrue(check("http://api.z.ai/api/anthropic", True))  # never plain http
+		self.assertTrue(check("https://api.anthropc.com", False))  # a typo is caught
+		self.assertEqual(check("https://llm.example.com", True), "")  # trusted by the admin

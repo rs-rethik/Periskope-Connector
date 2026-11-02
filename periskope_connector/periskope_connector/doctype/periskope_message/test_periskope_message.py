@@ -287,6 +287,17 @@ class TestEscalationAlert(FrappeTestCase):
 		mail = patch.object(frappe, "sendmail")
 		self.sendmail = mail.start()
 		self.addCleanup(mail.stop)
+		frappe.cache().delete_keys("periskope_escalat")  # the per-chat and hourly alert limits
+		self.addCleanup(frappe.cache().delete_keys, "periskope_escalat")
+
+	def test_a_flood_from_one_chat_is_one_email_until_it_rises_to_the_md(self):
+		self.assertTrue(alerts.escalate(self._message()))
+		for _ in range(5):
+			self.assertFalse(alerts.escalate(self._message()))
+		self.assertEqual(self.sendmail.call_count, 1)
+		self.assertTrue(alerts.escalate(self._message("MD")))  # a higher level still goes out
+		self.assertFalse(alerts.escalate(self._message("MD")))
+		self.assertEqual(self.sendmail.call_count, 2)
 
 	def _message(self, level="Managers", body="This is unacceptable <b>now</b>"):
 		name = messages.create_message(event(message_id=f"al_{frappe.generate_hash(length=6)}", body=body))

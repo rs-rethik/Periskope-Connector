@@ -28,6 +28,26 @@
 			</Button>
 		</Dropdown>
 
+		<Button
+			size="sm"
+			variant="ghost"
+			:class="chat.ai_off ? '!text-ink-amber-7' : ''"
+			:tooltip="
+				chat.ai_off
+					? 'AI is off for this customer. Click to let the AI read and answer again.'
+					: 'Keep this customer away from the AI (no tags, auto reply, summary or learning)'
+			"
+			:aria-label="chat.ai_off ? 'Turn the AI back on' : 'Keep away from the AI'"
+			:loading="aiBusy"
+			@click="toggleAi"
+		>
+			<template #prefix>
+				<LucideBotOff v-if="chat.ai_off" class="size-3.5" />
+				<LucideBot v-else class="size-3.5" />
+			</template>
+			{{ chat.ai_off ? "AI off" : "AI" }}
+		</Button>
+
 		<Dropdown :options="statusOptions">
 			<Button
 				size="sm"
@@ -51,10 +71,13 @@ import { Badge, Button, Dropdown, call, toast } from "frappe-ui";
 import LucideSquare from "~icons/lucide/square";
 import LucideSquareCheck from "~icons/lucide/square-check";
 import { showError } from "@/utils/errors";
+import { ask } from "@/utils/confirm";
 import LucideTag from "~icons/lucide/tag";
 import LucideUsersRound from "~icons/lucide/users-round";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideBot from "~icons/lucide/bot";
+import LucideBotOff from "~icons/lucide/bot-off";
 import SlaBadge from "@/components/SlaBadge.vue";
 import { boot } from "@/boot";
 import { inbox, loadTeams } from "@/stores/inbox";
@@ -90,6 +113,33 @@ async function act(method, args, done) {
 		showError(e);
 	} finally {
 		busy.value = false;
+	}
+}
+
+// Keep this customer away from the AI (asks first), or let the AI back.
+const aiBusy = ref(false);
+async function toggleAi() {
+	const off = !props.chat.ai_off;
+	if (
+		off &&
+		!(await ask(
+			"Nothing of this customer's chats goes to the AI any more: no tags, auto reply, welcome, CRM summary, voice-note transcript or learning. You can turn it back on any time.",
+			{ title: "Keep away from the AI?", confirmLabel: "Turn AI off" }
+		))
+	)
+		return;
+	aiBusy.value = true;
+	try {
+		await call("periskope_connector.api.chat_actions.set_ai_off", {
+			chats: [props.chat.name],
+			off: off ? 1 : 0,
+		});
+		toast.success(off ? "AI is off for this customer" : "AI is back on");
+		emit("changed");
+	} catch (e) {
+		showError(e);
+	} finally {
+		aiBusy.value = false;
 	}
 }
 

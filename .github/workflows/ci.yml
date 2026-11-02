@@ -1,0 +1,89 @@
+name: CI
+
+# Every pushed branch (and so every pull request from this repository) is checked.
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linters:
+    name: Linters (pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure
+
+  tests:
+    name: Tests (Frappe v15, ERPNext, CRM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -proot" --health-interval=5s --health-timeout=2s
+          --health-retries=10
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Database settings
+        run: |
+          mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+      - name: Bench
+        run: |
+          pip install frappe-bench
+          bench init --skip-redis-config-generation --skip-assets --frappe-branch version-15 --python "$(which python)" ~/frappe-bench
+          cd ~/frappe-bench
+          bench set-config -g redis_cache redis://127.0.0.1:13000
+          bench set-config -g redis_queue redis://127.0.0.1:11000
+          bench set-config -g redis_socketio redis://127.0.0.1:13000
+          bench get-app --branch version-15 erpnext
+          bench get-app crm
+          bench get-app periskope_connector "$GITHUB_WORKSPACE/app"
+          bench setup requirements --dev
+      - name: Site
+        run: |
+          cd ~/frappe-bench
+          bench new-site --db-root-password root --admin-password admin --mariadb-user-host-login-scope='%' test.local
+          bench --site test.local install-app erpnext crm periskope_connector
+          bench --site test.local set-config allow_tests true
+          bench build --app periskope_connector
+      - name: Run tests
+        run: |
+          cd ~/frappe-bench
+          bench --site test.local run-tests --app periskope_connector
