@@ -73,7 +73,8 @@ jobs:
           bench set-config -g redis_queue redis://127.0.0.1:11000
           bench set-config -g redis_socketio redis://127.0.0.1:13000
           bench get-app --skip-assets --branch version-15 erpnext
-          bench get-app --skip-assets crm  # its own frontend is not needed for these tests
+          bench get-app --skip-assets whatsapp  # CRM requires it
+          bench get-app --skip-assets crm  # their frontends are not needed for these tests
           bench get-app --skip-assets periskope_connector "$GITHUB_WORKSPACE/app"
           bench setup requirements --dev
       - name: Site
