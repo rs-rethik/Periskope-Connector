@@ -15,6 +15,36 @@
 						{{ messageTime(current.message_timestamp) }}
 					</div>
 				</div>
+				<!-- zoom -->
+				<div class="flex items-center gap-0.5 rounded-full bg-white/10 px-1">
+					<Tooltip text="Zoom out (-)"
+						><button
+							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40"
+							aria-label="Zoom out (-)"
+							:disabled="scale <= MIN"
+							@click="zoomBy(1 / STEP)"
+						>
+							<LucideZoomOut class="size-4" /></button
+					></Tooltip>
+					<Tooltip text="Actual size (0)"
+						><button
+							class="w-12 rounded-full py-1 text-center text-xs tabular-nums hover:bg-white/10"
+							aria-label="Reset the zoom (0)"
+							@click="reset"
+						>
+							{{ Math.round(scale * 100) }}%
+						</button></Tooltip
+					>
+					<Tooltip text="Zoom in (+)"
+						><button
+							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40"
+							aria-label="Zoom in (+)"
+							:disabled="scale >= MAX"
+							@click="zoomBy(STEP)"
+						>
+							<LucideZoomIn class="size-4" /></button
+					></Tooltip>
+				</div>
 				<Tooltip text="Download"
 					><a
 						:href="url(current)"
@@ -35,8 +65,10 @@
 			</div>
 
 			<div
-				class="relative flex min-h-0 flex-1 items-center justify-center px-14"
-				@click.self="close"
+				ref="stage"
+				class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-14"
+				@click.self="scale === 1 && close()"
+				@wheel.prevent="onWheel"
 			>
 				<Tooltip v-if="index > 0" text="Previous (←)"
 					><button
@@ -50,7 +82,21 @@
 					:key="current.name"
 					:src="url(current)"
 					class="max-h-full max-w-full select-none object-contain"
+					:class="
+						scale > 1
+							? dragging
+								? 'cursor-grabbing'
+								: 'cursor-grab'
+							: 'cursor-zoom-in'
+					"
+					:style="{
+						transform: `translate(${x}px, ${y}px) scale(${scale})`,
+						transition: dragging ? 'none' : 'transform 0.12s ease-out',
+					}"
+					draggable="false"
 					alt=""
+					@dblclick="toggleZoom"
+					@pointerdown="startDrag"
 				/>
 				<Tooltip v-if="index < images.length - 1" text="Next (→)"
 					><button
@@ -62,11 +108,21 @@
 				></Tooltip>
 			</div>
 
-			<div
-				v-if="current.body"
-				class="mx-auto max-w-2xl whitespace-pre-wrap break-words px-4 pt-3 text-center text-base"
-			>
-				{{ current.body }}
+			<!-- the caption keeps to three lines unless opened, so the image keeps the screen -->
+			<div v-if="current.body" class="mx-auto w-full max-w-2xl px-4 pt-3 text-center">
+				<div
+					class="whitespace-pre-wrap break-words text-sm text-white/90"
+					:class="captionOpen ? 'max-h-[30vh] overflow-y-auto' : 'line-clamp-3'"
+				>
+					{{ current.body }}
+				</div>
+				<button
+					v-if="longCaption"
+					class="mt-1 text-xs font-medium text-white/60 hover:text-white"
+					@click="captionOpen = !captionOpen"
+				>
+					{{ captionOpen ? "Show less" : "Show more" }}
+				</button>
 			</div>
 
 			<div v-if="images.length > 1" class="flex justify-center gap-2 overflow-x-auto p-3">
@@ -95,6 +151,8 @@ import LucideX from "~icons/lucide/x";
 import LucideDownload from "~icons/lucide/download";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideZoomIn from "~icons/lucide/zoom-in";
+import LucideZoomOut from "~icons/lucide/zoom-out";
 import { dayLabel, messageTime } from "@/utils/format";
 import { mediaUrl as url } from "@/utils/media";
 
@@ -111,6 +169,78 @@ const sender = computed(() => {
 	const m = current.value;
 	if (m.direction === "Outgoing") return m.sender_label || "You";
 	return m.sender_label || (m.sender_phone ? "+" + m.sender_phone : props.chatTitle);
+});
+
+// Zoom: the wheel zooms towards the pointer, a double-click toggles 2.5x, the buttons and + - 0
+// step it; zoomed in, the image is dragged to look around. A new image starts at its fitted size.
+const MIN = 1;
+const MAX = 6;
+const STEP = 1.5;
+const stage = ref(null);
+const scale = ref(1);
+const x = ref(0);
+const y = ref(0);
+const dragging = ref(false);
+const captionOpen = ref(false);
+const longCaption = computed(() => {
+	const body = current.value?.body || "";
+	return body.split("\n").length > 3 || body.length > 240;
+});
+
+function reset() {
+	scale.value = 1;
+	x.value = y.value = 0;
+}
+
+// Zoom to `next`, keeping the point (px, py) of the stage (from its centre) where it is.
+function zoomTo(next, px = 0, py = 0) {
+	const target = Math.min(MAX, Math.max(MIN, next));
+	if (target === MIN) return reset();
+	const ratio = target / scale.value;
+	x.value = px - (px - x.value) * ratio;
+	y.value = py - (py - y.value) * ratio;
+	scale.value = target;
+}
+
+function zoomBy(factor) {
+	zoomTo(scale.value * factor);
+}
+
+function fromCentre(e) {
+	const box = stage.value.getBoundingClientRect();
+	return [e.clientX - box.left - box.width / 2, e.clientY - box.top - box.height / 2];
+}
+
+function onWheel(e) {
+	zoomTo(scale.value * Math.exp(-e.deltaY * 0.0015), ...fromCentre(e));
+}
+
+function toggleZoom(e) {
+	if (scale.value > 1) reset();
+	else zoomTo(2.5, ...fromCentre(e));
+}
+
+function startDrag(e) {
+	if (scale.value <= 1) return;
+	e.preventDefault();
+	dragging.value = true;
+	const start = { cx: e.clientX, cy: e.clientY, x: x.value, y: y.value };
+	const move = (ev) => {
+		x.value = start.x + ev.clientX - start.cx;
+		y.value = start.y + ev.clientY - start.cy;
+	};
+	const stop = () => {
+		dragging.value = false;
+		window.removeEventListener("pointermove", move);
+		window.removeEventListener("pointerup", stop);
+	};
+	window.addEventListener("pointermove", move);
+	window.addEventListener("pointerup", stop);
+}
+
+watch(current, () => {
+	reset();
+	captionOpen.value = false;
 });
 
 watch(open, (name) => {
@@ -130,6 +260,9 @@ function onKey(e) {
 	if (e.key === "Escape") close();
 	else if (e.key === "ArrowLeft" && index.value > 0) index.value--;
 	else if (e.key === "ArrowRight" && index.value < props.images.length - 1) index.value++;
+	else if (e.key === "+" || e.key === "=") zoomBy(STEP);
+	else if (e.key === "-") zoomBy(1 / STEP);
+	else if (e.key === "0") reset();
 	else return;
 	// Handled here, so the chat's own Esc (leave the chat) does not run as well.
 	e.preventDefault();

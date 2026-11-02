@@ -67,9 +67,17 @@ def set_ai_off(chats, off: int | str = 1) -> dict:
 
 
 def assignable(chat: str) -> list[str]:
-	"""Who can take a chat: whoever may work its number (managers, its agents and team members)."""
+	"""Who can take a chat: whoever may work its number (managers, its agents and team members), the
+	sales rep of the customer's territory and the sales persons under that rep, and the sales persons
+	under the user (territory.py)."""
+	from periskope_connector import territory
+
 	number = frappe.db.get_value("Periskope Chat", chat, "whatsapp_number")
-	return _recipients(number)
+	rep = territory.rep_for(chat)
+	people = _recipients(number) + territory.team_of(frappe.session.user)
+	if rep:
+		people += [rep, *territory.team_of(rep)]
+	return list(dict.fromkeys(people))
 
 
 @frappe.whitelist()
@@ -99,9 +107,7 @@ def assign(chats, users) -> dict:
 		allowed = set(assignable(chat))
 		wrong = [u for u in users if u not in allowed]
 		if wrong:
-			frappe.throw(
-				_("{0} cannot work this chat's number.").format(", ".join(wrong)), frappe.PermissionError
-			)
+			frappe.throw(_("{0} cannot take this chat.").format(", ".join(wrong)), frappe.PermissionError)
 		workflow.assign(chat, users, by=frappe.session.user)
 	return _done(chats)
 

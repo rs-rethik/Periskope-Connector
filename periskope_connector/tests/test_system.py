@@ -238,7 +238,8 @@ class TestUninstallCleanup(FrappeTestCase):
 		# Patching the real name also proves the helper exists in this Frappe version.
 		with patch("frappe.custom.doctype.custom_field.custom_field.delete_custom_fields") as delete:
 			install.before_uninstall()
-		delete.assert_called_once_with(install.CUSTOM_FIELDS)
+		# with ERPNext, the Sales Order field goes too
+		delete.assert_called_once_with({**install.CUSTOM_FIELDS, **install._erpnext_fields()})
 
 	def test_a_failure_is_logged_and_does_not_stop_the_uninstall(self):
 		from periskope_connector import install

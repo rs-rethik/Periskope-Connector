@@ -86,6 +86,10 @@ def new_chat(chat: str, opened_on=None):
 		update_modified=False,
 	)
 	assign_by_rule(chat)
+	# nobody from a team rule: the sales rep of the customer's territory (territory.py)
+	from periskope_connector import territory
+
+	territory.assign_rep(chat)
 
 
 def assign_by_rule(chat: str):
@@ -106,6 +110,11 @@ def on_message(chat: str, message) -> None:
 		_customer_wrote(row, stamp)
 	elif message.get("agent_reply") not in NOT_ANSWERS:
 		_we_answered(row, stamp)
+	if message.get("crm_lead") or message.get("crm_deal"):
+		# linked now (or again): still unassigned, it goes to the territory's sales rep
+		from periskope_connector import territory
+
+		territory.assign_rep(chat)
 
 
 def _customer_wrote(row, stamp):

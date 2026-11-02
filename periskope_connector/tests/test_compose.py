@@ -146,6 +146,18 @@ class TestSending(ComposeCase):
 		self.assertEqual(self._sent()[1]["message"], "Our rates")
 		self.assertTrue(row.has_media)
 
+	def test_a_new_chat_can_start_with_a_file(self):
+		self._incoming(A)  # our number A, as a customer's message makes it
+		f = frappe.get_doc(
+			{"doctype": "File", "file_name": "catalog.txt", "content": b"30s cotton", "is_private": 1}
+		).insert(ignore_permissions=True)
+		result = compose.start_chat(A, CUSTOMER, "", file=f.name)
+		self.assertEqual(self._sent()[1]["media"]["filename"], "catalog.txt")
+		self.assertTrue(result["message"].has_media)
+		self.assertRaises(
+			frappe.ValidationError, compose.start_chat, A, "919876500099", ""
+		)  # nothing to send
+
 	def test_someone_elses_file_cannot_be_sent(self):
 		mine = self._incoming(A)
 		rep = _user("compose.rep@example.com", "Sales User")
@@ -271,8 +283,8 @@ class TestTicksWithoutWebhook(ComposeCase):
 		self.request.return_value = _ok("UID9")
 		compose.send(other, "Other number")
 		asked = []
-		self.request.side_effect = lambda method, url, **kw: asked.append(url) or SimpleNamespace(
-			status_code=200, ok=True, text="", json=lambda: {"ack": 3}
+		self.request.side_effect = lambda method, url, **kw: (
+			asked.append(url) or SimpleNamespace(status_code=200, ok=True, text="", json=lambda: {"ack": 3})
 		)
 		frappe.cache().delete_value(f"periskope_ticks:{mine}")
 		self.assertEqual(compose.refresh_chat_ticks(mine), 1)

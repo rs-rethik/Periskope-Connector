@@ -205,6 +205,31 @@ class TestSending(MetaCase):
 		self.assertEqual(row.body, "Hi Kumar, any update on the sample?")
 		self.assertEqual((row.direction, row.sent_by), ("Outgoing", "Administrator"))
 
+	def test_a_new_chat_from_a_meta_number_starts_with_a_template_only(self):
+		template = frappe.new_doc("WhatsApp Templates")
+		template.update(
+			{
+				"template_name": "_test_hello",
+				"template": "Hello {{1}}, thanks for your interest.",
+				"sample_values": "Ravi",
+				"language_code": "en",
+				"category": "UTILITY",
+				"status": "APPROVED",
+				"whatsapp_account": ACCOUNT,
+			}
+		)
+		template.name = "_test_hello-en"
+		template.db_insert()
+		self.assertIn(template.name, [t["name"] for t in compose.meta_templates(number=OURS)])
+		# free text is refused before any chat is made
+		self.assertRaises(frappe.ValidationError, compose.start_chat, OURS, CUSTOMER, "Hi there")
+		self.assertFalse(self._chat())
+		with patch(SEND, return_value={"messages": [{"id": "wamid.NEW1"}]}) as post:
+			result = compose.start_chat(OURS, CUSTOMER, template=template.name, params=["Kumar"])
+		self.assertEqual(frappe.parse_json(post.call_args.kwargs["data"])["type"], "template")
+		self.assertEqual(result["message"].body, "Hello Kumar, thanks for your interest.")
+		self.assertEqual(result["chat"], self._chat())
+
 	def test_test_mode_stops_a_number_that_is_not_allowed(self):
 		meta.ingest(self._wm())
 		settings(test_allowed_chats="919999999999")

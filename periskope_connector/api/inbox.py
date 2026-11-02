@@ -310,6 +310,7 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 		row.reactions = json.loads(row.reactions) if row.reactions else {}
 		row.shared = shared_items.from_row(row)
 	_deals_made(rows)
+	_orders_made(rows)
 	return {"messages": rows, "has_more": more, "notes": _notes(chat, rows, more, before)}
 
 
@@ -327,6 +328,24 @@ def _deals_made(rows: list) -> None:
 		by_message.setdefault(d.periskope_message, []).append(d.name)
 	for row in rows:
 		row.deals = by_message.get(row.name, [])
+
+
+def _orders_made(rows: list) -> None:
+	"""Mark the messages a Sales Order was made from (Sales Order.periskope_message) with it."""
+	if not rows or not frappe.db.exists("DocType", "Sales Order"):
+		return
+	if not frappe.get_meta("Sales Order").has_field("periskope_message"):
+		return
+	made = frappe.get_all(
+		"Sales Order",
+		filters={"periskope_message": ["in", [r.name for r in rows]], "docstatus": ["<", 2]},
+		fields=["name", "periskope_message"],
+	)
+	by_message = {}
+	for o in made:
+		by_message.setdefault(o.periskope_message, []).append(o.name)
+	for row in rows:
+		row.orders = by_message.get(row.name, [])
 
 
 def _notes(chat: str, rows: list, more: bool, before: str | None) -> list[dict]:
@@ -468,10 +487,15 @@ def boot() -> dict:
 				"is_active": r.is_active,
 				"is_ready": r.is_ready,
 				"wa_state": r.wa_state,
+				"source": r.source or "Periskope",
 			}
 			for r in rows
 		],
 		"tags": frappe.get_all("Periskope Tag", pluck="name", order_by="name asc"),
 		"brand": branding.brand(),
+		# "Create sales order" on a customer's message (api/sales_order.py)
+		"can_create_order": bool(
+			frappe.db.exists("DocType", "Sales Order") and frappe.has_permission("Sales Order", "create")
+		),
 		"festival": festival.current(),
 	}

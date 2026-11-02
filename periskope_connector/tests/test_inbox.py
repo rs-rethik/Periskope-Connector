@@ -129,7 +129,7 @@ class TestAccess(InboxCase):
 		self.stranger = _user("inbox.stranger@example.com", "Sales User")
 		self._msg(A, CUSTOMER)  # assigned to the rep
 		self._msg(A, OTHER)  # on the rep's number, not theirs
-		self._msg(B, CUSTOMER)  # theirs by assignment, but on a number they do not have
+		self._msg(B, CUSTOMER)  # theirs by assignment, on a number they do not have: still theirs
 		_agent(self.rep, A)
 		_agent(self.stranger, B)
 		for name in (self._chat(A, CUSTOMER), self._chat(B, CUSTOMER)):
@@ -147,8 +147,8 @@ class TestAccess(InboxCase):
 		for name in (self._chat(A, CUSTOMER), self._chat(A, OTHER), self._chat(B, CUSTOMER)):
 			self.assertIn(name, visible)
 
-	def test_a_rep_sees_only_their_chats_on_their_numbers(self):
-		self.assertEqual(self._visible(self.rep), {self._chat(A, CUSTOMER)})
+	def test_a_rep_sees_the_chats_assigned_to_them_on_any_number_and_no_others(self):
+		self.assertEqual(self._visible(self.rep), {self._chat(A, CUSTOMER), self._chat(B, CUSTOMER)})
 
 	def test_a_rep_sees_the_chats_of_the_leads_they_own(self):
 		lead = frappe.get_doc(
@@ -170,7 +170,7 @@ class TestAccess(InboxCase):
 			chats = set(frappe.get_list("Periskope Message", pluck="periskope_chat", limit=0))
 		finally:
 			frappe.set_user("Administrator")
-		self.assertEqual(chats, {self._chat(A, CUSTOMER)})
+		self.assertEqual(chats, {self._chat(A, CUSTOMER), self._chat(B, CUSTOMER)})
 
 	def test_one_record_reads_obey_the_rule_and_reps_cannot_write(self):
 		mine = frappe.get_doc("Periskope Chat", self._chat(A, CUSTOMER))
