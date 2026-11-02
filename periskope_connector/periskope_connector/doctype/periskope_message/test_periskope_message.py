@@ -247,6 +247,10 @@ class TestPeriskopeMessage(FrappeTestCase):
 		self.assertEqual((replied(first), replied(other_chat), replied(later)), (1, 0, 0))
 
 	def test_the_sales_person_of_the_phone_is_saved_on_the_message(self):
+		if not frappe.db.exists("Sales Person", "Sales Team"):  # ERPNext's setup wizard makes it
+			frappe.get_doc(
+				{"doctype": "Sales Person", "sales_person_name": "Sales Team", "is_group": 1}
+			).insert(ignore_permissions=True)
 		with patch.object(messages, "_sales_person_for_phone", lambda n: "Sales Team"):
 			name = messages.create_message(_event(message_id="sp1"))
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "sales_person"), "Sales Team")
@@ -1539,7 +1543,7 @@ class TestEditsDeletesAndVoiceNotes(FrappeTestCase):
 		from periskope_connector.tests.utils import isolate, settings
 
 		isolate(self, "periskope_edit_test")
-		settings(enable_agent=1, enable_classification=1, enable_auto_reply=0)
+		settings(enabled=1, enable_auto_reply=0)
 		p = patch.object(messages, "fetch_chat_name", lambda *a, **k: "")
 		p.start()
 		self.addCleanup(p.stop)
