@@ -35,6 +35,7 @@ KINDS = {
 		"list": [
 			"number",
 			"display_name",
+			"source",
 			"is_active",
 			"default_team",
 			"default_assignee",

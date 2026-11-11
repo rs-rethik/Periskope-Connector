@@ -6,7 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import answer, knowledge, knowledge_canvas, suggestions
+from periskope_connector import answer, knowledge, knowledge_canvas
 from periskope_connector.tests.utils import isolate
 
 

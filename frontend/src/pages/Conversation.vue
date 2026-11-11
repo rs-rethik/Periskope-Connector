@@ -42,7 +42,7 @@
 				/>
 			</div>
 			<div class="min-h-0 flex-1">
-				<ContextPanel v-if="tab === 'crm'" :chat="chat" />
+				<ContextPanel v-if="tab === 'crm'" :key="$route.params.chat" :chat="chat" />
 				<ActivityLog v-else ref="activity" :chat="$route.params.chat" />
 			</div>
 		</div>

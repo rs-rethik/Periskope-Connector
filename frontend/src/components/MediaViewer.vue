@@ -2,7 +2,7 @@
 	<Teleport to="body">
 		<div
 			v-if="current"
-			class="fixed inset-0 z-50 flex flex-col bg-black text-white"
+			class="safe-top safe-bottom fixed inset-0 z-50 flex flex-col bg-black text-white"
 			role="dialog"
 			aria-modal="true"
 			@click.self="close"
@@ -19,7 +19,7 @@
 				<div class="flex items-center gap-0.5 rounded-full bg-white/10 px-1">
 					<Tooltip text="Zoom out (-)"
 						><button
-							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40"
+							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40 max-md:p-3"
 							aria-label="Zoom out (-)"
 							:disabled="scale <= MIN"
 							@click="zoomBy(1 / STEP)"
@@ -28,7 +28,7 @@
 					></Tooltip>
 					<Tooltip text="Actual size (0)"
 						><button
-							class="w-12 rounded-full py-1 text-center text-xs tabular-nums hover:bg-white/10"
+							class="w-12 rounded-full py-1 text-center text-xs tabular-nums hover:bg-white/10 max-md:h-10"
 							aria-label="Reset the zoom (0)"
 							@click="reset"
 						>
@@ -37,7 +37,7 @@
 					>
 					<Tooltip text="Zoom in (+)"
 						><button
-							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40"
+							class="rounded-full p-1.5 hover:bg-white/10 disabled:opacity-40 max-md:p-3"
 							aria-label="Zoom in (+)"
 							:disabled="scale >= MAX"
 							@click="zoomBy(STEP)"
@@ -49,14 +49,14 @@
 					><a
 						:href="url(current)"
 						:download="current.media_filename || current.name"
-						class="rounded-full p-2 hover:bg-white/10"
+						class="rounded-full p-2 hover:bg-white/10 max-md:p-2.5"
 						aria-label="Download"
 					>
 						<LucideDownload class="size-5" /> </a
 				></Tooltip>
 				<Tooltip text="Close (Esc)"
 					><button
-						class="rounded-full p-2 hover:bg-white/10"
+						class="rounded-full p-2 hover:bg-white/10 max-md:p-2.5"
 						aria-label="Close (Esc)"
 						@click="close"
 					>
@@ -81,7 +81,7 @@
 				<img
 					:key="current.name"
 					:src="url(current)"
-					class="max-h-full max-w-full select-none object-contain"
+					class="max-h-full max-w-full touch-none select-none object-contain"
 					:class="
 						scale > 1
 							? dragging
@@ -137,7 +137,7 @@
 					"
 					@click="index = i"
 				>
-					<img :src="url(m)" class="size-full object-cover" loading="lazy" alt="" />
+					<img :src="thumbUrl(m)" class="size-full object-cover" loading="lazy" alt="" />
 				</button>
 			</div>
 		</div>
@@ -154,7 +154,7 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideZoomIn from "~icons/lucide/zoom-in";
 import LucideZoomOut from "~icons/lucide/zoom-out";
 import { dayLabel, messageTime } from "@/utils/format";
-import { mediaUrl as url } from "@/utils/media";
+import { mediaUrl as url, thumbUrl } from "@/utils/media";
 
 // Opens on the image message named by v-model; the arrows step through the chat's other images.
 const props = defineProps({
@@ -233,9 +233,11 @@ function startDrag(e) {
 		dragging.value = false;
 		window.removeEventListener("pointermove", move);
 		window.removeEventListener("pointerup", stop);
+		window.removeEventListener("pointercancel", stop);
 	};
 	window.addEventListener("pointermove", move);
 	window.addEventListener("pointerup", stop);
+	window.addEventListener("pointercancel", stop);
 }
 
 watch(current, () => {

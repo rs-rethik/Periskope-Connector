@@ -23,7 +23,7 @@
 				</template>
 				<template #body>
 					<div
-						class="mt-1 w-96 rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
+						class="mt-1 w-96 max-w-[calc(100vw-1.5rem)] rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-xl"
 					>
 						<div v-for="(f, i) in extra" :key="i" class="mb-2 flex items-center gap-2">
 							<Select
@@ -138,8 +138,14 @@
 			class="panel page-card min-h-0 flex-1 overflow-auto transition-opacity"
 			:class="switching ? 'opacity-60' : ''"
 		>
-			<table class="w-full min-w-max border-collapse text-sm">
+			<!-- a phone: one column, each chat a card; choosing columns and bulk changes are for
+			     larger screens -->
+			<table
+				class="w-full border-collapse text-sm"
+				:class="isMobile ? 'table-fixed' : 'min-w-max'"
+			>
 				<thead
+					v-if="!isMobile"
 					class="sticky top-0 z-10 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
 				>
 					<tr>
@@ -193,26 +199,14 @@
 								:class="selected.has(row.name) ? 'bg-surface-gray-2' : ''"
 								@click="openRow(row)"
 							>
-								<td class="px-3 py-2" @click.stop>
-									<input
-										type="checkbox"
-										class="rounded border-outline-gray-3"
-										:checked="selected.has(row.name)"
-										@change="toggle(row.name)"
-									/>
-								</td>
-								<td
-									v-for="c in shownColumns"
-									:key="c.key"
-									class="max-w-[22rem] truncate px-3 py-2 text-ink-gray-7"
-								>
-									<div v-if="c.key === 'title'" class="flex items-center gap-2">
+								<td v-if="isMobile" class="px-3 py-2.5">
+									<div class="flex items-center gap-2">
 										<span
 											v-if="row.unread"
 											class="size-2 shrink-0 rounded-full bg-surface-green-6"
 										/>
 										<span
-											class="truncate"
+											class="truncate text-base"
 											:class="
 												row.unread
 													? 'font-semibold text-ink-gray-9'
@@ -220,54 +214,114 @@
 											"
 											>{{ row.title }}</span
 										>
+										<span class="ml-auto shrink-0 text-xs text-ink-gray-5">{{
+											fromNow(row.last_message_at)
+										}}</span>
 									</div>
-									<Badge
-										v-else-if="c.key === 'status'"
-										:label="row.status"
-										variant="subtle"
-										:theme="statusTheme[row.status]"
-									/>
-									<SlaBadge v-else-if="c.key === 'sla'" :chat="row" />
-									<Badge
-										v-else-if="c.key === 'ai_tag' && row.ai_tag"
-										:label="row.ai_tag"
-										variant="subtle"
-										theme="blue"
-									/>
-									<span v-else-if="c.key === 'labels'" class="flex gap-1">
+									<div class="mt-0.5 truncate text-ink-gray-6">
+										{{ row.last_message_preview || " " }}
+									</div>
+									<div
+										class="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-gray-6"
+									>
+										<Badge
+											:label="row.status"
+											variant="subtle"
+											:theme="statusTheme[row.status]"
+										/>
+										<SlaBadge :chat="row" />
+										<Badge
+											v-if="row.ai_tag"
+											:label="row.ai_tag"
+											variant="subtle"
+											theme="blue"
+										/>
 										<Badge
 											v-for="l in row.labels"
 											:key="l"
 											:label="l"
 											variant="outline"
 										/>
-									</span>
-									<span v-else-if="c.key === 'record'">
-										{{
-											row.crm_deal
-												? "Deal " + (row.deal_title || row.crm_deal)
-												: row.crm_lead
-												? "Lead " + (row.lead_title || row.crm_lead)
-												: ""
-										}}
-									</span>
-									<span v-else-if="c.key === 'assigned_to'">{{
-										(row.assigned_to || []).join(", ")
-									}}</span>
-									<span
-										v-else-if="c.key === 'last_message_at'"
-										class="text-ink-gray-6"
-										>{{ fromNow(row.last_message_at) }}</span
-									>
-									<span v-else-if="c.key === 'contact_number'">{{
-										row.contact_number
-											? "+" + row.contact_number
-											: row.is_group
-											? "Group"
-											: ""
-									}}</span>
-									<span v-else>{{ row[c.key] }}</span>
+										<span>{{ recordText(row) }}</span>
+										<span class="ml-auto truncate">{{
+											(row.assigned_to || []).map(nameFromEmail).join(", ")
+										}}</span>
+									</div>
 								</td>
+								<template v-else>
+									<td class="px-3 py-2" @click.stop>
+										<input
+											type="checkbox"
+											class="rounded border-outline-gray-3"
+											:checked="selected.has(row.name)"
+											@change="toggle(row.name)"
+										/>
+									</td>
+									<td
+										v-for="c in shownColumns"
+										:key="c.key"
+										class="max-w-[22rem] truncate px-3 py-2 text-ink-gray-7"
+									>
+										<div
+											v-if="c.key === 'title'"
+											class="flex items-center gap-2"
+										>
+											<span
+												v-if="row.unread"
+												class="size-2 shrink-0 rounded-full bg-surface-green-6"
+											/>
+											<span
+												class="truncate"
+												:class="
+													row.unread
+														? 'font-semibold text-ink-gray-9'
+														: 'text-ink-gray-8'
+												"
+												>{{ row.title }}</span
+											>
+										</div>
+										<Badge
+											v-else-if="c.key === 'status'"
+											:label="row.status"
+											variant="subtle"
+											:theme="statusTheme[row.status]"
+										/>
+										<SlaBadge v-else-if="c.key === 'sla'" :chat="row" />
+										<Badge
+											v-else-if="c.key === 'ai_tag' && row.ai_tag"
+											:label="row.ai_tag"
+											variant="subtle"
+											theme="blue"
+										/>
+										<span v-else-if="c.key === 'labels'" class="flex gap-1">
+											<Badge
+												v-for="l in row.labels"
+												:key="l"
+												:label="l"
+												variant="outline"
+											/>
+										</span>
+										<span v-else-if="c.key === 'record'">{{
+											recordText(row)
+										}}</span>
+										<span v-else-if="c.key === 'assigned_to'">{{
+											(row.assigned_to || []).join(", ")
+										}}</span>
+										<span
+											v-else-if="c.key === 'last_message_at'"
+											class="text-ink-gray-6"
+											>{{ fromNow(row.last_message_at) }}</span
+										>
+										<span v-else-if="c.key === 'contact_number'">{{
+											row.contact_number
+												? "+" + row.contact_number
+												: row.is_group
+												? "Group"
+												: ""
+										}}</span>
+										<span v-else>{{ row[c.key] }}</span>
+									</td>
+								</template>
 							</tr>
 						</template>
 					</template>
@@ -434,7 +488,8 @@ import LucideArrowUpNarrowWide from "~icons/lucide/arrow-up-narrow-wide";
 import SlaBadge from "@/components/SlaBadge.vue";
 import { boot } from "@/boot";
 import { currentFilters, inbox, loadCounts, loadTeams, loadViews } from "@/stores/inbox";
-import { fromNow } from "@/utils/format";
+import { fromNow, nameFromEmail } from "@/utils/format";
+import { isMobile } from "@/utils/screen";
 import { showError } from "@/utils/errors";
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -452,11 +507,17 @@ const COLUMNS = [
 	{ label: "Assigned to", key: "assigned_to", width: "170px" },
 	{ label: "Team", key: "team", width: "120px", sort: "team" },
 	{ label: "AI tag", key: "ai_tag", width: "140px" },
-	{ label: "Labels", key: "labels", width: "140px" },
+	{ label: "Label", key: "labels", width: "140px" },
 	{ label: "Lead / Deal", key: "record", width: "190px" },
 	{ label: "Last activity", key: "last_message_at", width: "120px", sort: "last_message_at" },
 	{ label: "Messages", key: "message_count", width: "90px", sort: "message_count" },
 ];
+const recordText = (row) =>
+	row.crm_deal
+		? "Deal " + (row.deal_title || row.crm_deal)
+		: row.crm_lead
+		? "Lead " + (row.lead_title || row.crm_lead)
+		: "";
 const DEFAULT_COLUMNS = COLUMNS.filter(
 	(c) => !["message_count", "labels", "team"].includes(c.key)
 ).map((c) => c.key);

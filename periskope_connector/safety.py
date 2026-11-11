@@ -97,12 +97,17 @@ def crm_mode(chat_id: str | None) -> str:
 	return LIVE if chat_id and not is_group(chat_id) and _digits(chat_id) in allowed_numbers() else DRY_RUN
 
 
-def crm_write(chat_id: str | None, action: str, summary: str, fn, **values):
+def crm_write(chat_id: str | None, action: str, summary: str, fn, once: str | None = None, **values):
 	"""Run `fn()` (a CRM write) when allowed and log it; in a dry run only log what it would do.
-	Returns what `fn` returned, or None in a dry run."""
+	Returns what `fn` returned, or None in a dry run. `once` names the thing written (a call, a
+	message): a write that is tried again and again for it logs its dry run a single time."""
 	mode = crm_mode(chat_id)
 	if mode != LIVE:
-		log(action, mode, summary, chat_id=chat_id, **values)
+		if once and frappe.db.exists(
+			"Periskope Agent Action", {"action": action, "mode": mode, "external_id": once}
+		):
+			return None
+		log(action, mode, summary, chat_id=chat_id, external_id=once, **values)
 		return None
 	result = fn()
 	if isinstance(result, str) and values.get("target_doctype") and not values.get("target_name"):

@@ -1,0 +1,174 @@
+{
+ "actions": [],
+ "autoname": "field:broadcast_id",
+ "creation": "2026-11-03 18:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "description": "Broadcasts sent through Periskope from the WhatsApp app (api/broadcast.py).",
+ "field_order": [
+  "broadcast_id",
+  "title",
+  "whatsapp_number",
+  "message",
+  "file",
+  "column_1",
+  "status",
+  "scheduled_at",
+  "delay",
+  "recipient_count",
+  "section_progress",
+  "queued",
+  "sent",
+  "delivered",
+  "read",
+  "failed",
+  "checked_on",
+  "section_recipients",
+  "recipients"
+ ],
+ "fields": [
+  {
+   "fieldname": "broadcast_id",
+   "fieldtype": "Data",
+   "label": "Broadcast ID",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "label": "WhatsApp Number",
+   "options": "WhatsApp Number",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "label": "Message"
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File"
+  },
+  {
+   "fieldname": "column_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Scheduled\nSending\nDone\nStopped\nCancelled",
+   "default": "Sending",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "scheduled_at",
+   "fieldtype": "Datetime",
+   "label": "Starts At"
+  },
+  {
+   "fieldname": "delay",
+   "fieldtype": "Int",
+   "label": "Seconds Between Messages"
+  },
+  {
+   "fieldname": "recipient_count",
+   "fieldtype": "Int",
+   "label": "Recipients",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "section_progress",
+   "fieldtype": "Section Break",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "queued",
+   "fieldtype": "Int",
+   "label": "Waiting",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sent",
+   "fieldtype": "Int",
+   "label": "Sent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "delivered",
+   "fieldtype": "Int",
+   "label": "Delivered",
+   "read_only": 1
+  },
+  {
+   "fieldname": "read",
+   "fieldtype": "Int",
+   "label": "Read",
+   "read_only": 1
+  },
+  {
+   "fieldname": "failed",
+   "fieldtype": "Int",
+   "label": "Failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_on",
+   "fieldtype": "Datetime",
+   "label": "Checked On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_recipients",
+   "fieldtype": "Section Break",
+   "label": "Recipients"
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Long Text",
+   "label": "Recipients (JSON)",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-11-03 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Broadcast",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title"
+}

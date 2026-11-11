@@ -1,18 +1,13 @@
 """Tests for the Periskope Ai Usage doctype and the code that works on it."""
 
-import json
-import time
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
 
-from periskope_connector import health, messages
+from periskope_connector import health
 from periskope_connector.ai import classifier
-from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
 from periskope_connector.tests.utils import without_site_teams
 

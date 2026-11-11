@@ -12,16 +12,21 @@ messages of that chat are linked to it.
 """
 
 import frappe
+from redis.exceptions import LockError
 
+from periskope_connector import safety
 from periskope_connector.contacts import is_ignored
 from periskope_connector.linking import by_mobile, link_message, number_key, phone_e164
 
 DEFAULT_SOURCE = "WhatsApp"
+LOCK_SECONDS = 120  # a lock nobody released (a killed worker) frees itself after this
+LOCK_WAIT_SECONDS = 20
 
 # The message fields that decide a lead and fill it in.
 MESSAGE_FIELDS = [
 	"direction",
 	"is_group",
+	"chat_id",
 	"contact_number",
 	"contact_name",
 	"ai_category",
@@ -89,12 +94,63 @@ def split_name(full: str, fallback: str) -> tuple[str, str]:
 
 
 def create_lead(doc) -> str | None:
-	"""Make the lead for this message's number. Returns its name, or None when not allowed."""
+	"""Make the lead for this message's number. Returns its name, or None when not allowed (or, in
+	test mode, when the chat is not on the allow list: a dry run, safety.py)."""
 	if not is_new_enquiry(doc) or by_mobile(doc.contact_number):
 		return None
 	if is_ignored(doc.contact_number) or _known_contact(phone_e164(doc.contact_number)):
 		return None
+	return safety.crm_write(
+		doc.get("chat_id") or f"{doc.contact_number}@c.us",
+		"Create Lead",
+		f"Created a lead for +{doc.contact_number}",
+		lambda: _create_once(doc),
+		once=f"lead:{doc.contact_number}",
+		target_doctype="CRM Lead",
+	)
 
+
+def _create_once(doc) -> str | None:
+	"""Find the number's lead, else create it, one job at a time per number.
+
+	Two messages of a new customer are classified by two jobs at the same moment; both find no lead
+	and both would create one. A unique index on the lead's number would stop that, but CRM Lead is
+	Frappe CRM's doctype (and its users may keep two leads with one number), so it is not ours to
+	add. A Redis lock per number is used instead: it is held until this job's transaction ends, so
+	the next job can see the lead once it gets the lock. It looks again with a locking read, which
+	sees rows committed after its own transaction began (a plain read would not)."""
+	lock = frappe.cache().lock(
+		frappe.cache().make_key(f"periskope_new_lead:{number_key(doc.contact_number)}"),
+		timeout=LOCK_SECONDS,
+		blocking_timeout=LOCK_WAIT_SECONDS,
+	)
+	if not lock.acquire():
+		return None  # another job is still making this number's lead
+	_release_at_end(lock)
+	if frappe.db.get_value(
+		"CRM Lead", {"periskope_phone_e164": phone_e164(doc.contact_number)}, for_update=True
+	) or by_mobile(doc.contact_number):
+		return None
+	return _insert_lead(doc)
+
+
+def _release_at_end(lock):
+	"""Release the lock when the job's transaction is committed or rolled back."""
+
+	def release():
+		try:
+			lock.release()
+		except LockError:
+			pass  # timed out, or already released by the other callback
+
+	if frappe.flags.in_test:
+		release()  # a test never commits: the lock would outlive it and block the next test
+		return
+	frappe.db.after_commit.add(release)
+	frappe.db.after_rollback.add(release)
+
+
+def _insert_lead(doc) -> str:
 	first_name, last_name = split_name(contact_name(doc), doc.contact_number)
 	lead = frappe.get_doc(
 		{

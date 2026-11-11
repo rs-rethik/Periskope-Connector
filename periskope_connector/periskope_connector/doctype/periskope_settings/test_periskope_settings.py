@@ -3,7 +3,6 @@
 import hashlib
 import hmac
 import json
-import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,14 +10,11 @@ from unittest.mock import MagicMock, patch
 import frappe
 import requests
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, now_datetime
 
-from periskope_connector import flow, health, install, messages, reminders, webhooks
-from periskope_connector.ai import classifier
+from periskope_connector import flow, health, install, reminders, webhooks
 from periskope_connector.api import settings as settings_api
 from periskope_connector.api import webhook
-from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, at, cfg
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -223,6 +219,7 @@ class TestWorkingHoursSettings(FrappeTestCase):
 			"_ensure_assistant_defaults",
 			"_ensure_crm_ui",
 			"_ensure_phone_fields",
+			"_ensure_crm_indexes",
 		]
 		steps = {}
 		for name in names:
@@ -471,7 +468,9 @@ class TestHealthFigures(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True)
 		latest = frappe.db.sql("select max(creation) from `tabPeriskope Webhook Log`")[0][0]
-		self.assertEqual(health.get_health()["last_webhook"], str(latest))
+		# to the second: the Health tab shows no microseconds
+		self.assertEqual(health.get_health()["last_webhook"], str(latest.replace(microsecond=0)))
+		self.assertEqual(health._when("2026-10-09 18:35:21.169532"), "2026-10-09 18:35:21")
 		self.assertNotEqual(health.get_health()["last_webhook"], "never")
 
 

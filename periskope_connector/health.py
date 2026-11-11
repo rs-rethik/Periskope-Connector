@@ -170,12 +170,19 @@ def _unprocessed_logs() -> int:
 	return int(row[0][0]) if row else 0
 
 
+def _when(value) -> str:
+	"""A time for the Health tab, to the second ("2026-10-09 18:35:21"), or "never"."""
+	if not value:
+		return _("never")
+	return str(frappe.utils.get_datetime(value).replace(microsecond=0))
+
+
 def get_health() -> dict:
 	"""The live figures shown on the settings page."""
 	phones = phone_counts()
 	return {
-		"last_webhook": str(query.latest("Periskope Webhook Log", "creation") or _("never")),
-		"last_ai_run": str(query.latest("Periskope Message", "classified_at") or _("never")),
+		"last_webhook": _when(query.latest("Periskope Webhook Log", "creation")),
+		"last_ai_run": _when(query.latest("Periskope Message", "classified_at")),
 		"pending": frappe.db.count("Periskope Message", {"classification_status": "Pending"}),
 		"failed": frappe.db.count("Periskope Message", {"classification_status": "Failed"}),
 		"unprocessed": _unprocessed_logs(),

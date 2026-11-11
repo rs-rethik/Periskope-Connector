@@ -220,11 +220,16 @@ class TestInboxApi(InboxCase):
 		self.assertEqual(row.number_label, A)
 		self.assertIn(A, inbox.counts()["unread_by_number"])
 
-	def test_opening_a_chat_marks_it_read_for_that_user_only(self):
-		inbox.mark_seen(self.mine)
-		self.assertFalse(inbox.get_chat(self.mine).unread)
-		frappe.set_user(self.rep)
-		self.assertTrue(inbox.get_chat(self.mine).unread)
+	def test_only_the_assignee_opening_it_marks_it_read_for_everyone(self):
+		# read_state.py: the Administrator looking at the rep's chat leaves it unread for both
+		with patch.object(frappe, "enqueue"):
+			inbox.mark_seen(self.mine)
+			self.assertTrue(inbox.get_chat(self.mine).unread)
+			frappe.set_user(self.rep)
+			inbox.mark_seen(self.mine)
+			self.assertFalse(inbox.get_chat(self.mine).unread)
+			frappe.set_user("Administrator")
+			self.assertFalse(inbox.get_chat(self.mine).unread)
 
 	def test_a_rep_reads_their_chat_and_nothing_else(self):
 		frappe.set_user(self.rep)
@@ -265,7 +270,7 @@ class TestInboxApi(InboxCase):
 
 	def test_older_messages_load_a_page_at_a_time(self):
 		for i in range(4):
-			self._msg(A, "919600055500", body=f"more {i}")
+			self._msg(A, "919600055500", body=f"more {i}", timestamp=f"2026-09-29T07:0{i}:00Z")
 		latest = inbox.get_messages(self.mine, limit=3)
 		self.assertTrue(latest["has_more"])
 		self.assertEqual(latest["messages"][-1].body, "more 3")
@@ -273,6 +278,59 @@ class TestInboxApi(InboxCase):
 		self.assertTrue(
 			all(m.message_timestamp < latest["messages"][0].message_timestamp for m in older["messages"])
 		)
+
+	def test_messages_of_the_same_second_are_never_split_between_pages(self):
+		# message times are whole seconds and the next page is "before the oldest time shown"
+		for i in range(3):
+			self._msg(A, "919600055500", body=f"burst {i}", timestamp="2026-09-29T08:00:00Z")
+		self._msg(A, "919600055500", body="last", timestamp="2026-09-29T08:00:05Z")
+		page = inbox.get_messages(self.mine, limit=2)
+		self.assertEqual(sorted(m.body for m in page["messages"]), ["burst 0", "burst 1", "burst 2", "last"])
+		self.assertTrue(page["has_more"])  # the chat's earlier messages
+		older = inbox.get_messages(self.mine, before=str(page["messages"][0].message_timestamp), limit=50)
+		self.assertFalse({m.name for m in older["messages"]} & {m.name for m in page["messages"]})
+		total = frappe.db.count("Periskope Message", {"periskope_chat": self.mine})
+		self.assertEqual(len(older["messages"]) + len(page["messages"]), total)
+
+	def test_an_image_can_be_asked_for_as_a_thumbnail(self):
+		import io
+
+		from PIL import Image
+
+		big = io.BytesIO()
+		Image.new("RGB", (1600, 800), "red").save(big, "PNG")
+		message = frappe.db.get_value("Periskope Message", {"periskope_chat": self.mine})
+		frappe.db.set_value(
+			"Periskope Message",
+			message,
+			{
+				"message_type": "image",
+				"media_mimetype": "image/png",
+				"media_filename": "photo.png",
+				"media_path": "https://example.com/file",
+			},
+		)
+		with patch("periskope_connector.attachments.download", lambda url: big.getvalue()):
+			inbox.media(message, thumb=1)
+			small = Image.open(io.BytesIO(frappe.local.response.filecontent))
+			self.assertEqual(small.size, (480, 240))
+			self.assertEqual(frappe.local.response.content_type, "image/jpeg")
+			inbox.media(message)
+			self.assertEqual(frappe.local.response.filecontent, big.getvalue())  # the file itself
+		# anything that is not an image ignores the flag
+		frappe.db.set_value("Periskope Message", message, "media_mimetype", "application/pdf")
+		with patch("periskope_connector.attachments.download", lambda url: b"%PDF"):
+			inbox.media(message, thumb=1)
+		self.assertEqual(frappe.local.response.filecontent, b"%PDF")
+
+	def test_the_quoted_messages_of_a_page_are_read_in_one_query(self):
+		first = frappe.db.get_value(
+			"Periskope Message", {"periskope_chat": self.mine}, ["name", "message_id"], as_dict=True
+		)
+		found = inbox._quoted(self.mine, [first.message_id[-8:], "NOSUCHID", first.message_id[-8:]])
+		self.assertEqual(list(found), [first.message_id[-8:]])
+		self.assertEqual(found[first.message_id[-8:]].name, first.name)
+		self.assertNotIn("message_id", found[first.message_id[-8:]])
 
 
 class TestNumbers(InboxCase):

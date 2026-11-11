@@ -2,9 +2,43 @@
 	<!-- unsaved changes: Esc and outside clicks do not close it (Cancel or Save first) -->
 	<Dialog v-model="open" :options="{ size: '6xl' }" :dismissible="!dirty">
 		<template #body>
-			<div class="flex h-[min(46rem,90vh)] overflow-hidden rounded-xl bg-surface-base">
+			<!-- a phone: the whole screen (theme.css), the menu as a select above the page -->
+			<div
+				class="settings-sheet flex overflow-hidden bg-surface-base"
+				:class="
+					isMobile
+						? 'safe-top safe-bottom h-[100dvh] flex-col'
+						: 'h-[min(46rem,90vh)] rounded-xl'
+				"
+			>
+				<div
+					v-if="isMobile"
+					class="flex shrink-0 items-center gap-2 border-b border-outline-gray-1 bg-surface-gray-1 px-3 py-2"
+				>
+					<select
+						class="h-10 min-w-0 flex-1 rounded border border-outline-gray-2 bg-surface-base py-0 pl-3 text-[16px] font-medium text-ink-gray-9"
+						aria-label="Settings section"
+						:value="page"
+						@change="pick"
+					>
+						<optgroup v-for="group in menu" :key="group.label" :label="group.label">
+							<option v-for="item in group.items" :key="item.key" :value="item.key">
+								{{ item.label }}
+							</option>
+						</optgroup>
+					</select>
+					<Button
+						class="tap"
+						variant="ghost"
+						aria-label="Close the settings"
+						@click="close"
+					>
+						<template #icon><LucideX class="size-4" /></template>
+					</Button>
+				</div>
 				<!-- Menu -->
 				<nav
+					v-else
 					class="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-outline-gray-1 bg-surface-gray-1 p-2"
 				>
 					<div class="px-2 pb-2 pt-1 text-base font-semibold text-ink-gray-9">
@@ -32,7 +66,7 @@
 				</nav>
 
 				<!-- Page -->
-				<div class="min-w-0 flex-1">
+				<div class="min-h-0 min-w-0 flex-1">
 					<RecordsPage
 						v-if="page === 'teams'"
 						@dirty="dirty = $event"
@@ -46,12 +80,13 @@
 					/>
 					<RecordsPage
 						v-else-if="page === 'numbers'"
+						ref="numbersPage"
 						@dirty="dirty = $event"
 						kind="numbers"
 						title="WhatsApp numbers"
 						singular="Number"
 						description="Every number connected in Periskope, with its team, its rep and its connection."
-						empty="No number yet. Sync the numbers from Periskope."
+						empty="No number yet. Add a number, or sync the numbers from Periskope."
 						@saved="refreshInbox"
 					>
 						<template v-if="my.admin" #actions="{ reload }">
@@ -60,28 +95,15 @@
 								:loading="syncing"
 								@click="syncNumbers(reload)"
 							/>
+							<Button variant="solid" label="Add a number" @click="addNumber" />
 						</template>
-						<template #cell="{ row, field }">
-							<template v-if="field.fieldname === 'wa_state'">
-								<span class="inline-flex items-center gap-1.5">
-									<span
-										class="size-2 rounded-full"
-										:class="
-											row.is_ready
-												? 'bg-surface-green-6'
-												: 'bg-surface-red-6'
-										"
-									/>
-									{{ row.wa_state || (row.is_ready ? "CONNECTED" : "Unknown") }}
-								</span>
-							</template>
-							<template v-else-if="field.fieldtype === 'Check'">{{
-								row[field.fieldname] ? "Yes" : "No"
-							}}</template>
-							<template v-else-if="field.fieldtype === 'Datetime'">{{
-								row[field.fieldname] ? fromNow(row[field.fieldname]) : ""
-							}}</template>
-							<template v-else>{{ row[field.fieldname] }}</template>
+						<template #list="{ rows, edit }">
+							<NumberCards
+								:rows="rows"
+								:admin="my.admin"
+								@edit="edit"
+								@link="openLink"
+							/>
 						</template>
 					</RecordsPage>
 					<RecordsPage
@@ -169,6 +191,13 @@
 			/>
 		</template>
 	</Dialog>
+	<PhoneLinkDialog
+		v-model="link.open"
+		:number="link.number"
+		:relink="link.relink"
+		:add="link.add"
+		@changed="numbersChanged"
+	/>
 </template>
 
 <script setup>
@@ -188,14 +217,18 @@ import LucideClock from "~icons/lucide/clock";
 import LucideFlaskConical from "~icons/lucide/flask-conical";
 import LucidePalette from "~icons/lucide/palette";
 import LucideMessageCircle from "~icons/lucide/message-circle";
+import LucideX from "~icons/lucide/x";
 import RecordsPage from "@/components/settings/RecordsPage.vue";
 import SettingsSection from "@/components/settings/SettingsSection.vue";
 import Picker from "@/components/settings/Picker.vue";
+import PhoneLinkDialog from "@/components/settings/PhoneLinkDialog.vue";
+import NumberCards from "@/components/settings/NumberCards.vue";
 import { boot } from "@/boot";
 import { loadCounts, loadTeams } from "@/stores/inbox";
-import { fromNow } from "@/utils/format";
-import { discardChanges } from "@/utils/confirm";
+import { ask, discardChanges } from "@/utils/confirm";
+import { errorText, showError } from "@/utils/errors";
 import { loadFailed } from "@/utils/load";
+import { isMobile } from "@/utils/screen";
 
 const open = defineModel({ type: Boolean, default: false });
 const page = ref("teams");
@@ -207,9 +240,48 @@ async function go(key) {
 	dirty.value = false;
 	page.value = key;
 }
+// The phone's select: when the change is refused (unsaved changes) it shows the open page again.
+async function pick(e) {
+	await go(e.target.value);
+	e.target.value = page.value;
+}
+async function close() {
+	if (dirty.value && !(await discardChanges())) return;
+	open.value = false;
+}
 const my = ref({ manager: boot.is_manager, admin: boot.is_admin });
 const settings = ref(null);
 const syncing = ref(false);
+// Connect / Re-link a Periskope number by its QR code (PhoneLinkDialog)
+const numbersPage = ref(null);
+const link = ref({ open: false, number: null, relink: false, add: false });
+async function openLink(row) {
+	const relink = !!row.is_ready;
+	if (
+		relink &&
+		!(await ask(
+			"This logs WhatsApp out of Periskope for this number. Chats stop coming in until a phone scans the new code.",
+			{
+				title: "Re-link this number?",
+				confirmLabel: "Log out and show the code",
+				danger: true,
+			}
+		))
+	)
+		return;
+	link.value = { open: true, number: row, relink, add: false };
+}
+async function addNumber() {
+	const ok = await ask(
+		"This adds a new phone to your Periskope account, then shows a QR code to scan with the WhatsApp to add. Periskope may bill for each phone on your plan.",
+		{ title: "Add a WhatsApp number?", confirmLabel: "Add and show the code" }
+	);
+	if (ok) link.value = { open: true, number: null, relink: false, add: true };
+}
+function numbersChanged() {
+	numbersPage.value?.reload();
+	refreshInbox();
+}
 const inviteOpen = ref(false);
 const invite = ref({ email: "", first_name: "", numbers: [], send_welcome_email: false });
 const inviteError = ref("");
@@ -275,11 +347,12 @@ async function loadSettings() {
 async function settingsSaved(data) {
 	if (data) settings.value = data;
 	else loadSettings();
-	// the new name, logo, colour, festival switch or Meta number shows at once
-	if (["branding", "meta"].includes(page.value)) {
+	// the new name, logo, colour, festival switch, Meta number or test mode shows at once
+	if (["branding", "meta", "test_mode"].includes(page.value)) {
 		const fresh = await call("periskope_connector.api.inbox.get_boot");
 		boot.brand = fresh.brand;
 		boot.festival = fresh.festival;
+		boot.test_mode = fresh.test_mode;
 		boot.numbers = fresh.numbers;
 		refreshInbox();
 	}
@@ -297,7 +370,7 @@ async function syncNumbers(reload) {
 		toast.success("Numbers synced from Periskope");
 		reload();
 	} catch (e) {
-		toast.error(e?.messages?.[0] || e?.message || "Could not sync.");
+		showError(e, "Could not sync.");
 	} finally {
 		syncing.value = false;
 	}
@@ -324,20 +397,25 @@ async function sendInvite() {
 		inviteOpen.value = false;
 		reloadAgents?.();
 	} catch (e) {
-		inviteError.value = e?.messages?.[0] || e?.message || "Not added.";
+		inviteError.value = errorText(e, "Not added.");
 	} finally {
 		inviting.value = false;
 	}
 }
 
-watch(open, async (o) => {
-	if (!o) return;
-	try {
-		my.value = await call("periskope_connector.api.admin.my_access");
-	} catch (e) {
-		return loadFailed(e, "Could not open the settings.");
-	}
-	loadSettings();
-});
+// It is mounted when first opened (App.vue), so the first run is at once.
+watch(
+	open,
+	async (o) => {
+		if (!o) return;
+		try {
+			my.value = await call("periskope_connector.api.admin.my_access");
+		} catch (e) {
+			return loadFailed(e, "Could not open the settings.");
+		}
+		loadSettings();
+	},
+	{ immediate: true }
+);
 watch(page, (p) => sectionKeys.includes(p) && !settings.value && loadSettings());
 </script>

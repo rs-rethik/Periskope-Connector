@@ -171,11 +171,14 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			"shared_details": _shared_details(kind, data),
 		}
 	)
+	frappe.db.savepoint("periskope_new_message")
 	try:
 		insert_as_system(doc)
-	except frappe.DuplicateEntryError:
-		# Periskope can deliver the same event twice at once; the unique key catches it.
-		frappe.db.rollback()
+	except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+		# Periskope can deliver the same event twice at once; the unique key catches it. Only this
+		# insert is undone: whatever the caller has not committed yet stays.
+		frappe.db.rollback(save_point="periskope_new_message")
+		frappe.clear_last_message()
 		return None
 
 	if from_me and agent_reply not in NOT_ANSWERS:

@@ -382,3 +382,106 @@ class TestManyRecords(PanelCase):
 			"Contact Phone", filters={"parent": deal.contacts[0].contact}, pluck="phone"
 		)
 		self.assertIn(f"+{sender}", contact_phones)
+
+
+class TestGroupOrganization(PanelCase):
+	"""A WhatsApp group linked to a CRM organization follows the company's deal (or lead), its messages
+	go to that record, and its other groups are listed."""
+
+	GROUP = "120363000000000077@g.us"
+
+	def _group_msg(self, body="Dispatch the 30s order", group=None):
+		self.n += 1
+		group = group or self.GROUP
+		messages.create_message(
+			event(
+				message_id=f"false_{group}_O{self.n}{frappe.generate_hash(length=4)}",
+				chat_id=group,
+				sender_phone="919600055555@c.us",
+				org_phone=f"{A}@c.us",
+				body=body,
+				is_group=True,
+			)
+		)
+		return chat.name_of(A, group)
+
+	def _org(self, name):
+		if not frappe.db.exists("CRM Organization", name):
+			frappe.get_doc({"doctype": "CRM Organization", "organization_name": name}).insert(
+				ignore_permissions=True
+			)
+		return name
+
+	def test_link_and_remove(self):
+		org = self._org("Zzg Spinners")
+		lead = _lead("Zzg buyer")
+		frappe.db.set_value("CRM Lead", lead, "organization", org)
+		deal = _deal(lead)
+		frappe.db.set_value("CRM Deal", deal, "organization", org)
+		group_chat = self._group_msg()
+
+		self.assertIn(org, [o["name"] for o in crm_panel.search_organizations("Zzg")])
+		ctx = crm_panel.link_organization(group_chat, org)
+		self.assertEqual(ctx["organization"]["name"], org)
+		self.assertEqual(ctx["organization"]["deals"], 1)
+		self.assertEqual(ctx["record"]["name"], deal)  # the group follows the company's deal
+		group = frappe.db.get_value(
+			"Periskope Group", {"chat_id": self.GROUP}, ["organization", "group_type"], as_dict=True
+		)
+		self.assertEqual((group.organization, group.group_type), (org, "Customer"))
+		linked = frappe.get_all(
+			"Periskope Message", filters={"chat_id": self.GROUP}, fields=["crm_deal", "link_method"]
+		)
+		self.assertTrue(linked and all(m.crm_deal == deal for m in linked))
+		self.assertEqual(frappe.db.get_value("Periskope Chat", group_chat, "organization"), org)
+
+		# a second group of the same company is listed on the first
+		other = self._group_msg(group="120363000000000078@g.us")
+		crm_panel.link_organization(other, org)
+		self.assertEqual(len(crm_panel.get_context(group_chat)["organization"]["groups"]), 1)
+
+		ctx = crm_panel.unlink_organization(group_chat)
+		self.assertIsNone(ctx["organization"])
+		self.assertFalse(frappe.db.get_value("Periskope Group", {"chat_id": self.GROUP}, "organization"))
+
+	def test_only_groups_and_known_organizations(self):
+		one_to_one = self._msg(A)
+		self.assertRaises(frappe.ValidationError, crm_panel.link_organization, one_to_one, "Anything")
+		group_chat = self._group_msg()
+		self.assertRaises(frappe.PermissionError, crm_panel.link_organization, group_chat, "No Such Org Zzg")
+
+	def test_groups_page_maps_to_an_organization(self):
+		from periskope_connector.api import desk_pages
+
+		org = self._org("Zzg Weavers")
+		self._group_msg()
+		group = frappe.db.get_value("Periskope Group", {"chat_id": self.GROUP})
+		desk_pages.map_group(group, organization=org)
+		self.assertEqual(frappe.db.get_value("Periskope Group", group, "organization"), org)
+		self.assertEqual(frappe.db.get_value("Periskope Chat", {"chat_id": self.GROUP}, "organization"), org)
+
+
+class TestGroupTabsAndRecords(TestGroupOrganization):
+	def test_internal_groups_have_their_own_tab(self):
+		from periskope_connector.api import inbox
+
+		self._group_msg()
+		frappe.db.set_value("Periskope Group", {"chat_id": self.GROUP}, "group_type", "Internal")
+		ids = lambda f: {c.chat_id for c in inbox.get_chats(filters=f, page_length=500)["chats"]}  # noqa: E731
+		self.assertIn(self.GROUP, ids({"internal": 1}))
+		self.assertNotIn(self.GROUP, ids({"internal": 0}))
+		self.assertNotIn(self.GROUP, ids({"groups": 1, "internal": 0}))
+		frappe.db.set_value("Periskope Group", {"chat_id": self.GROUP}, "group_type", "Customer")
+		self.assertIn(self.GROUP, ids({"groups": 1, "internal": 0}))
+
+	def test_a_linked_group_lists_only_its_organizations_records(self):
+		org = self._org("Zzg Knits")
+		ours = _lead("Zzg knit buyer")
+		frappe.db.set_value("CRM Lead", ours, "organization", org)
+		other = _lead("Someone else")
+		group_chat = self._group_msg()
+		crm_panel.link_record(group_chat, "CRM Lead", other)  # linked by hand to another company
+		ctx = crm_panel.link_organization(group_chat, org)
+		names = {r["name"] for r in ctx["related"]}
+		self.assertIn(ours, names)
+		self.assertNotIn(other, names)

@@ -94,6 +94,8 @@ scheduler_events = {
 			"periskope_connector.api.compose.refresh_ticks",
 			# Alert the assignee and the managers once when a customer waits past the SLA reply time.
 			"periskope_connector.sla.check_breaches",
+			# WhatsApp calls (calls.py): into their chats, missed-call bells, the CRM's Calls tab.
+			"periskope_connector.calls.run",
 		],
 		# The background learning agent: reads new conversations, builds the knowledge base and
 		# emails suggested changes for approval (nothing is applied without a manager's approval).
@@ -101,6 +103,8 @@ scheduler_events = {
 			"periskope_connector.agent.run",
 			# The connection state of every WhatsApp number; managers hear when one drops.
 			"periskope_connector.numbers.health_check",
+			# Scheduled messages (scheduled.py): Periskope's list, failed runs, the test-mode pause.
+			"periskope_connector.scheduled.run",
 		],
 		# Send the AI replies that are due (after the delay; a rep's reply or a new message moves or cancels them).
 		"* * * * *": [

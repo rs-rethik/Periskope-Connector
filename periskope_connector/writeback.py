@@ -393,6 +393,7 @@ def link_organization(chat_id: str, organization: str) -> str | None:
 		)
 		if record and not frappe.db.get_value(record[0], record[1], "organization"):
 			frappe.db.set_value(record[0], record[1], "organization", name)
+			frappe.cache().delete_value("periskope:organizations")  # linking.organizations()
 		if safety.is_group(chat_id) and frappe.db.exists("Periskope Group", {"chat_id": chat_id}):
 			group = frappe.db.get_value("Periskope Group", {"chat_id": chat_id})
 			if not frappe.db.get_value("Periskope Group", group, "organization"):

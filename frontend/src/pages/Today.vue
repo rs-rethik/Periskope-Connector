@@ -54,6 +54,8 @@
 
 			<FestivalBanner />
 
+			<DailyBrief />
+
 			<!-- the four numbers -->
 			<section class="grid grid-cols-2 gap-3 lg:grid-cols-4">
 				<button
@@ -293,6 +295,7 @@ import LucideUserRound from "~icons/lucide/user-round";
 import SlaBadge from "@/components/SlaBadge.vue";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import FestivalBanner from "@/components/FestivalBanner.vue";
+import DailyBrief from "@/components/DailyBrief.vue";
 import { setFestival } from "@/utils/festival";
 import { boot } from "@/boot";
 import { inbox } from "@/stores/inbox";

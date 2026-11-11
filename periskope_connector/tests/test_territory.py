@@ -70,6 +70,7 @@ class TestRep(TerritoryCase):
 		chat = self._chat_of_org()
 		self.assertEqual(territory.assign_rep(chat), REP)
 		self.assertIn(REP, frappe.parse_json(frappe.db.get_value("Periskope Chat", chat, "_assign")))
+		self.assertTrue(frappe.db.exists("Periskope Chat Activity", {"chat": chat, "action": "Territory"}))
 		frappe.db.set_value("Periskope Chat", chat, "_assign", frappe.as_json(["Administrator"]))
 		self.assertIsNone(territory.assign_rep(chat))  # a hand assignment is never replaced
 

@@ -102,12 +102,15 @@ def assign_by_rule(chat: str):
 	apply(doc)
 
 
-def on_message(chat: str, message) -> None:
-	"""The newest message of a chat was saved (or saved again)."""
+def on_message(chat: str, message, seen_before: bool = False) -> None:
+	"""The newest message of a chat was saved (or saved again: `seen_before`). A customer message
+	that was counted already (it is being linked or classified again) does not open a Resolved or
+	Pending chat again or restart its clocks."""
 	row = _row(chat)
 	stamp = get_datetime(message.message_timestamp) if message.message_timestamp else now_datetime()
 	if message.direction == "Incoming":
-		_customer_wrote(row, stamp)
+		if not seen_before:
+			_customer_wrote(row, stamp)
 	elif message.get("agent_reply") not in NOT_ANSWERS:
 		_we_answered(row, stamp)
 	if message.get("crm_lead") or message.get("crm_deal"):

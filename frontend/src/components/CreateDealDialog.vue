@@ -160,31 +160,36 @@ const when = computed(() =>
 	props.message ? dayjs(props.message.message_timestamp).format("D MMM, h:mm A") : ""
 );
 
-watch(show, async (open) => {
-	if (!open || !props.chat) return;
-	created.value = null;
-	error.value = "";
-	loading.value = true;
-	try {
-		defaults.value = await call("periskope_connector.api.crm_panel.deal_defaults", {
-			chat_name: props.chat.name,
-			message: props.message?.name,
-		});
-		form.value = {
-			first_name: defaults.value.first_name,
-			last_name: defaults.value.last_name,
-			organization: defaults.value.organization,
-			status: defaults.value.status,
-			expected_closure_date: dayjs().add(14, "day").format("YYYY-MM-DD"),
-			deal_value: "",
-			note: "",
-		};
-	} catch (e) {
-		error.value = errorText(e, "Could not open the form.");
-	} finally {
-		loading.value = false;
-	}
-});
+// (run at once too: the dialog is loaded on demand and may mount already open)
+watch(
+	show,
+	async (open) => {
+		if (!open || !props.chat) return;
+		created.value = null;
+		error.value = "";
+		loading.value = true;
+		try {
+			defaults.value = await call("periskope_connector.api.crm_panel.deal_defaults", {
+				chat_name: props.chat.name,
+				message: props.message?.name,
+			});
+			form.value = {
+				first_name: defaults.value.first_name,
+				last_name: defaults.value.last_name,
+				organization: defaults.value.organization,
+				status: defaults.value.status,
+				expected_closure_date: dayjs().add(14, "day").format("YYYY-MM-DD"),
+				deal_value: "",
+				note: "",
+			};
+		} catch (e) {
+			error.value = errorText(e, "Could not open the form.");
+		} finally {
+			loading.value = false;
+		}
+	},
+	{ immediate: true }
+);
 
 async function create() {
 	busy.value = true;

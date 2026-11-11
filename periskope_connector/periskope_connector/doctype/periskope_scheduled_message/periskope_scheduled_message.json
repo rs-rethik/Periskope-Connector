@@ -1,0 +1,193 @@
+{
+ "actions": [],
+ "autoname": "field:scheduled_id",
+ "creation": "2026-11-03 15:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "description": "Messages scheduled in Periskope from the WhatsApp app (scheduled.py). Periskope sends them; this is the app's copy.",
+ "field_order": [
+  "scheduled_id",
+  "periskope_chat",
+  "chat_id",
+  "whatsapp_number",
+  "message",
+  "file",
+  "column_1",
+  "status",
+  "next_run",
+  "scheduled_by",
+  "paused_for_test_mode",
+  "skip_next",
+  "section_repeat",
+  "is_repeat",
+  "repeat_interval",
+  "repeat_value",
+  "repeat_days",
+  "repeat_ends",
+  "section_runs",
+  "runs_checked_to",
+  "last_failure"
+ ],
+ "fields": [
+  {
+   "fieldname": "scheduled_id",
+   "fieldtype": "Data",
+   "label": "Scheduled ID",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "periskope_chat",
+   "fieldtype": "Link",
+   "label": "Chat",
+   "options": "Periskope Chat",
+   "search_index": 1
+  },
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Contact",
+   "search_index": 1
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "label": "WhatsApp Number",
+   "options": "WhatsApp Number",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text",
+   "label": "Message",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "file",
+   "fieldtype": "Attach",
+   "label": "File"
+  },
+  {
+   "fieldname": "column_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Scheduled\nPaused\nCompleted",
+   "default": "Scheduled",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "next_run",
+   "fieldtype": "Datetime",
+   "label": "Next Run",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "scheduled_by",
+   "fieldtype": "Link",
+   "label": "Scheduled By",
+   "options": "User",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "paused_for_test_mode",
+   "fieldtype": "Check",
+   "label": "Paused for Test Mode",
+   "read_only": 1,
+   "description": "Paused by the app when test mode was turned on: the customer is not a test number."
+  },
+  {
+   "fieldname": "skip_next",
+   "fieldtype": "Check",
+   "label": "Skip Next Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_repeat",
+   "fieldtype": "Section Break",
+   "label": "Repeat"
+  },
+  {
+   "fieldname": "is_repeat",
+   "fieldtype": "Check",
+   "label": "Repeats",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "repeat_interval",
+   "fieldtype": "Select",
+   "label": "Every",
+   "options": "\nday\nweek\nmonth"
+  },
+  {
+   "fieldname": "repeat_value",
+   "fieldtype": "Int",
+   "label": "Interval",
+   "default": "1"
+  },
+  {
+   "fieldname": "repeat_days",
+   "fieldtype": "Data",
+   "label": "Weekdays",
+   "description": "For daily repeats: the weekdays it may go out on, comma separated (monday,friday). Empty: every day."
+  },
+  {
+   "fieldname": "repeat_ends",
+   "fieldtype": "Datetime",
+   "label": "Ends On"
+  },
+  {
+   "fieldname": "section_runs",
+   "fieldtype": "Section Break",
+   "label": "Runs"
+  },
+  {
+   "fieldname": "runs_checked_to",
+   "fieldtype": "Datetime",
+   "label": "Runs Checked Up To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_failure",
+   "fieldtype": "Small Text",
+   "label": "Last Failure",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-11-03 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Scheduled Message",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "next_run",
+ "sort_order": "ASC",
+ "states": []
+}

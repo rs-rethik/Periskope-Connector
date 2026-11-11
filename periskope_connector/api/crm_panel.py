@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils import strip_html
 
 from periskope_connector import access, chat, numbers
-from periskope_connector.linking import link_message
+from periskope_connector.linking import relink_chats, relink_group
 from periskope_connector.text_rules import readable_text
 
 DOCTYPES = ("CRM Lead", "CRM Deal")
@@ -27,6 +27,7 @@ CHAT_FIELDS = [
 	"crm_deal",
 	"summary_note",
 	"linked_by_hand",
+	"organization",
 ]
 
 
@@ -34,7 +35,10 @@ def _chat(name: str) -> frappe._dict:
 	access.require_inbox_user()
 	if not access.can_see_chat(name):
 		frappe.throw(_("You cannot open this chat."), frappe.PermissionError)
-	return frappe.db.get_value("Periskope Chat", name, CHAT_FIELDS, as_dict=True)
+	row = frappe.db.get_value("Periskope Chat", name, CHAT_FIELDS, as_dict=True)
+	if row and (row.chat_id or "").endswith("@g.us"):
+		row.is_group = 1  # some older rows lack the flag
+	return row
 
 
 def _record(row) -> tuple[str, str] | None:
@@ -72,6 +76,7 @@ def get_context(chat_name: str) -> dict:
 		"record": None,
 		"tags": _tags(chat_name),
 		"other_chats": _other_chats(row),
+		"organization": _organization(row) if row.is_group else None,
 	}
 	record = _record(row)
 	out["related"] = _related(row, record)
@@ -115,6 +120,24 @@ def _related(row, active: tuple[str, str] | None) -> list[dict]:
 	pairs = []  # (doctype, name)
 	if active:
 		pairs.append(active)
+	org = row.is_group and (
+		frappe.db.get_value("Periskope Group", {"chat_id": row.chat_id}, "organization") or row.organization
+	)
+	if org:
+		# a group linked to a company lists only that company's deals and leads
+		pairs += [
+			("CRM Deal", d)
+			for d in frappe.get_all(
+				"CRM Deal", filters={"organization": org}, pluck="name", order_by="modified desc"
+			)
+		]
+		pairs += [
+			("CRM Lead", n)
+			for n in frappe.get_all(
+				"CRM Lead", filters={"organization": org}, pluck="name", order_by="modified desc"
+			)
+		]
+		return _related_rows(list(dict.fromkeys(p for p in pairs if p[1])), active)
 	if row.contact_number and not row.is_group:
 		for lead, deal in by_mobile(row.contact_number):
 			pairs += [("CRM Deal", deal)] if deal else []
@@ -142,7 +165,13 @@ def _related(row, active: tuple[str, str] | None) -> list[dict]:
 			for d in frappe.get_all("CRM Deal", filters={"lead": ["in", list(leads)]}, pluck="name")
 		]
 	pairs = list(dict.fromkeys(p for p in pairs if p[1]))
+	return _related_rows(pairs, active)
 
+
+def _related_rows(pairs: list[tuple[str, str]], active: tuple[str, str] | None) -> list[dict]:
+	"""The listed leads and deals, with status, owner and value, that the user may see."""
+	# a big organization lists its newest ones (the panel shows 25)
+	pairs = pairs[:60]
 	types = {
 		dt: {r.name: r for r in frappe.get_all(f"{dt} Status", fields=["name", "color", "type"])}
 		for dt in DOCTYPES
@@ -159,27 +188,24 @@ def _related(row, active: tuple[str, str] | None) -> list[dict]:
 					as_list=True,
 				)
 			)
-	out = []
-	for doctype, name in pairs:
-		if not frappe.db.exists(doctype, name) or not frappe.has_permission(doctype, "read", name):
+	# one read per doctype, with the user's CRM permissions applied; then the owners' names in one
+	found = {}
+	for doctype in DOCTYPES:
+		names = [n for dt, n in pairs if dt == doctype]
+		if not names:
 			continue
 		is_deal = doctype == "CRM Deal"
-		fields = (
-			["name", "status", "modified", "deal_owner as owner", "organization", "lead_name"]
-			if is_deal
-			else [
-				"name",
-				"status",
-				"modified",
-				"lead_owner as owner",
-				"organization",
-				"lead_name",
-				"converted",
-			]
-		)
-		if is_deal:
-			fields += [f for f in ("deal_value",) if frappe.get_meta("CRM Deal").has_field(f)]
-		r = frappe.db.get_value(doctype, name, fields, as_dict=True)
+		fields = ["name", "status", "modified", "organization", "lead_name"]
+		fields += ["deal_owner"] if is_deal else ["lead_owner", "converted"]
+		if is_deal and frappe.get_meta("CRM Deal").has_field("deal_value"):
+			fields.append("deal_value")
+		for r in frappe.get_list(doctype, filters={"name": ["in", names]}, fields=fields, limit=len(names)):
+			r.owner = r.get("deal_owner") or r.get("lead_owner")
+			found[(doctype, r.name)] = r
+	owner_names = _full_names({r.owner for r in found.values() if r.owner})
+	out = []
+	for (doctype, name), r in found.items():
+		is_deal = doctype == "CRM Deal"
 		status = types[doctype].get(r.status)
 		out.append(
 			{
@@ -189,7 +215,7 @@ def _related(row, active: tuple[str, str] | None) -> list[dict]:
 				"status": r.status,
 				"color": status.color if status else None,
 				"closed": bool(status and status.type in ("Won", "Lost")) or bool(r.get("converted")),
-				"owner_name": frappe.utils.get_fullname(r.owner) if r.owner else "",
+				"owner_name": owner_names.get(r.owner) or r.owner or "",
 				"value": r.get("deal_value") or 0,
 				"modified": r.modified,
 				"route": _route(doctype, name),
@@ -202,6 +228,16 @@ def _related(row, active: tuple[str, str] | None) -> list[dict]:
 		key=lambda x: (not x["active"], x["closed"], x["doctype"] != "CRM Deal", -x["modified"].timestamp())
 	)
 	return out[:25]
+
+
+def _full_names(users: set[str]) -> dict:
+	if not users:
+		return {}
+	return dict(
+		frappe.get_all(
+			"User", filters={"name": ["in", list(users)]}, fields=["name", "full_name"], as_list=True
+		)
+	)
 
 
 def _summary(note: str | None) -> str:
@@ -332,13 +368,15 @@ def search_records(query: str = "") -> list[dict]:
 
 
 def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
-	"""Point every chat row of this contact (or the group) at the record, and link its messages again,
-	so the CRM timeline follows."""
+	"""Point every chat row of this contact (or the group) at the record, and link its messages again
+	(linking.relink_chats: the newest now, the rest in a background job). A message's CRM timeline
+	comment moves to the new record with it; a file already copied to the old record stays there and
+	is copied to the new one as well."""
 	if row.is_group:
 		group = frappe.db.get_value("Periskope Group", {"chat_id": row.chat_id})
 		if group:
 			frappe.db.set_value("Periskope Group", group, {"crm_lead": lead, "crm_deal": deal})
-	chat.set_on_all(
+	relink_chats(
 		row.chat_id,
 		{
 			"crm_lead": lead,
@@ -347,8 +385,6 @@ def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
 			"linked_by": frappe.session.user if by_hand else None,
 		},
 	)
-	for name in frappe.get_all("Periskope Message", filters={"chat_id": row.chat_id}, pluck="name"):
-		link_message(name)
 	from periskope_connector import workflow
 
 	record = deal or lead
@@ -377,6 +413,153 @@ def link_record(chat_name: str, doctype: str, name: str) -> dict:
 		(frappe.db.get_value("CRM Deal", name, "lead"), name) if doctype == "CRM Deal" else (name, None)
 	)
 	_relink(row, lead, deal, by_hand=True)
+	return get_context(chat_name)
+
+
+# --- A group's organization -------------------------------------------------------------------------
+
+
+def _organization(row) -> dict | None:
+	"""The CRM organization a group is linked to, with its territory and how many deals, leads and
+	other WhatsApp groups it has."""
+	name = (
+		frappe.db.get_value("Periskope Group", {"chat_id": row.chat_id}, "organization") or row.organization
+	)
+	# what the user may read in the CRM, no more: the organization itself, and its deals and leads
+	if not name or not frappe.has_permission("CRM Organization", "read", name):
+		return None
+	org = frappe.db.get_value(
+		"CRM Organization", name, ["name", "organization_name", "territory"], as_dict=True
+	)
+	if not org:
+		return None
+	groups = frappe.get_all(
+		"Periskope Group",
+		filters={"organization": org.name, "chat_id": ["!=", row.chat_id]},
+		fields=["group_name", "chat_id"],
+		limit=20,
+	)
+	return {
+		"name": org.name,
+		"title": org.organization_name or org.name,
+		"territory": org.territory,
+		"route": f"/crm/organizations/{org.name}",
+		"deals": _readable_count("CRM Deal", {"organization": org.name}),
+		"leads": _readable_count("CRM Lead", {"organization": org.name, "converted": 0}),
+		"groups": [g.group_name or g.chat_id for g in groups],
+	}
+
+
+COUNT_CAP = 1000
+
+
+def _readable_count(doctype: str, filters: dict) -> int:
+	"""How many of these records the user may read (up to COUNT_CAP). Read as a list so the user's
+	CRM permissions apply; a count() field is not used, as Frappe v16 refuses it (query.py)."""
+	if not frappe.has_permission(doctype, "read"):
+		return 0
+	return len(frappe.get_list(doctype, filters=filters, pluck="name", limit=COUNT_CAP))
+
+
+@frappe.whitelist()
+def search_organizations(query: str = "") -> list[dict]:
+	"""CRM organizations the user may see, by name, with how many deals and WhatsApp groups each has."""
+	access.require_inbox_user()
+	words = [w for w in (query or "").split() if w]
+	filters = [["organization_name", "like", f"%{w}%"] for w in words]
+	rows = frappe.get_list(
+		"CRM Organization",
+		fields=["name", "organization_name", "territory"],
+		filters=filters,
+		order_by="modified desc",
+		limit=20,
+	)
+	names = [r.name for r in rows] or [""]
+	deals = dict(
+		frappe.get_all(
+			"CRM Deal",
+			filters={"organization": ["in", names]},
+			fields=["organization", "count(name) as n"],
+			group_by="organization",
+			as_list=True,
+		)
+	)
+	groups = dict(
+		frappe.get_all(
+			"Periskope Group",
+			filters={"organization": ["in", names]},
+			fields=["organization", "count(name) as n"],
+			group_by="organization",
+			as_list=True,
+		)
+	)
+	return [
+		{
+			"name": r.name,
+			"title": r.organization_name or r.name,
+			"territory": r.territory,
+			"deals": deals.get(r.name, 0),
+			"groups": groups.get(r.name, 0),
+		}
+		for r in rows
+	]
+
+
+def _group_of(row) -> str:
+	if not row.is_group:
+		frappe.throw(_("Only a WhatsApp group is linked to an organization."))
+	from periskope_connector.linking import ensure_group
+
+	return ensure_group(row.chat_id).name
+
+
+def set_group_organization(chat_id: str, group: str, organization: str | None, user: str | None = None):
+	"""Link a WhatsApp group to a CRM organization (or remove the link): the group follows the
+	organization's best deal or lead, its messages go to that record's timeline, and an unassigned
+	group goes to the organization's territory rep."""
+	frappe.db.set_value(
+		"Periskope Group",
+		group,
+		{"organization": organization, "crm_lead": None, "crm_deal": None}
+		| ({"group_type": "Customer"} if organization else {}),
+	)
+	relink_group(group, user)
+	from periskope_connector import territory, workflow
+
+	for name in frappe.get_all("Periskope Chat", filters={"chat_id": chat_id}, pluck="name"):
+		workflow.log(
+			name,
+			"Linked",
+			_("Group linked to organization {0}").format(organization)
+			if organization
+			else _("Organization link removed"),
+			user=user,
+		)
+		if organization:
+			territory.assign_rep(name)  # still unassigned: the territory's sales rep
+
+
+@frappe.whitelist(methods=["POST"])
+def link_organization(chat_name: str, organization: str) -> dict:
+	"""Link this WhatsApp group to a CRM organization the user may see."""
+	access.require_inbox_user()
+	row = _chat(chat_name)
+	group = _group_of(row)
+	if not frappe.db.exists("CRM Organization", organization) or not frappe.has_permission(
+		"CRM Organization", "read", organization
+	):
+		frappe.throw(_("You cannot link this group to that organization."), frappe.PermissionError)
+	set_group_organization(row.chat_id, group, organization, frappe.session.user)
+	return get_context(chat_name)
+
+
+@frappe.whitelist(methods=["POST"])
+def unlink_organization(chat_name: str) -> dict:
+	"""Remove the group's organization: it is matched by its name and members again."""
+	access.require_inbox_user()
+	row = _chat(chat_name)
+	group = _group_of(row)
+	set_group_organization(row.chat_id, group, None, frappe.session.user)
 	return get_context(chat_name)
 
 
@@ -566,7 +749,9 @@ def _sender(row, msg) -> tuple[str | None, str]:
 
 def _customer_message(row, message: str):
 	msg = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
-	if not msg or msg.chat_id != row.chat_id:
+	# this chat row, not just this contact: the same customer's chat on another of our numbers is
+	# another chat, which the user may not be allowed to see
+	if not msg or msg.periskope_chat != row.name:
 		frappe.throw(_("That message is not in this chat."), frappe.PermissionError)
 	if msg.direction != "Incoming":
 		frappe.throw(_("Use the customer's message, not ours."))
@@ -768,9 +953,7 @@ def full_view(chat_name: str) -> dict:
 	customers = set()
 	for d in deals:
 		customers.update(c for c in (d.get("custom_customer"), d.get("erpnext_customer")) if c)
-	if deal_names and _has("Customer", "crm_deal"):
-		customers.update(frappe.get_all("Customer", filters={"crm_deal": ["in", deal_names]}, pluck="name"))
-	customers = sorted(c for c in customers if frappe.db.exists("Customer", c))
+	customers = _readable_customers(customers, deal_names)
 
 	quotations = None
 	if frappe.db.exists("DocType", "Quotation"):
@@ -831,6 +1014,20 @@ def full_view(chat_name: str) -> dict:
 		"orders": orders,
 		"more": more,
 	}
+
+
+def _readable_customers(named: set[str], deal_names: list[str]) -> list[str]:
+	"""The customers named on the deals, and those made from them, that the user may read."""
+	if not frappe.db.exists("DocType", "Customer") or not frappe.has_permission("Customer", "read"):
+		return []
+	or_filters = []
+	if named:
+		or_filters.append(["name", "in", sorted(named)])
+	if deal_names and _has("Customer", "crm_deal"):
+		or_filters.append(["crm_deal", "in", deal_names])
+	if not or_filters:
+		return []
+	return sorted(frappe.get_list("Customer", or_filters=or_filters, pluck="name", limit=100))
 
 
 # --- From the CRM -------------------------------------------------------------------------------
