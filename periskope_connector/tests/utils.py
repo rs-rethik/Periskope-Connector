@@ -17,6 +17,7 @@ OTHER_APP_DOCTYPES = [
 	"Assignment Rule",
 	"Periskope SLA Policy",
 	"Periskope Team",
+	"Company",  # WhatsApp Number.company where ERPNext is installed (install.COMPANY_FIELD)
 	"CRM Deal",
 	"CRM Lead",
 	"CRM Organization",
