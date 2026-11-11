@@ -17,7 +17,7 @@ from periskope_connector import attachments, decisions, tags
 from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
 from periskope_connector.setup_status import agent_on
-from periskope_connector.system import insert_as_system, save_as_system
+from periskope_connector.system import insert_as_system
 from periskope_connector.text_rules import analysis_skip_reason, readable_text, skip_fields
 
 DEFAULT_MODEL = "claude-haiku-4-5"
@@ -616,33 +616,40 @@ def apply_result(doc, result: dict):
 		except (ValueError, TypeError):
 			follow_up = None
 
-	doc.ai_category = category
-	doc.sentiment = result.get("sentiment") if result.get("sentiment") in SENTIMENTS else "Neutral"
-	doc.severity = _severity(result.get("severity"))
-	doc.ai_summary = (result.get("summary") or "")[:140]
 	try:
 		confidence = int(float(result.get("confidence") or 0))
 	except (TypeError, ValueError):
 		confidence = 0
-	doc.ai_confidence = max(0, min(100, confidence))
-	doc.needs_reply = 1 if result.get("needs_reply") else 0
-	doc.follow_up_on = follow_up
-	doc.mentioned_products = result.get("mentioned_products") or ""
-	doc.mentioned_amount = (result.get("mentioned_amount") or "")[:140]
-	doc.competitor_name = (result.get("competitor_name") or "")[:140]
-	doc.mentioned_customer = (result.get("customer_name") or "")[:140]
-	doc.contact_name = (result.get("contact_name") or "")[:140]
-	doc.language = (result.get("language") or "")[:140]
 	escalation = {"managers": "Managers", "md": "MD"}.get(result.get("escalate") or "", "")
-	doc.escalation = escalation
-	doc.escalation_reason = (result.get("escalation_reason") or "")[:500] if escalation else ""
-	doc.on_timeline = 1 if result.get("on_timeline") else 0
+	values = {
+		"ai_category": category,
+		"sentiment": result.get("sentiment") if result.get("sentiment") in SENTIMENTS else "Neutral",
+		"severity": _severity(result.get("severity")),
+		"ai_summary": (result.get("summary") or "")[:140],
+		"ai_confidence": max(0, min(100, confidence)),
+		"needs_reply": 1 if result.get("needs_reply") else 0,
+		"follow_up_on": follow_up,
+		"mentioned_products": result.get("mentioned_products") or "",
+		"mentioned_amount": (result.get("mentioned_amount") or "")[:140],
+		"competitor_name": (result.get("competitor_name") or "")[:140],
+		"mentioned_customer": (result.get("customer_name") or "")[:140],
+		"contact_name": (result.get("contact_name") or "")[:140],
+		"language": (result.get("language") or "")[:140],
+		"escalation": escalation,
+		"escalation_reason": (result.get("escalation_reason") or "")[:500] if escalation else "",
+		"on_timeline": 1 if result.get("on_timeline") else 0,
+		"classification_status": "Done",
+		"classified_at": now_datetime(),
+		"classification_error": "",
+		"classification_attempts": doc.classification_attempts or 0,
+	}
 	if result.get("attachment_summary"):
-		doc.attachment_summary = result["attachment_summary"][:1000]
-	doc.classification_status = "Done"
-	doc.classified_at = now_datetime()
-	doc.classification_error = ""
-	save_as_system(doc)
+		values["attachment_summary"] = result["attachment_summary"][:1000]
+	doc.update(values)
+	# Only the AI's own fields are written (with `modified`, as a save did). `doc` was read before
+	# the AI call, which takes seconds: saving all of it would put back the old value of whatever
+	# was written meanwhile (delivery ticks, the chat link, an edit, the saved attachment).
+	frappe.db.set_value("Periskope Message", doc.name, values)
 	link_message(doc.name)
 	decisions.act(doc.name, result)
 	if attachments.has_file(doc):
@@ -735,22 +742,24 @@ def _ready_to_run() -> bool:
 
 
 def _pending(limit: int) -> list[str]:
-	return frappe.get_all(
-		"Periskope Message",
-		filters={
-			"classification_attempts": ["<", MAX_ATTEMPTS],
-			"direction": "Incoming",
+	"""The customer messages still to analyse, oldest first. The status is compared as it is stored
+	(a list of values, or NULL), so its index is used; an ifnull() around the column would read the
+	whole table."""
+	msg = frappe.qb.DocType("Periskope Message")
+	waiting = msg.classification_status.isin(["Pending", "Failed", ""]) | msg.classification_status.isnull()
+	return (
+		frappe.qb.from_(msg)
+		.select(msg.name)
+		.where(
+			waiting
+			& (msg.classification_attempts < MAX_ATTEMPTS)
+			& (msg.direction == "Incoming")
 			# a newer one is still with its own job (queue)
-			"modified": ["<", add_to_date(now_datetime(), minutes=-QUEUED_GRACE_MINUTES)],
-		},
-		or_filters=[
-			["classification_status", "is", "not set"],
-			["classification_status", "in", ["Pending", "Failed"]],
-		],
-		pluck="name",
-		order_by="creation asc",
-		limit=limit,
-	)
+			& (msg.modified < add_to_date(now_datetime(), minutes=-QUEUED_GRACE_MINUTES))
+		)
+		.orderby(msg.creation)
+		.limit(limit)
+	).run(pluck=True)
 
 
 def _record_failure(name: str, error: Exception):

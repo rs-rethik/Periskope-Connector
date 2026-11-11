@@ -5,7 +5,7 @@
 			<span class="text-sm text-ink-gray-5"
 				>What the AI answers from. Topics branch into conditions and end in answers.</span
 			>
-			<div class="ml-auto flex flex-wrap gap-2">
+			<div v-if="!isMobile" class="ml-auto flex flex-wrap gap-2">
 				<Button variant="solid" label="Add topic" @click="addChild(ROOT, 'Topic')" />
 				<Button
 					:label="gapCount ? `Knowledge gaps (${gapCount})` : 'Knowledge gaps'"
@@ -29,6 +29,34 @@
 
 		<div v-if="!boot.is_admin" class="p-10 text-center text-sm text-ink-gray-6">
 			The knowledge base is for admins.
+		</div>
+		<!-- a phone has no room for the canvas: the tree as an outline, to read -->
+		<div v-else-if="isMobile" class="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+			<p class="rounded-lg bg-surface-amber-1 px-3 py-2 text-sm text-ink-amber-8">
+				Editing the knowledge base needs a larger screen. Here it is to read.
+			</p>
+			<ul v-if="outline.length" class="panel mt-4 divide-y divide-outline-gray-1">
+				<li
+					v-for="o in outline"
+					:key="o.node.name"
+					class="flex items-start gap-2 py-2 pr-3"
+					:style="{ paddingLeft: `${0.75 + o.depth}rem` }"
+				>
+					<span
+						class="mt-1.5 size-2 shrink-0 rounded-full"
+						:style="{ background: TYPES[o.node.node_type].color }"
+					/>
+					<span class="min-w-0">
+						<span class="block text-sm font-medium text-ink-gray-8">{{
+							o.node.question || "Untitled"
+						}}</span>
+						<span class="line-clamp-3 text-xs text-ink-gray-5">{{
+							subOf(o.node)
+						}}</span>
+					</span>
+				</li>
+			</ul>
+			<p v-else class="p-6 text-center text-sm text-ink-gray-5">Nothing here yet.</p>
 		</div>
 		<div
 			v-else
@@ -393,12 +421,14 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Button, Dialog, ErrorMessage, FormControl, Tooltip, call, toast } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 import { boot } from "@/boot";
 import { fromNow } from "@/utils/format";
 import { ask } from "@/utils/confirm";
+import { errorText, showError } from "@/utils/errors";
+import { isMobile } from "@/utils/screen";
 
 // The knowledge base the auto reply answers from, as a node graph. Every node is a Periskope Knowledge Entry and its
 // wire is its parent_entry; everything saves as it is made (knowledge_canvas.py).
@@ -498,8 +528,22 @@ function children() {
 	return kids;
 }
 
+// The tree top down, each node with its depth: the phone's outline.
+const outline = computed(() => {
+	const kids = children();
+	const out = [];
+	const walk = (parent, depth) => {
+		for (const name of kids[parent] || []) {
+			out.push({ node: nodes[name], depth });
+			walk(name, depth + 1);
+		}
+	};
+	walk(ROOT, 0);
+	return out;
+});
+
 function fail(e) {
-	toast.error(e?.messages?.[0] || e?.message || "That did not work.");
+	showError(e);
 }
 
 // --- Loading and layout ---------------------------------------------------------------------------
@@ -877,7 +921,7 @@ async function save() {
 		selected.value = saved.name;
 		await load();
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "Not saved.";
+		error.value = errorText(e, "Not saved.");
 	} finally {
 		saving.value = false;
 	}
@@ -980,6 +1024,7 @@ function onKey(ev) {
 	}
 }
 
+watch(isMobile, () => nextTick(fit)); // the canvas comes back when the window grows
 onMounted(async () => {
 	if (!boot.is_admin) return;
 	await load();

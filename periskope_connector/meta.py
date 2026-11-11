@@ -479,11 +479,13 @@ def import_history(since: str | None = None) -> int:
 		for name in page:
 			if frappe.db.exists("Periskope Message", {"meta_message": name}):
 				continue  # copied before (live, or by an earlier import)
+			# One message's failure undoes only that message, not the ones of this batch before it.
+			frappe.db.savepoint("periskope_meta_import")
 			try:
 				if ingest(name, history=True):
 					copied += 1
 			except Exception:
-				frappe.db.rollback()
+				frappe.db.rollback(save_point="periskope_meta_import")
 				frappe.log_error(title=f"Periskope: could not import Meta WhatsApp message {name}")
 		done += len(page)
 		frappe.db.commit()

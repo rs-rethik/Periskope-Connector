@@ -10,6 +10,7 @@ otherwise.
 import frappe
 from frappe.utils import escape_html
 
+from periskope_connector import safety
 from periskope_connector.system import insert_as_system
 
 # The message fields the comment is built from.
@@ -74,25 +75,76 @@ def _content(doc) -> str:
 
 
 def add_comment(message: str) -> str | None:
-	"""Add the timeline comment of a linked, tagged message. Returns its name, or None."""
+	"""Add the timeline comment of a linked, tagged message. Returns its name, or None. A message
+	that has its comment already keeps it; when its lead or deal changed (linked again by hand, a
+	group mapped to another customer) the comment moves to the new record. Test mode: a dry run
+	for a chat that is not on the allow list (safety.py)."""
 	doc = frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
 	if not doc:
 		return None
 	target = _target(doc)
-	if doc.timeline_comment or not target or not doc.on_timeline:
+	if not target:
+		return None
+	if doc.timeline_comment:
+		return _move_comment(doc, target)
+	if not doc.on_timeline:
 		return None
 
-	author = doc.rep if doc.rep and frappe.db.get_value("User", doc.rep, "enabled") else "Administrator"
-	comment = insert_as_system(
-		{
-			"doctype": "Comment",
-			"comment_type": "Comment",
-			"reference_doctype": target[0],
-			"reference_name": target[1],
-			"comment_email": author,
-			"owner": author,
-			"content": _content(doc),
-		}
+	def write():
+		author = doc.rep if doc.rep and frappe.db.get_value("User", doc.rep, "enabled") else "Administrator"
+		comment = insert_as_system(
+			{
+				"doctype": "Comment",
+				"comment_type": "Comment",
+				"reference_doctype": target[0],
+				"reference_name": target[1],
+				"comment_email": author,
+				"owner": author,
+				"content": _content(doc),
+			}
+		)
+		frappe.db.set_value(
+			"Periskope Message", message, "timeline_comment", comment.name, update_modified=False
+		)
+		return comment.name
+
+	return safety.crm_write(
+		doc.chat_id,
+		"Timeline",
+		f"Timeline: WhatsApp message {message}",
+		write,
+		once=f"timeline:{message}",
+		target_doctype="Comment",
+		reference_doctype=target[0],
+		reference_name=target[1],
 	)
-	frappe.db.set_value("Periskope Message", message, "timeline_comment", comment.name, update_modified=False)
-	return comment.name
+
+
+def _move_comment(doc, target: tuple[str, str]) -> str | None:
+	"""Point the message's existing comment at the record the message is linked to now."""
+	at = frappe.db.get_value(
+		"Comment", doc.timeline_comment, ["reference_doctype", "reference_name"], as_dict=True
+	)
+	if not at or (at.reference_doctype, at.reference_name) == target:
+		return None
+
+	def write():
+		# The comment is the app's own (insert_as_system above); only where it shows changes.
+		frappe.db.set_value(
+			"Comment",
+			doc.timeline_comment,
+			{"reference_doctype": target[0], "reference_name": target[1]},
+			update_modified=False,
+		)
+		return doc.timeline_comment
+
+	return safety.crm_write(
+		doc.chat_id,
+		"Timeline",
+		f"Timeline: moved WhatsApp message {doc.name} to {target[1]}",
+		write,
+		once=f"timeline-move:{doc.name}:{target[1]}",
+		target_doctype="Comment",
+		reference_doctype=target[0],
+		reference_name=target[1],
+	)

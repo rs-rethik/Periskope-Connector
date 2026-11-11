@@ -11,7 +11,7 @@ import time
 import frappe
 from frappe.utils import format_date, get_system_timezone, getdate, today
 
-from periskope_connector import access, branding
+from periskope_connector import branding
 from periskope_connector.ai import assistant, classifier
 
 LOOKS = (
@@ -60,13 +60,6 @@ Reply with ONLY one JSON object, no commentary and no code fences:
 
 def cache_key(day=None) -> str:
 	return f"periskope:festival:{day or today()}"
-
-
-@frappe.whitelist()
-def get_festival() -> dict | None:
-	"""Today's festival look, or None. Reads only the cache; the hourly job fills it."""
-	access.require_inbox_user()
-	return current()
 
 
 def current() -> dict | None:
@@ -157,17 +150,6 @@ def judge(reply: dict, day) -> dict:
 		"source": reply.get("source"),
 		"show": bool(festival) and reply.get("confidence") == "high",
 	}
-
-
-@frappe.whitelist(methods=["POST"])
-def check_again() -> dict | None:
-	"""A manager asks the AI again now (for instance after changing the key)."""
-	access.require_inbox_user()
-	if not access.is_manager():
-		frappe.throw("Only managers can do this.", frappe.PermissionError)
-	frappe.cache().delete_value(cache_key() + ":tried")
-	refresh(force=True)
-	return frappe.cache().get_value(cache_key(), expires=True)
 
 
 def preview(look: str, festival: str = "", greeting: str = "") -> None:

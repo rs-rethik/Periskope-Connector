@@ -1,12 +1,8 @@
 """Tests for the Periskope Group doctype and the code that works on it."""
 
-from unittest.mock import patch
-
-import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import leads, linking, messages
-from periskope_connector import timeline_comments as timeline
+from periskope_connector import linking
 from periskope_connector.tests.utils import OTHER_APP_DOCTYPES
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES

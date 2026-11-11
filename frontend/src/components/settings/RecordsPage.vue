@@ -56,7 +56,9 @@
 
 		<!-- The list -->
 		<div v-else class="min-h-0 flex-1 overflow-auto px-6 py-2">
-			<table v-if="rows.length" class="w-full text-sm">
+			<!-- a page can draw its own list (cards), with the same rows and editor -->
+			<slot v-if="rows.length && $slots.list" name="list" :rows="rows" :edit="edit" />
+			<table v-else-if="rows.length" class="w-full text-sm">
 				<thead class="text-left text-xs text-ink-gray-5">
 					<tr>
 						<th
@@ -116,6 +118,7 @@ import LucideCheck from "~icons/lucide/check";
 import FieldInput from "@/components/settings/FieldInput.vue";
 import { fromNow } from "@/utils/format";
 import { ask, discardChanges } from "@/utils/confirm";
+import { errorText } from "@/utils/errors";
 
 const props = defineProps({
 	kind: { type: String, required: true },
@@ -211,7 +214,7 @@ async function save() {
 		await load();
 		emit("saved");
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "Not saved.";
+		error.value = errorText(e, "Not saved.");
 	} finally {
 		saving.value = false;
 	}
@@ -236,7 +239,7 @@ async function remove() {
 		await load();
 		emit("saved");
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "Not deleted.";
+		error.value = errorText(e, "Not deleted.");
 	} finally {
 		deleting.value = false;
 	}

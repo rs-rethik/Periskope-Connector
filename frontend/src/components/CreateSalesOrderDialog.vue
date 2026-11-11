@@ -285,29 +285,34 @@ function addItem(r) {
 		});
 }
 
-watch(show, async (open) => {
-	if (!open || !props.chat || !props.message) return;
-	created.value = null;
-	error.value = "";
-	lines.value = [];
-	note.value = "";
-	customer.value = null;
-	loading.value = true;
-	try {
-		defaults.value = await call("periskope_connector.api.sales_order.so_defaults", {
-			chat_name: props.chat.name,
-			message: props.message.name,
-		});
-		if (defaults.value.customer) customer.value = { value: defaults.value.customer };
-		deliveryDate.value = defaults.value.delivery_date;
-		series.value = defaults.value.naming_series || "";
-	} catch (e) {
-		defaults.value = null;
-		error.value = errorText(e, "Could not open the form.");
-	} finally {
-		loading.value = false;
-	}
-});
+// (run at once too: the dialog is loaded on demand and may mount already open)
+watch(
+	show,
+	async (open) => {
+		if (!open || !props.chat || !props.message) return;
+		created.value = null;
+		error.value = "";
+		lines.value = [];
+		note.value = "";
+		customer.value = null;
+		loading.value = true;
+		try {
+			defaults.value = await call("periskope_connector.api.sales_order.so_defaults", {
+				chat_name: props.chat.name,
+				message: props.message.name,
+			});
+			if (defaults.value.customer) customer.value = { value: defaults.value.customer };
+			deliveryDate.value = defaults.value.delivery_date;
+			series.value = defaults.value.naming_series || "";
+		} catch (e) {
+			defaults.value = null;
+			error.value = errorText(e, "Could not open the form.");
+		} finally {
+			loading.value = false;
+		}
+	},
+	{ immediate: true }
+);
 
 async function create() {
 	busy.value = true;

@@ -157,19 +157,14 @@ def check_breaches() -> int:
 		who = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.name)
 		subject = _("WhatsApp reply overdue: {0}").format(who)
 		assignees = frappe.parse_json(row._assign or "[]") or []
-		_bell(sorted(set(assignees + managers)), row.name, subject)
-		if cfg.emails:
-			safety.sendmail(
-				recipients=cfg.emails,
-				subject=subject,
-				message=_("{0} has been waiting for a reply since before {1}. Open the chat: {2}").format(
-					who, row.response_due, frappe.utils.get_url(f"/whatsapp/inbox/{row.name}")
-				),
-				delayed=True,
-			)
+		# Marked first, then the bell, then the email: a site that cannot send email (no outgoing
+		# account) still rings the bell, once, and the next run does not fail on the same chat again.
 		frappe.db.set_value(
 			"Periskope Chat", row.name, {"breach_alerted": 1, "response_breached": 1}, update_modified=False
 		)
+		_bell(sorted(set(assignees + managers)), row.name, subject)
+		if cfg.emails:
+			_email(cfg.emails, row, who, subject)
 		workflow.log(
 			row.name,
 			"SLA Breached",
@@ -178,6 +173,24 @@ def check_breaches() -> int:
 		)
 	frappe.db.commit()
 	return len(rows)
+
+
+def _email(recipients: list[str], row, who: str, subject: str):
+	"""The managers' email about a late reply. Never raises: its own writes are undone and the
+	failure logged, the breach stays recorded."""
+	frappe.db.savepoint("periskope_sla_email")
+	try:
+		safety.sendmail(
+			recipients=recipients,
+			subject=subject,
+			message=_("{0} has been waiting for a reply since before {1}. Open the chat: {2}").format(
+				who, row.response_due, frappe.utils.get_url(f"/whatsapp/inbox/{row.name}")
+			),
+			delayed=True,
+		)
+	except Exception:
+		frappe.db.rollback(save_point="periskope_sla_email")
+		frappe.log_error(title=f"Periskope: could not email the SLA breach of chat {row.name}")
 
 
 def _bell(users: list[str], chat: str, subject: str):

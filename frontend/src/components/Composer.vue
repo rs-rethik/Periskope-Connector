@@ -1,5 +1,5 @@
 <template>
-	<div class="border-t border-outline-gray-1 bg-surface-base">
+	<div class="safe-bottom border-t border-outline-gray-1 bg-surface-base">
 		<div class="flex items-center gap-1 px-3 pt-2">
 			<Button
 				size="sm"
@@ -129,7 +129,7 @@
 					ref="box"
 					v-model="text"
 					rows="1"
-					class="max-h-48 min-h-[40px] w-full resize-none rounded border-0 bg-transparent p-1 text-base text-ink-gray-9 placeholder-ink-gray-4 focus:ring-0"
+					class="max-h-48 min-h-[40px] w-full resize-none rounded border-0 bg-transparent p-1 text-base text-ink-gray-9 placeholder-ink-gray-4 focus:ring-0 max-md:text-[16px]"
 					:placeholder="
 						mode === 'note'
 							? 'Write a note for your team…'
@@ -160,6 +160,7 @@
 									v-for="e in EMOJI"
 									:key="e"
 									class="rounded p-1 text-lg hover:bg-surface-gray-2"
+									:aria-label="`Insert ${e}`"
 									@click="
 										insert(e);
 										close();
@@ -180,6 +181,16 @@
 						<template #icon><LucidePaperclip class="size-4" /></template>
 					</Button>
 					<input ref="picker" type="file" class="hidden" @change="onFile" />
+					<Button
+						v-if="mode === 'reply' && !isMeta"
+						variant="ghost"
+						tooltip="Send later"
+						aria-label="Send later"
+						:disabled="uploading"
+						@click="scheduling = true"
+					>
+						<template #icon><LucideClock class="size-4" /></template>
+					</Button>
 					<Dropdown v-if="mode === 'reply'" :options="quickOptions">
 						<Button variant="ghost" tooltip="Quick replies" aria-label="Quick replies"
 							><template #icon><LucideZap class="size-4" /></template
@@ -201,6 +212,15 @@
 				</div>
 			</div>
 		</div>
+
+		<ScheduleDialog
+			v-model="scheduling"
+			:chat="chat.name"
+			:text="text"
+			:file="file?.name ? file : null"
+			:can-repeat="!!boot.is_manager"
+			@saved="onScheduled"
+		/>
 
 		<Dialog v-model="saveDialog" :options="{ title: 'Save as quick reply' }">
 			<template #body-content>
@@ -230,11 +250,12 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import dayjs from "dayjs";
-import { Button, Dialog, Dropdown, FormControl, Popover, Tooltip, call } from "frappe-ui";
+import { Button, Dialog, Dropdown, FormControl, Popover, Tooltip, call, toast } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
 import LucidePaperclip from "~icons/lucide/paperclip";
+import ScheduleDialog from "@/components/ScheduleDialog.vue";
 import LucideSmile from "~icons/lucide/smile";
 import LucideZap from "~icons/lucide/zap";
 import LucideSendHorizontal from "~icons/lucide/send-horizontal";
@@ -243,14 +264,15 @@ import LucideFileText from "~icons/lucide/file-text";
 import TemplateDialog from "@/components/TemplateDialog.vue";
 import { MAX_UPLOAD_BYTES, uploadPrivate } from "@/utils/upload";
 import { boot } from "@/boot";
-import { drafts } from "@/stores/inbox";
+import { drafts, saveDraft } from "@/stores/inbox";
 import { errorText, showError } from "@/utils/errors";
+import { isMobile } from "@/utils/screen";
 
 const props = defineProps({
 	chat: { type: Object, required: true },
 	replyTo: { type: Object, default: null },
 });
-const emit = defineEmits(["sent", "noted", "clear-reply"]);
+const emit = defineEmits(["sent", "noted", "clear-reply", "scheduled"]);
 
 // A Meta WhatsApp chat (meta.py): free text only within 24 hours of the customer's last message,
 // an approved template any time.
@@ -303,6 +325,13 @@ const EMOJI = [
 
 const mode = ref("reply");
 const text = ref("");
+const scheduling = ref(false); // the "Send later" dialog (ScheduleDialog)
+function onScheduled(row) {
+	text.value = "";
+	file.value = null;
+	emit("scheduled", row);
+	nextTick(autosize);
+}
 const file = ref(null);
 const uploading = ref(false);
 const sending = ref(false);
@@ -336,20 +365,22 @@ if (saved) {
 	file.value = saved.file;
 	mentions.value = saved.mentions;
 }
-watch(
-	[mode, text, file, mentions],
-	() => {
-		if (text.value || file.value)
-			drafts.set(props.chat.name, {
-				mode: mode.value,
-				text: text.value,
-				file: file.value?.name ? file.value : null,
-				mentions: [...mentions.value],
-			});
-		else drafts.delete(props.chat.name);
-	},
-	{ deep: true }
-);
+function keepDraft() {
+	saveDraft(
+		props.chat.name,
+		text.value || file.value
+			? {
+					mode: mode.value,
+					text: text.value,
+					file: file.value?.name ? file.value : null,
+					mentions: [...mentions.value],
+			  }
+			: null
+	);
+}
+watch([mode, text, file, mentions], keepDraft, { deep: true });
+let left = false; // another chat was opened: this composer is gone, its uploads may still end
+onBeforeUnmount(() => (left = true));
 
 function removeFile() {
 	uploadId++;
@@ -468,7 +499,8 @@ function onKey(e) {
 		if (e.key === "Escape") return e.preventDefault(), (suggestions.value = []);
 	}
 	if (e.key === "Escape" && props.replyTo) return e.preventDefault(), emit("clear-reply");
-	if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+	// a phone's Enter is a new line (its keyboard has no Shift+Enter): the Send button sends
+	if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !isMobile.value) {
 		e.preventDefault();
 		submit();
 	}
@@ -489,10 +521,18 @@ async function onFile(e) {
 		const saved = await uploadPrivate(picked);
 		if (id !== uploadId) return;
 		file.value = saved;
+		if (left) {
+			// the watcher stopped with the composer: put the file in the chat's draft and say so
+			keepDraft();
+			toast.info(
+				`${saved.file_name} is uploaded and waits in the draft of ${props.chat.title}.`
+			);
+		}
 	} catch (err) {
 		if (id !== uploadId) return;
 		file.value = null;
 		error.value = "The file could not be uploaded.";
+		if (left) showError(null, `The file for ${props.chat.title} could not be uploaded.`);
 	} finally {
 		if (id === uploadId) uploading.value = false;
 	}
@@ -528,6 +568,8 @@ async function submit() {
 		text.value = "";
 		file.value = null;
 		mentions.value = [];
+		// at once, not by the watcher: it no longer runs when the chat was left while this was sent
+		saveDraft(props.chat.name);
 		emit("clear-reply");
 		nextTick(autosize);
 	} catch (err) {

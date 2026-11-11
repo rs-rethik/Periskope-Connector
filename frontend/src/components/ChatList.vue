@@ -6,15 +6,36 @@
 				<span class="text-sm text-ink-gray-5">{{ total }}</span>
 				<Button
 					v-if="boot.numbers.length"
-					class="ml-auto"
+					class="tap ml-auto"
 					size="sm"
 					label="New chat"
 					@click="newChat = true"
 				>
 					<template #prefix><LucideSquarePen class="size-4" /></template>
 				</Button>
+				<Dropdown
+					v-if="boot.is_manager && boot.numbers.some((n) => n.source !== 'Meta')"
+					:options="[
+						{ label: 'New group', onClick: () => (newGroup = true) },
+						{ label: 'Join with an invite link', onClick: () => (joinGroup = true) },
+					]"
+				>
+					<Button
+						class="tap"
+						size="sm"
+						tooltip="WhatsApp groups"
+						aria-label="WhatsApp groups"
+					>
+						<template #icon><LucideUsersRound class="size-4" /></template>
+					</Button>
+				</Dropdown>
 			</div>
 			<NewChatDialog v-model="newChat" />
+			<NewGroupDialog v-if="boot.is_manager" v-model="newGroup" />
+			<JoinGroupDialog v-if="boot.is_manager" v-model="joinGroup" />
+			<div v-if="isMobile && boot.numbers.length > 1" class="flex">
+				<NumberSwitcher compact />
+			</div>
 			<TextInput
 				v-model="search"
 				class="search-pill"
@@ -24,12 +45,12 @@
 				<template #prefix><LucideSearch class="size-4 text-ink-gray-5" /></template>
 			</TextInput>
 			<div
-				class="flex gap-0.5 overflow-x-auto rounded-full bg-surface-gray-2 p-1 [scrollbar-width:none]"
+				class="fade-right flex gap-0.5 overflow-x-auto rounded-full bg-surface-gray-2 p-1 [scrollbar-width:none]"
 			>
 				<button
 					v-for="t in tabs"
 					:key="t.key"
-					class="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm transition"
+					class="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm transition max-md:min-h-10"
 					:class="
 						tab === t.key
 							? 'bg-surface-base font-medium text-ink-gray-9 shadow-sm'
@@ -107,6 +128,15 @@
 							size="sm"
 						/>
 						<Badge
+							v-if="c.is_group && c.organization"
+							:label="c.organization"
+							variant="subtle"
+							theme="gray"
+							size="sm"
+						>
+							<template #prefix><LucideBuilding2 class="size-3" /></template>
+						</Badge>
+						<Badge
 							v-if="c.ai_tag"
 							:label="c.ai_tag"
 							variant="subtle"
@@ -145,7 +175,7 @@
 							v-if="c.assigned_to.length"
 							class="ml-auto"
 							size="xs"
-							:name="c.assigned_to[0].split('@')[0].replace(/[._]/g, ' ')"
+							:name="nameFromEmail(c.assigned_to[0])"
 							:tip="'Assigned to ' + c.assigned_to.join(', ')"
 						/>
 					</div>
@@ -173,21 +203,29 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
-import { Badge, Button, LoadingIndicator, TextInput, Tooltip, call } from "frappe-ui";
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
+import { Badge, Button, Dropdown, LoadingIndicator, TextInput, Tooltip, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import LucideSearch from "~icons/lucide/search";
 import LucideUsers from "~icons/lucide/users";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import { QUICK_FILTERS, currentFilters, inbox } from "@/stores/inbox";
 import LucideSquarePen from "~icons/lucide/square-pen";
-import NewChatDialog from "@/components/NewChatDialog.vue";
+import LucideUsersRound from "~icons/lucide/users-round";
 import SlaBadge from "@/components/SlaBadge.vue";
+import NumberSwitcher from "@/components/NumberSwitcher.vue";
+import { isMobile } from "@/utils/screen";
 import { boot, numberLabel } from "@/boot";
-import { listTime } from "@/utils/format";
+import { listTime, nameFromEmail } from "@/utils/format";
 import { loadFailed } from "@/utils/load";
 
-defineProps({ selected: { type: String, default: "" } });
+// Opened now and then: loaded apart from the list itself.
+const NewChatDialog = defineAsyncComponent(() => import("@/components/NewChatDialog.vue"));
+const NewGroupDialog = defineAsyncComponent(() => import("@/components/NewGroupDialog.vue"));
+const JoinGroupDialog = defineAsyncComponent(() => import("@/components/JoinGroupDialog.vue"));
+
+const props = defineProps({ selected: { type: String, default: "" } });
 const emit = defineEmits(["select"]);
 
 // Opening a chat reads it: show that at once rather than after the next live update.
@@ -198,6 +236,8 @@ function select(c) {
 }
 
 const newChat = ref(false);
+const newGroup = ref(false); // NewGroupDialog (managers)
+const joinGroup = ref(false); // JoinGroupDialog (managers)
 // the customer wrote last and the chat is still open: our move
 const waiting = (c) =>
 	c.last_message_direction === "Incoming" && c.status === "Open" && !c.is_group;
@@ -205,6 +245,7 @@ const tabs = [
 	{ key: "all", label: "All" },
 	{ key: "chats", label: "Chats" },
 	{ key: "groups", label: "Groups" },
+	{ key: "internal", label: "Internal groups" },
 	{ key: "linked", label: "In CRM" },
 	{ key: "unlinked", label: "Not in CRM" },
 ];
@@ -229,6 +270,9 @@ function filters() {
 	const extra = { search: search.value };
 	if (tab.value === "chats") extra.groups = 0;
 	if (tab.value === "groups") extra.groups = 1;
+	// internal (team) groups only in their own tab
+	extra.internal = tab.value === "internal" ? 1 : 0;
+	if (tab.value === "internal") delete extra.groups;
 	if (tab.value === "linked") extra.linked = 1;
 	if (tab.value === "unlinked") extra.linked = 0;
 	return currentFilters(extra);
@@ -260,8 +304,17 @@ async function load(append = false) {
 	}
 }
 
+// A phone hides the list while a chat is open (pages/Inbox.vue), which forgets how far it was
+// scrolled: Back puts it where it was.
+let scrolled = 0;
+watch(
+	() => props.selected,
+	(now) => now || nextTick(() => scroller.value?.scrollTo({ top: scrolled }))
+);
+
 function onScroll() {
 	const el = scroller.value;
+	if (el?.clientHeight) scrolled = el.scrollTop;
 	if (!el || loading.value || chats.value.length >= total.value) return;
 	if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) load(true);
 }

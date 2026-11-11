@@ -5,11 +5,21 @@ from frappe import _
 TIMEOUT = 20
 
 
-def request(method: str, path: str, phone: str | None = None, json: dict | None = None):
-	"""Call the Periskope API and return the decoded JSON body.
+def request(
+	method: str,
+	path: str,
+	phone: str | None = None,
+	json: dict | None = None,
+	text: bool = False,
+	missing_ok: bool = False,
+	params: dict | None = None,
+):
+	"""Call the Periskope API and return the decoded JSON body (`text`: the body as text, for the
+	endpoints that answer HTML, such as the QR code).
 
-	`phone` is the WhatsApp number (digits with country code) for endpoints
-	that act on one linked number; it is sent as the `x-phone` header.
+	`phone` is the WhatsApp number (digits with country code), or the phone's id, for endpoints that
+	act on one linked number; it is sent as the `x-phone` header. With `missing_ok` a 404 returns None
+	(a QR code that is not there right now). `params` are the query string (GET filters).
 	"""
 	settings = frappe.get_single("Periskope Settings")
 	api_key = settings.get_password("api_key", raise_exception=False)
@@ -28,6 +38,7 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 			f"{settings.base_url}/{path.lstrip('/')}",
 			headers=headers,
 			json=json,
+			params=params,
 			timeout=TIMEOUT,
 		)
 	except requests.RequestException as e:
@@ -35,9 +46,11 @@ def request(method: str, path: str, phone: str | None = None, json: dict | None 
 
 	if response.status_code in (401, 403):
 		frappe.throw(_("Periskope rejected the API key (HTTP {0})").format(response.status_code))
+	if response.status_code == 404 and missing_ok:
+		return None
 	if not response.ok:
 		frappe.throw(_("Periskope returned HTTP {0}: {1}").format(response.status_code, response.text[:200]))
-	return response.json()
+	return response.text if text else response.json()
 
 
 def send_message(

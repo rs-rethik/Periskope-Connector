@@ -113,15 +113,20 @@ const canSend = computed(() => {
 	return isMeta.value ? !!choice.value.ready : !!text.value.trim() || !!file.value;
 });
 
-watch(open, (v) => {
-	if (!v) return;
-	number.value =
-		inbox.number ||
-		numbers.value.find((n) => n.is_ready)?.name ||
-		numbers.value[0]?.name ||
-		"";
-	error.value = "";
-});
+// (run at once too: the dialog is loaded on demand and may mount already open)
+watch(
+	open,
+	(v) => {
+		if (!v) return;
+		number.value =
+			inbox.number ||
+			numbers.value.find((n) => n.is_ready)?.name ||
+			numbers.value[0]?.name ||
+			"";
+		error.value = "";
+	},
+	{ immediate: true }
+);
 
 // A Meta number's templates are loaded when it is chosen.
 watch([number, open], async () => {

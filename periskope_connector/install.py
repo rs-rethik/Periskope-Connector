@@ -118,12 +118,35 @@ def setup():
 		_ensure_assistant_defaults,
 		_ensure_crm_ui,
 		_ensure_phone_fields,
+		_ensure_crm_indexes,
 	):
 		try:
 			step()
 		except Exception:
 			# A half-installed site must still be able to migrate; the gap shows in Health.
 			frappe.log_error(title=f"Periskope: install step {step.__name__} failed")
+
+
+# The CRM columns this app filters on for every message and inbox load (linking.py, access.py,
+# api/crm_panel.py); the CRM indexes none of them.
+CRM_INDEXES = {
+	"CRM Lead": ["lead_owner", "organization"],
+	"CRM Deal": ["deal_owner", "lead", "organization", "periskope_message"],
+}
+
+
+def _ensure_crm_indexes():
+	for doctype, fields in CRM_INDEXES.items():
+		if not frappe.db.table_exists(doctype):
+			continue
+		columns = set(frappe.db.get_table_columns(doctype))
+		for field in fields:
+			if field in columns:
+				frappe.db.add_index(doctype, [field], index_name=f"periskope_{field}")
+	# the chat list's latest AI tag per chat (api/inbox.CHAT_COLUMNS): a chat's messages by time
+	frappe.db.add_index(
+		"Periskope Message", ["periskope_chat", "message_timestamp"], index_name="periskope_chat_time"
+	)
 
 
 def before_uninstall():

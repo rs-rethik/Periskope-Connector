@@ -1,9 +1,17 @@
 <template>
 	<div
-		class="group flex items-center gap-1 px-4 py-0.5"
+		class="group flex items-center gap-1 px-4 py-0.5 max-md:px-2"
 		:class="outgoing ? 'justify-end' : 'justify-start'"
 	>
-		<Tooltip v-if="outgoing && canReply" text="Reply to this message"
+		<MessageMenu
+			v-if="outgoing && hasMenu"
+			:message="message"
+			:chat="chat"
+			:whatsapp="canAct"
+			:extra="phoneActions"
+			@updated="(m) => $emit('updated', m)"
+		/>
+		<Tooltip v-if="outgoing && canReply && !isMobile" text="Reply to this message"
 			><button
 				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
 				aria-label="Reply to this message"
@@ -12,7 +20,7 @@
 				<LucideReply class="size-4" /></button
 		></Tooltip>
 		<div
-			class="relative max-w-[75%] rounded-2xl px-3.5 py-2 shadow-[0_1px_2px_rgb(0_0_0/0.06),0_6px_16px_-10px_rgb(0_0_0/0.18)]"
+			class="relative max-w-[75%] rounded-2xl max-md:max-w-[82%] px-3.5 py-2 shadow-[0_1px_2px_rgb(0_0_0/0.06),0_6px_16px_-10px_rgb(0_0_0/0.18)]"
 			:class="[
 				outgoing ? 'bg-surface-green-2' : 'bg-surface-base',
 				unsent ? 'ring-1 ring-outline-red-2' : '',
@@ -64,7 +72,7 @@
 				<template v-if="message.has_media">
 					<img
 						v-if="message.message_type === 'image'"
-						:src="mediaUrl"
+						:src="thumbUrl(message)"
 						class="mb-1 max-h-72 cursor-zoom-in rounded"
 						loading="lazy"
 						alt=""
@@ -249,7 +257,15 @@
 				</div></Tooltip
 			>
 		</div>
-		<Tooltip v-if="!outgoing && canReply" text="Reply to this message"
+		<MessageMenu
+			v-if="!outgoing && hasMenu"
+			:message="message"
+			:chat="chat"
+			:whatsapp="canAct"
+			:extra="phoneActions"
+			@updated="(m) => $emit('updated', m)"
+		/>
+		<Tooltip v-if="!outgoing && canReply && !isMobile" text="Reply to this message"
 			><button
 				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 group-hover:visible"
 				aria-label="Reply to this message"
@@ -257,7 +273,9 @@
 			>
 				<LucideReply class="size-4" /></button
 		></Tooltip>
-		<Tooltip v-if="!outgoing && canCreateDeal" text="Create a deal from the customer's message"
+		<Tooltip
+			v-if="!outgoing && canCreateDeal && !isMobile"
+			text="Create a deal from the customer's message"
 			><button
 				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-violet-7 group-hover:visible"
 				aria-label="Create a deal from the customer's message"
@@ -266,7 +284,7 @@
 				<LucideHandshake class="size-4" /></button
 		></Tooltip>
 		<Tooltip
-			v-if="!outgoing && canCreateOrder"
+			v-if="!outgoing && canCreateOrder && !isMobile"
 			text="Create a sales order from the customer's message"
 			><button
 				class="invisible rounded p-1 text-ink-gray-5 hover:bg-surface-gray-2 hover:text-ink-blue-7 group-hover:visible"
@@ -292,10 +310,12 @@ import LucideCheck from "~icons/lucide/check";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideClock from "~icons/lucide/clock";
 import LucideReply from "~icons/lucide/reply";
+import MessageMenu from "@/components/MessageMenu.vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { messageTime } from "@/utils/format";
 import { showError } from "@/utils/errors";
-import { mediaUrl as messageMediaUrl } from "@/utils/media";
+import { mediaUrl as messageMediaUrl, thumbUrl } from "@/utils/media";
+import { isMobile } from "@/utils/screen";
 
 const props = defineProps({
 	message: { type: Object, required: true },
@@ -303,6 +323,7 @@ const props = defineProps({
 	showSenderName: { type: Boolean, default: true },
 	canCreateDeal: { type: Boolean, default: false },
 	canCreateOrder: { type: Boolean, default: false },
+	chat: { type: Object, default: null }, // for the message's More actions (MessageMenu)
 });
 const emit = defineEmits(["reply", "updated", "view", "create-deal", "create-order"]);
 
@@ -331,6 +352,34 @@ const size = computed(() => {
 });
 
 const unsent = computed(() => ["Failed", "Not Sent"].includes(props.message.send_status));
+// React, forward, pin, edit, delete: Periskope numbers, on a message WhatsApp has (MessageMenu)
+const canAct = computed(() => !!props.chat && props.chat.source !== "Meta" && canReply.value);
+// A phone has no hover: the buttons beside the bubble become the first entries of its one,
+// always shown, More menu.
+const phoneActions = computed(() => {
+	if (!isMobile.value) return [];
+	const out = [];
+	if (canReply.value)
+		out.push({
+			label: "Reply",
+			icon: LucideReply,
+			onClick: () => emit("reply", props.message),
+		});
+	if (!outgoing.value && props.canCreateDeal)
+		out.push({
+			label: "Create a deal",
+			icon: LucideHandshake,
+			onClick: () => emit("create-deal", props.message),
+		});
+	if (!outgoing.value && props.canCreateOrder)
+		out.push({
+			label: "Create a sales order",
+			icon: LucideShoppingCart,
+			onClick: () => emit("create-order", props.message),
+		});
+	return out;
+});
+const hasMenu = computed(() => !!props.chat && (canAct.value || phoneActions.value.length > 0));
 // A reply quotes a message WhatsApp knows: not one still being sent or that never went.
 const canReply = computed(
 	() =>

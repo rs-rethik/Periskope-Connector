@@ -8,7 +8,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
 
-from periskope_connector import agent, knowledge, learner
+from periskope_connector import agent, learner
 from periskope_connector.ai import assistant
 from periskope_connector.system import insert_as_system
 from periskope_connector.tests.utils import isolate, settings

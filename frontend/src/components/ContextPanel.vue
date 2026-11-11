@@ -74,6 +74,62 @@
 				</div>
 			</section>
 
+			<!-- a group's company: its messages follow the organization's deals and leads -->
+			<PanelSection v-if="ctx && ctx.is_group" id="organization" title="Organization">
+				<div
+					v-if="ctx.organization"
+					class="flex flex-col gap-2.5 rounded-xl border border-outline-gray-1 p-3"
+				>
+					<div class="flex items-center gap-2.5">
+						<span
+							class="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-blue-1 text-ink-blue-7"
+						>
+							<LucideBuilding2 class="size-4" />
+						</span>
+						<div class="min-w-0 flex-1">
+							<a
+								:href="ctx.organization.route"
+								target="_blank"
+								class="block truncate text-sm font-medium text-ink-gray-9 hover:underline"
+								>{{ ctx.organization.title }}</a
+							>
+							<div class="truncate text-xs text-ink-gray-5">
+								{{ ctx.organization.deals }}
+								{{ ctx.organization.deals === 1 ? "deal" : "deals" }} ·
+								{{ ctx.organization.leads }}
+								{{ ctx.organization.leads === 1 ? "lead" : "leads" }}
+								<template v-if="ctx.organization.territory">
+									· {{ ctx.organization.territory }}</template
+								>
+							</div>
+						</div>
+					</div>
+					<div v-if="ctx.organization.groups.length" class="text-xs text-ink-gray-6">
+						<span class="font-medium">Its other groups:</span>
+						{{ ctx.organization.groups.join(", ") }}
+					</div>
+					<div class="flex gap-2">
+						<Button size="sm" label="Change" @click="openOrg" />
+						<Button
+							size="sm"
+							variant="ghost"
+							label="Remove link"
+							:loading="busy"
+							@click="run('unlink_organization')"
+						/>
+					</div>
+				</div>
+				<div v-else class="flex flex-col items-start gap-2">
+					<span class="text-sm text-ink-gray-5"
+						>Link this group to its customer's organization, so its messages go to that
+						company's deals and leads.</span
+					>
+					<Button size="sm" label="Link organization" @click="openOrg">
+						<template #prefix><LucideBuilding2 class="size-3.5" /></template>
+					</Button>
+				</div>
+			</PanelSection>
+
 			<!-- What happens next: the earliest open task, with the actions on it -->
 			<section v-if="record && !record.hidden">
 				<div
@@ -104,8 +160,11 @@
 							v-if="nextTask.assigned_to"
 							class="mt-2 flex items-center gap-2 text-sm text-ink-gray-6"
 						>
-							<InitialsAvatar size="xs" :name="person(nextTask.assigned_to)" />
-							{{ person(nextTask.assigned_to) }}
+							<InitialsAvatar
+								size="xs"
+								:name="nameFromEmail(nextTask.assigned_to)"
+							/>
+							{{ nameFromEmail(nextTask.assigned_to) }}
 						</div>
 						<div
 							v-if="record.tasks.length > 1"
@@ -424,7 +483,8 @@
 					>
 						<Tooltip text="Mark done">
 							<button
-								class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-outline-gray-3 text-transparent transition hover:border-outline-green-2 hover:bg-surface-green-2 hover:text-ink-green-7"
+								aria-label="Mark done"
+								class="tap mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-outline-gray-3 text-transparent transition hover:border-outline-green-2 hover:bg-surface-green-2 hover:text-ink-green-7"
 								:disabled="busy"
 								@click="run('complete_task', { task: t.name })"
 							>
@@ -453,8 +513,8 @@
 									><span class="cp-chip bg-surface-gray-2 text-ink-gray-7">
 										<InitialsAvatar
 											size="xs"
-											:name="person(t.assigned_to)"
-										/>{{ person(t.assigned_to).split(" ")[0] }}
+											:name="nameFromEmail(t.assigned_to)"
+										/>{{ nameFromEmail(t.assigned_to).split(" ")[0] }}
 									</span></Tooltip
 								>
 							</div>
@@ -562,7 +622,7 @@
 						:key="u"
 						class="cp-chip bg-surface-gray-2 text-ink-gray-8"
 					>
-						<InitialsAvatar size="xs" :name="person(u)" />{{ person(u) }}
+						<InitialsAvatar size="xs" :name="nameFromEmail(u)" />{{ nameFromEmail(u) }}
 					</span>
 					<span v-if="!chat.assigned_to?.length" class="text-sm text-ink-gray-5"
 						>Nobody</span
@@ -572,6 +632,53 @@
 		</div>
 
 		<!-- Link to an existing lead or deal -->
+		<Dialog v-model="orgDialog" :options="{ title: 'Link group to an organization' }">
+			<template #body-content>
+				<TextInput
+					v-model="orgQuery"
+					placeholder="Search organization name"
+					:debounce="300"
+				/>
+				<div class="mt-2 max-h-72 overflow-y-auto">
+					<button
+						v-for="o in orgResults"
+						:key="o.name"
+						class="flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-surface-gray-2"
+						:disabled="busy"
+						@click="linkOrg(o)"
+					>
+						<LucideBuilding2 class="size-4 shrink-0 text-ink-gray-5" />
+						<span class="min-w-0 flex-1">
+							<span class="block truncate text-sm text-ink-gray-8">{{
+								o.title
+							}}</span>
+							<span class="block truncate text-xs text-ink-gray-5"
+								>{{ o.deals }} {{ o.deals === 1 ? "deal" : "deals" }} ·
+								{{ o.groups }} WhatsApp {{ o.groups === 1 ? "group" : "groups"
+								}}<template v-if="o.territory">
+									· {{ o.territory }}</template
+								></span
+							>
+						</span>
+						<LucideCheck
+							v-if="ctx?.organization?.name === o.name"
+							class="size-4 text-ink-green-7"
+						/>
+					</button>
+					<div
+						v-if="orgSearching && !orgResults.length"
+						class="p-2 text-sm text-ink-gray-5"
+					>
+						Searching…
+					</div>
+					<div v-else-if="!orgResults.length" class="p-2 text-sm text-ink-gray-5">
+						No organization found. Try part of the company's name.
+					</div>
+				</div>
+				<ErrorMessage v-if="error && orgDialog" class="mt-2" :message="error" />
+			</template>
+		</Dialog>
+
 		<Dialog v-model="linkDialog" :options="{ title: 'Link to a lead or deal' }">
 			<template #body-content>
 				<TextInput
@@ -759,6 +866,7 @@ import LucideUserRound from "~icons/lucide/user-round";
 import LucideMessageSquareQuote from "~icons/lucide/message-square-quote";
 import LucideStickyNote from "~icons/lucide/sticky-note";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideBuilding2 from "~icons/lucide/building-2";
 import { computed, ref, watch } from "vue";
 import {
 	Badge,
@@ -777,7 +885,8 @@ import {
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucidePlus from "~icons/lucide/plus";
 import { changed, inbox } from "@/stores/inbox";
-import { fromNow } from "@/utils/format";
+import { errorText } from "@/utils/errors";
+import { fromNow, nameFromEmail } from "@/utils/format";
 
 const props = defineProps({ chat: { type: Object, default: null } });
 
@@ -842,10 +951,6 @@ function money(value, currency) {
 	}
 }
 
-function message(e) {
-	return e?.messages?.[0] || e?.message || "That did not work.";
-}
-
 // Only the newest load fills the panel, so a slow answer for the previous chat never shows here.
 async function load() {
 	if (!props.chat?.name) return;
@@ -871,17 +976,21 @@ async function run(method, args = {}) {
 	if (busy.value) return false;
 	busy.value = true;
 	error.value = "";
+	// what this change returns is the newest record: a load still on its way must not replace it
+	const seq = ++loadSeq;
 	try {
-		ctx.value = await call(`periskope_connector.api.crm_panel.${method}`, {
+		const out = await call(`periskope_connector.api.crm_panel.${method}`, {
 			chat_name: props.chat.name,
 			...args,
 		});
+		if (seq === loadSeq) ctx.value = out;
 		return true;
 	} catch (e) {
-		error.value = message(e);
+		error.value = errorText(e, "That did not work.");
 		return false;
 	} finally {
 		busy.value = false;
+		if (seq === loadSeq) loading.value = false; // the load it replaced no longer does this
 	}
 }
 
@@ -901,10 +1010,47 @@ async function search() {
 		});
 		if (seq === searchSeq) results.value = out;
 	} catch (e) {
-		if (seq === searchSeq) error.value = message(e);
+		if (seq === searchSeq) error.value = errorText(e, "That did not work.");
 	} finally {
 		if (seq === searchSeq) searching.value = false;
 	}
+}
+
+// --- a group's organization (crm_panel.link_organization) ---
+const orgDialog = ref(false);
+const orgQuery = ref("");
+const orgResults = ref([]);
+const orgSearching = ref(false);
+let orgSeq = 0;
+
+async function openOrg() {
+	error.value = "";
+	orgQuery.value = ctx.value?.organization ? "" : props.chat?.chat_name || "";
+	orgDialog.value = true;
+	await searchOrgs();
+	if (!orgResults.value.length && orgQuery.value) {
+		orgQuery.value = ""; // the group's name matched nothing: show the recent ones
+	}
+}
+
+async function searchOrgs() {
+	const seq = ++orgSeq;
+	orgSearching.value = true;
+	try {
+		const out = await call("periskope_connector.api.crm_panel.search_organizations", {
+			query: orgQuery.value,
+		});
+		if (seq === orgSeq) orgResults.value = out;
+	} catch (e) {
+		if (seq === orgSeq) error.value = errorText(e, "That did not work.");
+	} finally {
+		if (seq === orgSeq) orgSearching.value = false;
+	}
+}
+watch(orgQuery, () => orgDialog.value && searchOrgs());
+
+async function linkOrg(o) {
+	if (await run("link_organization", { organization: o.name })) orgDialog.value = false;
 }
 
 async function link(r) {
@@ -1028,14 +1174,6 @@ function dueTone(t, fallback = "text-ink-gray-9") {
 	if (!t.due_date) return fallback;
 	const days = dayjs(t.due_date).startOf("day").diff(dayjs().startOf("day"), "day");
 	return days < 0 ? "text-ink-red-6" : days === 0 ? "text-ink-amber-8" : fallback;
-}
-
-function person(user) {
-	if (!user) return "";
-	return user
-		.split("@")[0]
-		.replace(/[._]/g, " ")
-		.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function openUrl(url) {

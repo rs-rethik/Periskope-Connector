@@ -1,7 +1,5 @@
 """Tests for the Periskope Reply Reminder doctype and the code that works on it."""
 
-from datetime import datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import frappe

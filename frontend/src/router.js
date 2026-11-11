@@ -32,9 +32,10 @@ const routes = [
 	...[
 		["/health", "Health", "Health"],
 		["/flow", "Flow", "Flow"],
-		["/reports/:report?", "Reports", "Reports"],
 		["/data/:kind", "DataList", "DataList"],
 		["/knowledge", "Knowledge", "Knowledge"],
+		["/scheduled", "Scheduled", "Scheduled"],
+		["/broadcasts", "Broadcasts", "Broadcasts"],
 	].map(([path, name, page]) => ({
 		path,
 		name,

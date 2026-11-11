@@ -21,7 +21,7 @@ from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import add_to_date, get_datetime, now_datetime
+from frappe.utils import get_datetime, now_datetime
 
 from periskope_connector import answer, crm_context, health, reminders, safety, writeback
 from periskope_connector.ai import analyse, assistant
@@ -236,6 +236,48 @@ def _held_until(row, messages: list):
 	return max(times, default=None)
 
 
+def _cancel_siblings(row) -> int:
+	"""Cancel the other Waiting rows of this row's chat."""
+	names = frappe.get_all(
+		"Periskope Auto Reply",
+		filters={"chat_id": row.chat_id, "status": "Waiting", "name": ["!=", row.name]},
+		pluck="name",
+	)
+	for name in names:
+		frappe.db.set_value(
+			"Periskope Auto Reply",
+			name,
+			{"status": "Cancelled", "cancel_reason": _("Answered together with {0}").format(row.name)},
+		)
+	return len(names)
+
+
+def _already_sent(row, last_pending) -> bool:
+	"""Whether another row of this chat already sent a reply (an answer or the holding message) that
+	covered the customer's latest waiting message. Its WhatsApp copy may not have arrived yet, so
+	the messages alone do not show it."""
+	covered = frappe.get_all(
+		"Periskope Auto Reply",
+		filters={
+			"chat_id": row.chat_id,
+			"status": ["in", ["Sent", "Holding Sent"]],
+			"name": ["!=", row.name],
+			"last_customer_message": ["is", "set"],
+		},
+		pluck="last_customer_message",
+		order_by="sent_on desc",
+		limit=1,
+	)
+	if not covered:
+		return False
+	if covered[0] == last_pending.name:
+		return True
+	stamp = frappe.db.get_value("Periskope Message", covered[0], "message_timestamp")
+	return bool(
+		stamp and last_pending.message_timestamp and get_datetime(stamp) >= last_pending.message_timestamp
+	)
+
+
 def process(name: str) -> str:
 	"""Handle one due row. Returns the final status."""
 	settings = _settings()
@@ -271,6 +313,11 @@ def process(name: str) -> str:
 		pending = [m for m in pending if m.message_timestamp > held]
 	if not pending:
 		return end("Cancelled", _("Already answered, or nothing to answer"))
+	# Two messages saved at the same moment can each have started a clock (schedule): this row
+	# answers for all of them, and never repeats what another row has already sent.
+	_cancel_siblings(row)
+	if _already_sent(row, pending[-1]):
+		return end("Cancelled", _("The assistant already replied to this message"))
 
 	customer_text = "\n".join(readable_text(m) for m in pending if readable_text(m))
 	rep = next((m.rep for m in reversed(messages) if m.rep), None) or row.rep

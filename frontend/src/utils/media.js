@@ -4,3 +4,9 @@ export function mediaUrl(message) {
 		message.name
 	)}`;
 }
+
+// A small copy of an image message, for the bubble and the viewer's strip; the viewer itself and
+// Download use the full file.
+export function thumbUrl(message) {
+	return `${mediaUrl(message)}&thumb=1`;
+}

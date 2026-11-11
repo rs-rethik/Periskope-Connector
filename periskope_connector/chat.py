@@ -85,8 +85,22 @@ def ensure(message) -> str | None:
 				message.get("sender_name") if message.direction == "Incoming" else None
 			)
 		values = {k: v for k, v in values.items() if v is not None}
+		history = bool(frappe.flags.periskope_history)  # an imported earlier message: no SLA, no alerts
 		name = name_of(number, message.chat_id)
-		last = name and frappe.db.get_value("Periskope Chat", name, "last_message_at")
+		created = False
+		if not name:
+			# On a Meta number our own sends (invoices, alerts, campaigns from other apps) start most
+			# chats: such a chat waits on the customer; their first reply opens it (workflow.py).
+			from periskope_connector import meta
+
+			status = "Pending" if message.direction == "Outgoing" and meta.is_meta(number) else "Open"
+			name, created = _insert_or_existing(
+				{"chat_id": message.chat_id, "status": status, **values}, number, message.chat_id
+			)
+		last = None if created else frappe.db.get_value("Periskope Chat", name, "last_message_at")
+		# Already pointed at this chat: the message was counted before and is being linked again
+		# (after the AI read it, a link changed by hand, an edit).
+		seen_before = message.get("periskope_chat") == name
 		newest = not (
 			last
 			and message.message_timestamp
@@ -99,24 +113,15 @@ def ensure(message) -> str | None:
 			values.pop("last_message_at", None)  # an older message linked again
 		if message.direction == "Incoming" and newest:
 			values["last_incoming_at"] = message.message_timestamp
-		history = bool(frappe.flags.periskope_history)  # an imported earlier message: no SLA, no alerts
-		if name:
-			if frappe.db.get_value("Periskope Chat", name, "linked_by_hand"):
-				values.pop("crm_lead", None)  # chosen by hand in the inbox: kept as it is
-				values.pop("crm_deal", None)
-			if not message.crm_lead and not message.crm_deal:
-				values.pop("crm_lead", None)
-				values.pop("crm_deal", None)
-			frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
-		else:
-			# On a Meta number our own sends (invoices, alerts, campaigns from other apps) start most
-			# chats: such a chat waits on the customer; their first reply opens it (workflow.py).
-			from periskope_connector import meta
-
-			status = "Pending" if message.direction == "Outgoing" and meta.is_meta(number) else "Open"
-			name = _insert_chat({"chat_id": message.chat_id, "status": status, **values})
-			if not history:
-				_lifecycle("new_chat", name, message.message_timestamp)
+		if frappe.db.get_value("Periskope Chat", name, "linked_by_hand"):
+			values.pop("crm_lead", None)  # chosen by hand in the inbox: kept as it is
+			values.pop("crm_deal", None)
+		if not message.crm_lead and not message.crm_deal:
+			values.pop("crm_lead", None)
+			values.pop("crm_deal", None)
+		frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
+		if created and not history:
+			_lifecycle("new_chat", name, message.message_timestamp)
 		if message.get("name") and message.get("periskope_chat") != name:
 			frappe.db.set_value(
 				"Periskope Message", message.name, "periskope_chat", name, update_modified=False
@@ -131,7 +136,7 @@ def ensure(message) -> str | None:
 		if history:
 			return name
 		if newest:
-			_lifecycle("on_message", name, message)
+			_lifecycle("on_message", name, message, seen_before)
 		from periskope_connector import inbox_realtime
 
 		inbox_realtime.chat_changed(name)
@@ -171,6 +176,26 @@ def refresh(name: str):
 			last_message_direction=last[0].direction,
 		)
 	frappe.db.set_value("Periskope Chat", name, values, update_modified=False)
+
+
+def _insert_or_existing(values: dict, number: str, chat_id: str) -> tuple[str, bool]:
+	"""(chat row, whether this call made it). A contact's first two messages can be saved at the
+	same moment: both find no chat and both insert. The unique chat_key lets only one through; the
+	other undoes its own insert (a savepoint, so the message it is saving is kept) and uses the row
+	that won, so its message is attached to the chat too."""
+	frappe.db.savepoint("periskope_new_chat")
+	try:
+		return _insert_chat(values), True
+	except frappe.UniqueValidationError:
+		frappe.db.rollback(save_point="periskope_new_chat")
+		frappe.clear_last_message()  # db_insert's "must be unique" notice is not for anybody
+		# A locking read: it sees the row the other transaction has just committed.
+		name = frappe.db.get_value(
+			"Periskope Chat", {"chat_key": key(number, chat_id)}, "name", for_update=True
+		)
+		if not name:
+			raise
+		return name, False
 
 
 def _insert_chat(values: dict) -> str:

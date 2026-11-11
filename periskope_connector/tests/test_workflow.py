@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_to_date, get_datetime, now_datetime
+from frappe.utils import get_datetime
 
 from periskope_connector import access, chat, messages, numbers, reminders, sla, workflow
 from periskope_connector.api import chat_actions, inbox, notifications, views
