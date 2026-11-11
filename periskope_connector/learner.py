@@ -11,7 +11,7 @@ import json
 import frappe
 from frappe.utils import add_days, now_datetime
 
-from periskope_connector import query, suggestions
+from periskope_connector import chat_tasks, linking, query, suggestions
 from periskope_connector.ai import assistant
 
 MAX_SUGGESTIONS = 8
@@ -23,7 +23,7 @@ MIN_EVIDENCE = 3  # different conversations behind a suggestion
 SYSTEM_PROMPT = """You help a sales team keep the setup of their WhatsApp CRM assistant accurate. You see recent customer conversations, the current configuration and some statistics. Suggest a small number of concrete changes where the conversations show the setup is wrong, incomplete or outdated:
 - Tag: add a tag for a recurring topic no tag covers (lowercase letters, numbers, underscores), improve a tag description, or switch off a tag that is never used.
 - Setting: only one of the listed settings.
-- Group Mapping: a group listed under unmapped_groups that clearly belongs to one customer company: target is its chat_id, payload sets group_type "Customer" and organization (an existing organization name when one matches).
+- Group Mapping: a group listed under unmapped_groups that clearly belongs to one customer company: target is its chat_id, payload sets group_type "Customer" and organization, which must be one of that group's candidate_organizations written exactly as listed (members' companies come first); leave the group out when none of them fits.
 - Ignore Contact: a number listed under unmatched_contacts that is clearly personal, a vendor, spam or a colleague: target is the number, payload status one of "Ignored (Personal)", "Ignored (Vendor)", "Ignored (Spam)", "Ignored (Internal)".
 Rules: every suggestion must be backed by at least {min_evidence} different conversations (list their numbers in evidence_chats), except Group Mapping and Ignore Contact, which are backed by that group's or number's own conversation (cite it); do not repeat something that already exists or is listed in pending_suggestions (those wait for a decision); prefer fewer, stronger suggestions; return an empty list when nothing is clearly needed. target is the existing tag name or setting name (empty for an addition). payload_json is a JSON object string with only the changed fields: Tag {{"tag_name","description","active"}}, Setting {{"value"}}, Group Mapping {{"group_type","organization"}}, Ignore Contact {{"status"}}. reason must say what you saw."""
 
@@ -64,6 +64,24 @@ SCHEMA = {
 }
 
 
+def candidate_organizations(group) -> list[str]:
+	"""The organizations a group may belong to: its members' companies (by their numbers on leads,
+	deals and contacts), then the ones named most like the group. The AI picks only from these, so it
+	never invents a company or misses one that is not among the first few hundred."""
+	members = frappe.get_all(
+		"Periskope Message",
+		filters={"chat_id": group.chat_id, "direction": "Incoming", "sender_phone": ["is", "set"]},
+		pluck="sender_phone",
+		distinct=True,
+		limit=10,
+	)
+	found = []
+	for number in members:
+		found += sorted(linking.member_organizations(number))
+	found += chat_tasks.closest_organizations(group.group_name)
+	return list(dict.fromkeys(found))[:8]
+
+
 def snapshot() -> dict:
 	"""The current configuration, as the AI sees it."""
 	settings = frappe.get_doc("Periskope Settings")
@@ -83,7 +101,12 @@ def snapshot() -> dict:
 		],
 		"settings": {f: settings.get(f) for f in suggestions.LEARNABLE_SETTINGS},
 		"unmapped_groups": [
-			{"chat_id": g.chat_id, "name": g.group_name, "type": g.group_type}
+			{
+				"chat_id": g.chat_id,
+				"name": g.group_name,
+				"type": g.group_type,
+				"candidate_organizations": candidate_organizations(g),
+			}
 			for g in frappe.get_all(
 				"Periskope Group",
 				filters={
@@ -106,7 +129,6 @@ def snapshot() -> dict:
 				limit=30,
 			)
 		],
-		"organizations": frappe.get_all("CRM Organization", pluck="name", limit=200),
 		"pending_suggestions": [
 			f"{p.kind} {p.operation} {p.target or ''}: {p.summary}"
 			for p in frappe.get_all(
@@ -151,6 +173,8 @@ def validate(item: dict, config: dict, evidence_ok: bool) -> tuple[bool, object]
 			return False, None
 		if item["kind"] == "Ignore Contact" and item["operation"] != "Add":
 			return False, None
+		if item["kind"] == "Group Mapping":
+			return _group_mapping_ok(item, current), _without_candidates(current)
 		return True, current
 	current = _current(item, config) if item["operation"] != "Add" else None
 	if item["operation"] != "Add" and current is None:
@@ -168,6 +192,22 @@ def validate(item: dict, config: dict, evidence_ok: bool) -> tuple[bool, object]
 	if item["kind"] == "Setting" and item["operation"] == "Remove":
 		return False, None
 	return True, current
+
+
+def _group_mapping_ok(item: dict, group: dict) -> bool:
+	"""A group goes only to a company the code offered for it, never to a name the AI made up."""
+	try:
+		payload = json.loads(item.get("payload_json") or "{}")
+	except ValueError:
+		return False
+	if not isinstance(payload, dict) or payload.get("group_type", "Customer") not in ("Customer", "Internal"):
+		return False
+	organization = payload.get("organization")
+	return not organization or organization in group.get("candidate_organizations", [])
+
+
+def _without_candidates(group: dict) -> dict:
+	return {k: v for k, v in group.items() if k != "candidate_organizations"}
 
 
 def _is_own_chat(item: dict, messages: list[str]) -> bool:

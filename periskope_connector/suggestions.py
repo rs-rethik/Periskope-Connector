@@ -226,13 +226,15 @@ def _apply_group_mapping(doc, data: dict):
 	if data.get("group_type") in ("Customer", "Internal"):
 		values["group_type"] = data["group_type"]
 	if data.get("organization"):
-		organization = frappe.db.get_value("CRM Organization", {"organization_name": data["organization"]})
-		values["organization"] = (
-			organization
-			or insert_as_system(
-				{"doctype": "CRM Organization", "organization_name": data["organization"]}
-			).name
+		# Only an organization that exists: a name the AI wrote is never made into a new company.
+		organization = (
+			data["organization"]
+			if frappe.db.exists("CRM Organization", data["organization"])
+			else frappe.db.get_value("CRM Organization", {"organization_name": data["organization"]})
 		)
+		if not organization:
+			frappe.throw(_("Organization {0} does not exist in the CRM").format(data["organization"]))
+		values["organization"] = organization
 	for field, doctype in (("crm_deal", "CRM Deal"), ("crm_lead", "CRM Lead")):
 		if data.get(field):
 			if not frappe.db.exists(doctype, data[field]):

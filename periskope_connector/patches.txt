@@ -12,3 +12,4 @@ periskope_connector.patches.festival_themes_on
 periskope_connector.patches.remove_crm_whatsapp_mirror
 periskope_connector.patches.test_mode_holds_all_emails
 periskope_connector.patches.shared_read_state
+periskope_connector.patches.map_groups_by_name_and_members
