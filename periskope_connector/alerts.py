@@ -16,7 +16,7 @@ from frappe import _
 from frappe.utils import escape_html, get_url_to_form
 
 from periskope_connector import safety
-from periskope_connector.reminders import get_config
+from periskope_connector.reminders import _bell_target, get_config
 
 CHAT_GAP_MINUTES = 60
 HOURLY_CAP = 20
@@ -133,8 +133,7 @@ def escalate(message: str) -> bool:
 					"type": "Alert",
 					"for_user": user,
 					"subject": subject,
-					"document_type": "Periskope Message",
-					"document_name": doc.name,
+					**_bell_target(doc.name),  # the chat: shown in the inbox's bell
 				}
 			).insert(ignore_permissions=True)
 		frappe.db.set_value("Periskope Message", message, "high_alert_sent", 1, update_modified=False)

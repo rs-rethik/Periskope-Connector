@@ -139,6 +139,14 @@ def warnings() -> list[str]:
 		found.append(
 			_("Background jobs are off on this site: messages are not tagged, reminded or recovered.")
 		)
+	from periskope_connector import push
+
+	if not push.available():
+		found.append(
+			_(
+				"Notifications on phones and computers are off: install the pywebpush package (bench setup requirements)."
+			)
+		)
 	if not frappe.db.exists("Email Account", {"default_outgoing": 1, "enable_outgoing": 1}):
 		found.append(_("No outgoing Email Account: alerts and escalations cannot be emailed."))
 	return found

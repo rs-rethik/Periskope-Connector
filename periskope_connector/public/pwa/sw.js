@@ -79,3 +79,36 @@ self.addEventListener("fetch", (event) => {
 		})
 	);
 });
+
+// Web push (push.py): a bell from the inbox while the app is closed. Only its subject and the chat
+// to open arrive, never message text. Clicking it opens (or focuses) the inbox at that chat.
+self.addEventListener("push", (event) => {
+	let data = {};
+	try {
+		data = event.data ? event.data.json() : {};
+	} catch (e) {
+		data = { title: event.data ? event.data.text() : "" };
+	}
+	event.waitUntil(
+		self.registration.showNotification(data.title || "WhatsApp inbox", {
+			tag: data.tag,
+			renotify: Boolean(data.tag),
+			icon: "/assets/periskope_connector/pwa/icon-192.png",
+			badge: "/assets/periskope_connector/pwa/icon-192.png",
+			data: { url: data.url || "/whatsapp/inbox" },
+		})
+	);
+});
+
+self.addEventListener("notificationclick", (event) => {
+	event.notification.close();
+	const url = new URL(event.notification.data?.url || "/whatsapp/inbox", self.location.origin)
+		.href;
+	event.waitUntil(
+		self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
+			const open = tabs.find((t) => t.url.startsWith(self.location.origin + "/whatsapp"));
+			if (open) return open.navigate(url).then((t) => (t || open).focus());
+			return self.clients.openWindow(url);
+		})
+	);
+});

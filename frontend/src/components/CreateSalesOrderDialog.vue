@@ -1,25 +1,43 @@
 <template>
 	<Dialog
 		v-model="show"
-		:options="{ title: created ? 'Sales order created' : 'Create sales order', size: '2xl' }"
+		:options="{
+			title: created
+				? `${created.doctype} created`
+				: kind === 'Quotation'
+				? 'Create quotation'
+				: 'Create sales order',
+			size: '2xl',
+		}"
 	>
 		<template #body-content>
 			<!-- done -->
-			<div v-if="created" class="flex items-center gap-3">
-				<span
-					class="grid size-10 place-items-center rounded-xl bg-surface-blue-2 text-ink-blue-8"
-				>
-					<LucideShoppingCart class="size-5" />
-				</span>
-				<div>
-					<div class="text-base font-semibold text-ink-gray-9">
-						{{ created.name }} (Draft)
-					</div>
-					<div class="text-sm text-ink-gray-6">
-						The message is on the order. Fill in the rest (payment terms, sales team…)
-						in ERPNext and submit it there.
+			<div v-if="created" class="flex flex-col gap-3">
+				<div class="flex items-center gap-3">
+					<span
+						class="grid size-10 place-items-center rounded-xl bg-surface-blue-2 text-ink-blue-8"
+					>
+						<LucideShoppingCart class="size-5" />
+					</span>
+					<div>
+						<div class="text-base font-semibold text-ink-gray-9">
+							{{ created.name }} (Draft)
+						</div>
+						<div class="text-sm text-ink-gray-6">
+							The message is on it. Fill in the rest in ERPNext and submit it there.
+						</div>
 					</div>
 				</div>
+				<ul
+					v-if="created.warnings?.length"
+					class="list-disc rounded-lg bg-surface-amber-1 py-2 pl-7 pr-3 text-sm text-ink-amber-8"
+				>
+					<li v-for="w in created.warnings" :key="w">{{ w }}</li>
+				</ul>
+				<p v-if="pdfSent" class="text-sm text-ink-green-7">
+					The PDF was sent in the chat.
+				</p>
+				<ErrorMessage :message="error" />
 			</div>
 
 			<div v-else class="flex flex-col gap-3">
@@ -45,6 +63,21 @@
 					<LoadingIndicator class="size-5" />
 				</div>
 				<template v-else-if="defaults">
+					<div class="flex gap-1 rounded-full bg-surface-gray-2 p-1 self-start">
+						<button
+							v-for="k in ['Sales Order', 'Quotation']"
+							:key="k"
+							class="rounded-full px-3 py-1 text-sm"
+							:class="
+								kind === k
+									? 'bg-surface-base font-medium text-ink-gray-9 shadow-sm'
+									: 'text-ink-gray-6'
+							"
+							@click="kind = k"
+						>
+							{{ k === "Quotation" ? "Quotation" : "Sales order" }}
+						</button>
+					</div>
 					<div
 						v-if="!defaults.can_create"
 						class="rounded-lg bg-surface-amber-1 px-3 py-2 text-sm text-ink-amber-8"
@@ -148,13 +181,22 @@
 								}}</span>
 							</div>
 						</div>
-						<RecordSearch doctype="Item" placeholder="Add an item" @pick="addItem" />
+						<RecordSearch
+							doctype="Item"
+							placeholder="Add an item"
+							:customer="customer?.value || ''"
+							@pick="addItem"
+						/>
 					</div>
 
 					<div class="grid grid-cols-2 gap-3">
-						<FormControl v-model="deliveryDate" type="date" label="Delivery date" />
 						<FormControl
-							v-if="defaults.series.length > 1"
+							v-model="deliveryDate"
+							type="date"
+							:label="kind === 'Quotation' ? 'Valid till' : 'Delivery date'"
+						/>
+						<FormControl
+							v-if="kind === 'Sales Order' && defaults.series.length > 1"
 							v-model="series"
 							type="select"
 							label="Naming series"
@@ -184,6 +226,13 @@
 					<Button class="flex-1" label="Close" @click="show = false" />
 					<Button
 						class="flex-1"
+						label="Send PDF in this chat"
+						:loading="sending"
+						:disabled="pdfSent"
+						@click="sendPdf"
+					/>
+					<Button
+						class="flex-1"
 						variant="solid"
 						label="Open in ERPNext"
 						@click="openOrder"
@@ -195,7 +244,11 @@
 					v-else
 					class="w-full"
 					variant="solid"
-					label="Create draft sales order"
+					:label="
+						kind === 'Quotation'
+							? 'Create draft quotation'
+							: 'Create draft sales order'
+					"
 					:loading="busy"
 					:disabled="!ready"
 					@click="create"
@@ -245,6 +298,9 @@ const lines = ref([]);
 const deliveryDate = ref("");
 const series = ref("");
 const note = ref("");
+const kind = ref("Sales Order");
+const sending = ref(false);
+const pdfSent = ref(false);
 
 const preview = computed(() => {
 	const m = props.message;
@@ -291,6 +347,8 @@ watch(
 	async (open) => {
 		if (!open || !props.chat || !props.message) return;
 		created.value = null;
+		pdfSent.value = false;
+		kind.value = "Sales Order";
 		error.value = "";
 		lines.value = [];
 		note.value = "";
@@ -318,27 +376,49 @@ async function create() {
 	busy.value = true;
 	error.value = "";
 	try {
-		created.value = await call(
-			"periskope_connector.api.sales_order.create_sales_order_from_message",
-			{
-				chat_name: props.chat.name,
-				message: props.message.name,
-				customer: customer.value.value,
-				items: lines.value.map((l) => ({
-					item_code: l.item_code,
-					qty: l.qty,
-					rate: l.rate,
-				})),
-				delivery_date: deliveryDate.value,
-				naming_series: series.value || null,
-				note: note.value,
-			}
-		);
+		const common = {
+			chat_name: props.chat.name,
+			message: props.message.name,
+			customer: customer.value.value,
+			items: lines.value.map((l) => ({ item_code: l.item_code, qty: l.qty, rate: l.rate })),
+			note: note.value,
+		};
+		created.value =
+			kind.value === "Quotation"
+				? await call("periskope_connector.api.sales_order.create_quotation_from_message", {
+						...common,
+						valid_till: deliveryDate.value,
+				  })
+				: await call(
+						"periskope_connector.api.sales_order.create_sales_order_from_message",
+						{
+							...common,
+							delivery_date: deliveryDate.value,
+							naming_series: series.value || null,
+						}
+				  );
 		emit("created", created.value);
 	} catch (e) {
-		error.value = errorText(e, "Could not create the sales order.");
+		error.value = errorText(e, `Could not create the ${kind.value.toLowerCase()}.`);
 	} finally {
 		busy.value = false;
+	}
+}
+
+async function sendPdf() {
+	sending.value = true;
+	error.value = "";
+	try {
+		await call("periskope_connector.api.sales_order.send_pdf", {
+			chat_name: props.chat.name,
+			doctype: created.value.doctype,
+			name: created.value.name,
+		});
+		pdfSent.value = true;
+	} catch (e) {
+		error.value = errorText(e, "The PDF could not be sent.");
+	} finally {
+		sending.value = false;
 	}
 }
 

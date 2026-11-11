@@ -47,8 +47,47 @@
 				<template #prefix><LucideLayoutDashboard class="size-4" /></template>
 				Full view
 			</Button>
+			<Button
+				variant="ghost"
+				:class="finding ? '!bg-surface-gray-3' : ''"
+				tooltip="Search in this chat"
+				aria-label="Search in this chat"
+				@click="toggleFind"
+			>
+				<template #icon><LucideSearch class="size-4" /></template>
+			</Button>
 			<FullView v-model="fullView" :chat="chat" />
 			<slot name="actions" />
+		</div>
+		<!-- search in this chat: the messages with the words, newest first; a click jumps there -->
+		<div
+			v-if="chat && finding"
+			ref="findBar"
+			class="border-b border-outline-gray-1 bg-surface-base px-4 py-2"
+		>
+			<TextInput
+				v-model="findText"
+				:debounce="300"
+				placeholder="Search what was written in this chat"
+			>
+				<template #prefix><LucideSearch class="size-4 text-ink-gray-5" /></template>
+			</TextInput>
+			<div v-if="findText.trim().length >= 3" class="mt-1 max-h-56 overflow-y-auto">
+				<button
+					v-for="m in findRows"
+					:key="m.name"
+					class="flex w-full gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-gray-1"
+					@click="jumpTo(m.name)"
+				>
+					<span class="shrink-0 text-xs text-ink-gray-5">{{
+						dayLabel(m.message_timestamp)
+					}}</span>
+					<span class="min-w-0 flex-1 truncate text-ink-gray-8">{{ m.snippet }}</span>
+				</button>
+				<p v-if="!findRows.length" class="px-2 py-1.5 text-sm text-ink-gray-5">
+					Nothing found.
+				</p>
+			</div>
 		</div>
 
 		<div ref="scroller" class="chat-dots flex-1 overflow-y-auto" @scroll="onScroll">
@@ -94,6 +133,12 @@
 					<CallRow v-else-if="item.kind === 'call'" :call="item.call" />
 					<MessageBubble
 						v-else
+						:data-msg="item.message.name"
+						:class="
+							flash === item.message.name
+								? 'rounded-xl ring-2 ring-outline-amber-3 transition'
+								: ''
+						"
 						:message="item.message"
 						:is-group="!!chat?.is_group"
 						:show-sender-name="showName(i)"
@@ -160,7 +205,8 @@ import {
 	watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Button, LoadingIndicator, call } from "frappe-ui";
+import { Button, LoadingIndicator, TextInput, call } from "frappe-ui";
+import LucideSearch from "~icons/lucide/search";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import { boot } from "@/boot";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
@@ -514,6 +560,56 @@ watch(
 	() => inbox.version,
 	() => {
 		if (changed(props.name)) load({ keepPosition: true, counts: viewedAlone() });
+	}
+);
+
+// --- Search in this chat, and opening the chat at one message (?msg=, from a search result) ---
+const finding = ref(false);
+const findText = ref("");
+const findRows = ref([]);
+const findBar = ref(null);
+const flash = ref("");
+const JUMP_PAGES = 20; // older pages loaded at most to reach a message
+
+function toggleFind() {
+	finding.value = !finding.value;
+	if (!finding.value) findText.value = "";
+	else nextTick(() => findBar.value?.querySelector("input")?.focus());
+}
+watch(findText, async (q) => {
+	if ((q || "").trim().length < 3) return (findRows.value = []);
+	try {
+		findRows.value = await call("periskope_connector.api.inbox.search_messages", {
+			query: q,
+			chat: props.name,
+		});
+	} catch (e) {
+		findRows.value = [];
+	}
+});
+
+// Load earlier pages until the message is there, then bring it into view and mark it a moment.
+async function jumpTo(name) {
+	for (let i = 0; i < JUMP_PAGES; i++) {
+		if (messages.value.some((m) => m.name === name)) break;
+		if (!hasMore.value) break;
+		await loadOlder();
+	}
+	await nextTick();
+	const el = scroller.value?.querySelector(`[data-msg="${CSS.escape(name)}"]`);
+	if (!el) return;
+	stuck.value = false;
+	el.scrollIntoView({ block: "center" });
+	flash.value = name;
+	setTimeout(() => flash.value === name && (flash.value = ""), 2500);
+}
+watch(
+	() => [route.query.msg, loading.value, props.name],
+	([msg, busy]) => {
+		if (msg && !busy && messages.value.length) {
+			jumpTo(String(msg));
+			router.replace({ query: { ...route.query, msg: undefined } });
+		}
 	}
 );
 watch(

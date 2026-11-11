@@ -174,6 +174,9 @@ def on_update(doc, method=None):
 			return
 		name = frappe.db.get_value("Periskope Message", {"meta_message": doc.name})
 		if not name:
+			# its copy was never made (the job was lost): make it now, then apply the update
+			name = ingest(doc.name)
+		if not name:
 			return
 		values = {}
 		ack = ACKS.get((doc.status or "").lower())
@@ -418,8 +421,47 @@ def remove_shared_files() -> int:
 	return len(old)
 
 
-def templates() -> list[dict]:
-	"""The account's approved templates that need only text values (no header file)."""
+CATCH_UP_DAYS = 2
+
+
+def catch_up() -> int:
+	"""Scheduler, hourly: copy the account's WhatsApp Messages of the last CATCH_UP_DAYS days that have
+	no copy yet (the background copy job was lost: a worker restart, a crash). Returns how many."""
+	acc = account()
+	if not acc:
+		return 0
+	wm = frappe.qb.DocType("WhatsApp Message")
+	pm = frappe.qb.DocType("Periskope Message")
+	missing = (
+		frappe.qb.from_(wm)
+		.left_join(pm)
+		.on(pm.meta_message == wm.name)
+		.select(wm.name)
+		.where(
+			(wm.whatsapp_account == acc)
+			& (wm.content_type != "reaction")
+			& (wm.creation >= frappe.utils.add_days(frappe.utils.now_datetime(), -CATCH_UP_DAYS))
+			& (wm.creation < frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-10))
+			& pm.name.isnull()
+		)
+		.orderby(wm.creation)
+		.limit(200)
+	).run(pluck=True)
+	copied = 0
+	for name in missing:
+		frappe.db.savepoint("periskope_meta_catch_up")
+		try:
+			copied += 1 if ingest(name) else 0
+		except Exception:
+			frappe.db.rollback(save_point="periskope_meta_catch_up")
+			frappe.log_error(title=f"Periskope: could not copy Meta message {name}")
+	return copied
+
+
+def templates(with_media: bool = False) -> list[dict]:
+	"""The account's approved templates. Only those that need text values (no header file), unless
+	`with_media`: then also those with an image, video or document header ("header": its type), for a
+	broadcast that attaches the file."""
 	acc = account()
 	if not acc:
 		return []
@@ -431,7 +473,8 @@ def templates() -> list[dict]:
 	)
 	out = []
 	for r in rows:
-		if (r.header_type or "TEXT").upper() not in ("", "TEXT"):
+		header = (r.header_type or "TEXT").upper()
+		if header not in ("", "TEXT") and not (with_media and header in ("IMAGE", "VIDEO", "DOCUMENT")):
 			continue
 		count = len(set(re.findall(r"\{\{(\d+)\}\}", r.template or "")))
 		out.append(
@@ -442,6 +485,7 @@ def templates() -> list[dict]:
 				"category": r.category,
 				"language": r.language_code,
 				"params": count,
+				"header": header if header not in ("", "TEXT") else "",
 			}
 		)
 	return out

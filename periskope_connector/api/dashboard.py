@@ -16,6 +16,7 @@ from statistics import median
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, get_datetime, getdate, now_datetime, nowdate
+from frappe.utils.caching import redis_cache
 
 from periskope_connector import access, numbers, sla
 from periskope_connector.api.permission import require_manager
@@ -23,6 +24,7 @@ from periskope_connector.api.permission import require_manager
 TOP_TAGS = 8
 BREACH_LIMIT = 50
 LOOKBACK_DAYS = 30
+CACHE_SECONDS = 300  # the dashboard's figures are worked out at most this often
 
 
 def _range(from_date, to_date):
@@ -60,13 +62,27 @@ def get_dashboard(
 	require_manager()
 	if not access.is_manager():
 		frappe.throw(_("The dashboard is for managers."), frappe.PermissionError)
+	args = (from_date, to_date, number, team, rep, cint(waiting_minutes) or 30)
+	# a test changes the data between calls: it always gets fresh figures
+	return _figures(*args) if frappe.flags.in_test else _cached(*args)
+
+
+@redis_cache(ttl=CACHE_SECONDS)
+def _cached(from_date, to_date, number, team, rep, waiting_minutes) -> dict:
+	"""The dashboard's figures, kept for CACHE_SECONDS: they are heavy to work out (every wait of the
+	period), and a manager reopening the page, or another manager, gets the same numbers at once."""
+	return _figures(from_date, to_date, number, team, rep, waiting_minutes)
+
+
+def _figures(from_date, to_date, number, team, rep, waiting_minutes) -> dict:
 	start, end, from_day, to_day = _range(from_date, to_date)
 	where, values = _chat_filter(number, team, rep)
 	values.update(start=start, end=end)
 	waits = _waits(start, end, where, values)
 	return {
 		"range": {"from": str(from_day), "to": str(to_day)},
-		"tiles": _tiles(where, values, waits, cint(waiting_minutes) or 30),
+		"tiles": _tiles(where, values, waits, waiting_minutes),
+		"computed_on": str(frappe.utils.now_datetime().replace(microsecond=0)),
 		"response": _summary(waits),
 		"by_rep": _grouped(waits, "responder"),
 		"by_team": _grouped(waits, "team"),

@@ -36,6 +36,7 @@ const routes = [
 		["/knowledge", "Knowledge", "Knowledge"],
 		["/scheduled", "Scheduled", "Scheduled"],
 		["/broadcasts", "Broadcasts", "Broadcasts"],
+		["/reports", "Reports", "Reports"],
 	].map(([path, name, page]) => ({
 		path,
 		name,

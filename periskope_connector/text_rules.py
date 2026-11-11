@@ -41,7 +41,7 @@ def is_single_word_statement(body: str | None) -> bool:
 
 # Skipped for these reasons, a message gets no category. Any other skipped message counts as general
 # with low severity, so it shows up in the counts and is never sent to the AI.
-NO_CATEGORY_SKIPS = {"Sent by the rep", "Group chat"}
+NO_CATEGORY_SKIPS = {"Sent by the rep", "Group chat", "Sticker"}
 
 
 def skip_fields(reason: str) -> dict:

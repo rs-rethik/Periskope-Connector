@@ -121,6 +121,14 @@ def snapshot() -> dict:
 			"human_corrections": [
 				{"ai": r.ai_category, "correct": r.correct_category, "count": r.n} for r in corrected
 			],
+			"escalations_marked_wrong_by_managers": [
+				{"tag": r.ai_category, "escalation": r.escalation, "count": r.n}
+				for r in query.counts(
+					"Periskope Message",
+					["ai_category", "escalation"],
+					{"escalation_feedback": "Wrong", "creation": [">=", since]},
+				)
+			],
 			"open_or_escalated_reminders": frappe.db.count(
 				"Periskope Reply Reminder", {"status": ["in", ["Open", "Escalated"]]}
 			),

@@ -113,9 +113,13 @@ def ensure(message) -> str | None:
 			values.pop("last_message_at", None)  # an older message linked again
 		if message.direction == "Incoming" and newest:
 			values["last_incoming_at"] = message.message_timestamp
+		if message.get("link_status") and (newest or message.get("periskope_chat") == name):
+			# More than one open deal (or lead) has this number: the best was picked, to be confirmed.
+			values["link_review"] = 1 if message.link_status == "Ambiguous" else 0
 		if frappe.db.get_value("Periskope Chat", name, "linked_by_hand"):
 			values.pop("crm_lead", None)  # chosen by hand in the inbox: kept as it is
 			values.pop("crm_deal", None)
+			values["link_review"] = 0
 		if not message.crm_lead and not message.crm_deal:
 			values.pop("crm_lead", None)
 			values.pop("crm_deal", None)

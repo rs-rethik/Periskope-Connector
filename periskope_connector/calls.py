@@ -164,6 +164,15 @@ def save(call: dict) -> str | None:
 	else:
 		insert_as_system({"doctype": DOCTYPE, "call_id": call_id, **values})
 	row = frappe.get_doc(DOCTYPE, call_id)
+	if row.has_recording and not row.recording_file and result not in LIVE_RESULTS:
+		frappe.enqueue(
+			"periskope_connector.calls.keep_recording",
+			call=call_id,
+			queue="long",
+			job_id=f"periskope_call_recording::{call_id}",
+			deduplicate=True,
+			enqueue_after_commit=True,
+		)
 	if not row.alerted and _should_alert(row):
 		_alert(row)
 	if row.periskope_chat and result not in LIVE_RESULTS:
@@ -174,6 +183,41 @@ def save(call: dict) -> str | None:
 
 		inbox_realtime.chat_changed(row.periskope_chat)
 	return call_id
+
+
+MAX_RECORDING_BYTES = 50 * 1024 * 1024
+
+
+def keep_recording(call: str) -> str | None:
+	"""Background job: save the call's recording as a private File on the call, so it plays after
+	Periskope's link (which expires) is gone. Returns the File name."""
+	from periskope_connector import attachments
+
+	row = frappe.db.get_value(DOCTYPE, call, ["name", "has_recording", "recording_file"], as_dict=True)
+	if not row or not row.has_recording or row.recording_file:
+		return row and row.recording_file
+	try:
+		url = ((request("GET", f"calls/{call}") or {}).get("recording") or {}).get("url")
+		if not url:
+			return None
+		content = attachments.download(url, MAX_RECORDING_BYTES)
+		file = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"call-{call}.wav",
+				"content": content,
+				"is_private": 1,
+				"attached_to_doctype": DOCTYPE,
+				"attached_to_name": call,
+			}
+		)
+		file.flags.ignore_permissions = True
+		file.insert()
+	except Exception:
+		frappe.log_error(title=f"Periskope: could not keep the recording of call {call}")
+		return None
+	frappe.db.set_value(DOCTYPE, call, "recording_file", file.name, update_modified=False)
+	return file.name
 
 
 def _details(call_id: str) -> dict:
@@ -196,9 +240,11 @@ def _details(call_id: str) -> dict:
 def _chat_of(number: str, chat_id: str, direction: str, values: dict) -> str | None:
 	"""The chat of the customer on that number. An incoming call from someone with no chat yet starts
 	one (as a first message does: assignment rules, territory rep). Groups and unresolved callers
-	(@lid) get none."""
-	if not chat_id or chat_id.endswith(("@lid", "@g.us")):
+	(@lid: WhatsApp hides their number) get none. A group call joins the group's chat when it has one."""
+	if not chat_id or chat_id.endswith("@lid"):
 		return None
+	if chat_id.endswith("@g.us"):
+		return chat.name_of(number, chat_id)
 	name = chat.name_of(number, chat_id)
 	if name or direction != "Incoming" or not values.get("whatsapp_number"):
 		return name

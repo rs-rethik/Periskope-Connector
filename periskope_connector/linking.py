@@ -110,32 +110,84 @@ def by_mobile(number: str | None) -> list[tuple]:
 	local = full[len(home_code()) :] if full.startswith(home_code()) else ""
 	if len(local) == NUMBER_LENGTH:
 		forms += [local, "0" + local, "0" + full]
-	filters = {"periskope_phone_e164": ["in", forms]}
-	deals = frappe.get_all("CRM Deal", filters=filters, fields=["name", "lead"], limit=50)
-	leads = frappe.get_all("CRM Lead", filters=filters, fields=["name", "converted"], limit=50)
-	return _from_deals(deals) + _from_leads(leads)
+	found = []
+	# the mobile number, then a second number in the Phone field (periskope_phone2_e164)
+	for field in ("periskope_phone_e164", "periskope_phone2_e164"):
+		filters = {field: ["in", forms]}
+		deals = frappe.get_all("CRM Deal", filters=filters, fields=["name", "lead"], limit=50)
+		leads = frappe.get_all("CRM Lead", filters=filters, fields=["name", "converted"], limit=50)
+		found += [c for c in _from_deals(deals) + _from_leads(leads) if c not in found]
+	return found
+
+
+def phone_values(mobile_no: str | None, phone: str | None) -> dict:
+	"""The normalised phone fields of a lead or deal: its main number, and the Phone field as a second
+	number when both are set and differ."""
+	main = phone_e164(mobile_no or phone)
+	second = phone_e164(phone) if mobile_no and phone else ""
+	return {
+		"periskope_phone_e164": main,
+		"periskope_phone_key": number_key(main) if main else "",
+		"periskope_phone2_e164": second if second and second != main else "",
+	}
 
 
 def update_phone_fields(doc, method: str | None = None):
 	"""Keep the normalised, indexed phone fields of a lead or deal in step with mobile_no / phone.
+	A number new on the record links its past WhatsApp messages (relink_number, in the background).
 
 	Runs as a doc_event on every save; a failure here must never stop a sales save. A save may add or
 	change an organization, so the cached list of organizations is dropped too.
 	"""
 	frappe.cache().delete_value(ORGANIZATIONS_KEY)
 	try:
-		value = phone_e164(doc.mobile_no or doc.phone)
-		frappe.db.set_value(
-			doc.doctype,
-			doc.name,
-			{
-				"periskope_phone_e164": value,
-				"periskope_phone_key": number_key(value) if value else "",
-			},
-			update_modified=False,
+		values = phone_values(doc.mobile_no, doc.phone)
+		before = (
+			frappe.db.get_value(
+				doc.doctype, doc.name, ["periskope_phone_e164", "periskope_phone2_e164"], as_dict=True
+			)
+			or {}
 		)
+		frappe.db.set_value(doc.doctype, doc.name, values, update_modified=False)
+		new = {values["periskope_phone_e164"], values["periskope_phone2_e164"]} - {
+			before.get("periskope_phone_e164"),
+			before.get("periskope_phone2_e164"),
+			"",
+			None,
+		}
+		for number in new:
+			frappe.enqueue(
+				"periskope_connector.linking.relink_number",
+				number=number,
+				queue="long",
+				enqueue_after_commit=True,
+				job_id=f"periskope_relink_number::{number}",
+				deduplicate=True,
+			)
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not set the phone fields of {doc.doctype} {doc.name}")
+
+
+def relink_number(number: str) -> int:
+	"""Background job: a lead or deal got this number. Its 1-to-1 chats' messages are linked again,
+	and its row in the contact queue is marked linked. Returns how many messages were linked."""
+	full = with_country_code(number)
+	if not full:
+		return 0
+	linked = 0
+	for chat_id in frappe.get_all(
+		"Periskope Message", filters={"contact_number": full, "is_group": 0}, pluck="chat_id", distinct=True
+	):
+		if not frappe.db.exists("Periskope Chat", {"chat_id": chat_id, "linked_by_hand": 1}):
+			linked += relink_messages(chat_id)
+	lead, deal, status = resolve(by_mobile(full))
+	if status in ("Linked", "Ambiguous"):
+		frappe.db.set_value(
+			"Periskope Contact",
+			{"phone": full, "status": "New"},
+			{"status": "Linked", "linked_lead": lead, "linked_deal": deal},
+		)
+	return linked
 
 
 def backfill_phone_fields(doctype: str, page: int = 500) -> int:
@@ -162,12 +214,8 @@ def backfill_phone_fields(doctype: str, page: int = 500) -> int:
 			if row.name in seen:
 				continue
 			seen.add(row.name)
-			value = phone_e164(row.mobile_no or row.phone)
 			frappe.db.set_value(
-				doctype,
-				row.name,
-				{"periskope_phone_e164": value, "periskope_phone_key": number_key(value)},
-				update_modified=False,
+				doctype, row.name, phone_values(row.mobile_no, row.phone), update_modified=False
 			)
 			total += 1
 		frappe.db.commit()
@@ -344,6 +392,36 @@ def ensure_group(chat_id: str, phone: str | None = None):
 	return group
 
 
+def refresh_group_name(chat_id: str, name: str) -> bool:
+	"""A group renamed in WhatsApp: the stored group and its chat rows take the new name, and a group
+	matched by its name (not set up by hand) is linked again in the background. Returns True when the
+	name changed. Never raises."""
+	try:
+		name = (name or "").strip()
+		group = frappe.db.get_value(
+			"Periskope Group",
+			{"chat_id": chat_id},
+			["name", "group_name", "organization", "crm_lead", "crm_deal"],
+			as_dict=True,
+		)
+		if not group or not name or group.group_name == name:
+			return False
+		frappe.db.set_value("Periskope Group", group.name, "group_name", name)
+		for row in frappe.get_all("Periskope Chat", filters={"chat_id": chat_id}, pluck="name"):
+			frappe.db.set_value("Periskope Chat", row, "chat_name", name, update_modified=False)
+		if not (group.organization or group.crm_lead or group.crm_deal):
+			frappe.enqueue(
+				"periskope_connector.linking.relink_messages",
+				chat_id=chat_id,
+				queue="long",
+				enqueue_after_commit=True,
+			)
+		return True
+	except Exception:
+		frappe.log_error(title=f"Periskope: could not rename group {chat_id}")
+		return False
+
+
 # --- Linking -----------------------------------------------------------------------------------------
 
 
@@ -444,6 +522,7 @@ CHAT_FIELDS = [
 	"message_timestamp",
 	"crm_lead",
 	"crm_deal",
+	"link_status",
 ]
 
 
@@ -527,11 +606,14 @@ def relink_group(group: str, user: str | None = None):
 	)
 
 
-def link_unlinked(limit: int = 5000) -> int:
-	"""Link messages that have no link yet or could not be matched earlier.
-	Run with: bench --site <site> execute periskope_connector.linking.link_unlinked"""
+def link_unlinked(limit: int = 5000, days: int | None = None) -> int:
+	"""Link messages that have no link yet or could not be matched earlier (a lead made since, a
+	number added in the CRM). Scheduler, daily: the last LINK_AGAIN_DAYS days; by hand, everything:
+	bench --site <site> execute periskope_connector.linking.link_unlinked"""
+	filters = {"creation": [">=", frappe.utils.add_days(frappe.utils.now_datetime(), -days)]} if days else {}
 	names = frappe.get_all(
 		"Periskope Message",
+		filters=filters,
 		or_filters=[["link_status", "is", "not set"], ["link_status", "in", ["No Match", "Internal"]]],
 		pluck="name",
 		order_by="creation asc",
@@ -540,3 +622,11 @@ def link_unlinked(limit: int = 5000) -> int:
 	for name in names:
 		link_message(name)
 	return len(names)
+
+
+LINK_AGAIN_DAYS = 30
+
+
+def link_unlinked_daily() -> int:
+	"""Scheduler, daily: link_unlinked over the last LINK_AGAIN_DAYS days."""
+	return link_unlinked(limit=3000, days=LINK_AGAIN_DAYS)

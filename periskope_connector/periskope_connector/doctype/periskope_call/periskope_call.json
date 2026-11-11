@@ -24,6 +24,7 @@
   "transcript",
   "has_recording",
   "recording_duration",
+  "recording_file",
   "section_crm",
   "crm_call_log",
   "alerted"
@@ -139,6 +140,14 @@
    "label": "Recording Duration (seconds)"
   },
   {
+   "fieldname": "recording_file",
+   "fieldtype": "Link",
+   "options": "File",
+   "label": "Recording (kept here)",
+   "read_only": 1,
+   "description": "A copy of the recording saved on this site, so it can be played after Periskope's link expires."
+  },
+  {
    "fieldname": "section_crm",
    "fieldtype": "Section Break",
    "label": "CRM"
@@ -159,7 +168,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-03 13:30:00.000000",
+ "modified": "2026-11-11 18:34:32.911237",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Call",
