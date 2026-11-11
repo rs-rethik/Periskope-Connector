@@ -49,7 +49,15 @@ def _to_site_datetime(value: str | None):
 	return dt.astimezone(pytz.timezone(get_system_timezone())).replace(tzinfo=None)
 
 
-MEDIA_TYPES = {"image": "image", "video": "video", "document": "document", "audio": "audio", "ptt": "audio"}
+# A sticker is a small picture: shown and kept as an image (never sent to the AI).
+MEDIA_TYPES = {
+	"image": "image",
+	"sticker": "image",
+	"video": "video",
+	"document": "document",
+	"audio": "audio",
+	"ptt": "audio",
+}
 # Shared items the inbox shows from the saved payload (shared_items.py).
 SHARED_TYPES = {"location": "location", "vcard": "contact", "multi_vcard": "contact", "poll_creation": "poll"}
 
@@ -122,6 +130,8 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	has_words = kind == "text" or (kind in ("image", "document", "video") and bool(body))
 	if from_me:
 		skip = "Sent by the rep"  # only the customer's messages are classified
+	elif (data.get("message_type") or "").lower() == "sticker":
+		skip = "Sticker"
 	elif readable_file and not body:
 		skip = None
 	else:

@@ -33,6 +33,17 @@ CUSTOM_FIELDS = {
 			search_index=1,
 			print_hide=1,
 		),
+		dict(
+			fieldname="periskope_phone2_e164",
+			label="Periskope Second Phone (E.164)",
+			fieldtype="Data",
+			insert_after="periskope_phone_key",
+			read_only=1,
+			hidden=1,
+			search_index=1,
+			print_hide=1,
+			description="The Phone field when it is a second number beside the Mobile number.",
+		),
 	],
 	"CRM Deal": [
 		# the WhatsApp message a rep made this deal from (api/crm_panel.create_deal_from_message)
@@ -65,6 +76,17 @@ CUSTOM_FIELDS = {
 			search_index=1,
 			print_hide=1,
 		),
+		dict(
+			fieldname="periskope_phone2_e164",
+			label="Periskope Second Phone (E.164)",
+			fieldtype="Data",
+			insert_after="periskope_phone_key",
+			read_only=1,
+			hidden=1,
+			search_index=1,
+			print_hide=1,
+			description="The Phone field when it is a second number beside the Mobile number.",
+		),
 	],
 }
 
@@ -96,8 +118,29 @@ ERPNEXT_CUSTOM_FIELDS = {
 }
 
 
+# Where ERPNext is installed: the company each WhatsApp number belongs to, for the orders and
+# quotations made from its chats (api/sales_order.py). One site serves one company's sales team; with
+# more than one company on a site, set it per number.
+COMPANY_FIELD = {
+	"WhatsApp Number": [
+		dict(
+			fieldname="company",
+			label="Company",
+			fieldtype="Link",
+			options="Company",
+			insert_after="display_name",
+			description="Orders and quotations made from this number's chats are for this company "
+			"(empty: the user's default company).",
+		),
+	],
+}
+
+
 def _erpnext_fields() -> dict:
-	return {dt: fields for dt, fields in ERPNEXT_CUSTOM_FIELDS.items() if frappe.db.exists("DocType", dt)}
+	fields = {dt: f for dt, f in ERPNEXT_CUSTOM_FIELDS.items() if frappe.db.exists("DocType", dt)}
+	if frappe.db.exists("DocType", "Company"):
+		fields.update(COMPANY_FIELD)
+	return fields
 
 
 def _ensure_custom_fields():
@@ -119,6 +162,7 @@ def setup():
 		_ensure_crm_ui,
 		_ensure_phone_fields,
 		_ensure_crm_indexes,
+		_ensure_message_search,
 	):
 		try:
 			step()
@@ -151,6 +195,18 @@ def _ensure_crm_indexes():
 	frappe.db.add_index(
 		"Periskope Message", ["org_phone", "message_timestamp"], index_name="periskope_phone_time"
 	)
+
+
+def _ensure_message_search():
+	"""A full-text index on the message text and voice-note transcripts, for searching what customers
+	wrote (api/inbox.search_messages). Raw SQL: the query builder cannot make a FULLTEXT index, and
+	frappe.db.add_index makes ordinary ones only. Safe to run again."""
+	table = "tabPeriskope Message"
+	have = frappe.db.sql(f"show index from `{table}` where Key_name = %s", ("periskope_text_search",))
+	if not have:
+		frappe.db.sql_ddl(
+			f"alter table `{table}` add fulltext index periskope_text_search (body, transcript)"
+		)
 
 
 def before_uninstall():

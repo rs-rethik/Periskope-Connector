@@ -150,28 +150,58 @@ def run(chat_id: str, force: bool = False) -> dict:
 	done = {"summary": None, "notes": 0, "task": None, "status": "", "organization": None}
 	if context:
 		s = result.get("summary") or {}
-		done["summary"] = writeback.summary(
-			chat_id, s.get("wants", ""), s.get("answered", ""), s.get("pending", "")
+		done["summary"] = _step(
+			chat_id,
+			"summary",
+			lambda: writeback.summary(
+				chat_id, s.get("wants", ""), s.get("answered", ""), s.get("pending", "")
+			),
 		)
 		for note in (result.get("notes") or [])[:MAX_NOTES]:
-			if writeback.upsert_note(chat_id, note.get("topic"), note.get("text")):
+			if _step(
+				chat_id, "note", lambda n=note: writeback.upsert_note(chat_id, n.get("topic"), n.get("text"))
+			):
 				done["notes"] += 1
 		follow = result.get("follow_up") or {}
 		if follow.get("needed") and (follow.get("title") or "").strip():
 			hours = min(max(_hours(follow.get("due_in_hours")), 1), 72)
-			done["task"] = writeback.upsert_task(
+			done["task"] = _step(
 				chat_id,
-				"follow_up",
-				follow["title"],
-				follow.get("reason", ""),
-				due=add_to_date(now_datetime(), hours=hours),
-				priority=follow.get("priority")
-				if follow.get("priority") in ("Low", "Medium", "High")
-				else "Medium",
+				"task",
+				lambda: writeback.upsert_task(
+					chat_id,
+					"follow_up",
+					follow["title"],
+					follow.get("reason", ""),
+					due=add_to_date(now_datetime(), hours=hours),
+					priority=follow.get("priority")
+					if follow.get("priority") in ("Low", "Medium", "High")
+					else "Medium",
+				),
 			)
 		status = result.get("status") or {}
 		if status.get("change") and status.get("to") in statuses:
-			done["status"] = writeback.set_status(chat_id, status["to"], status.get("reason", ""))
+			done["status"] = (
+				_step(
+					chat_id,
+					"status",
+					lambda: writeback.set_status(chat_id, status["to"], status.get("reason", "")),
+				)
+				or ""
+			)
 	if (result.get("organization") or "").strip():
-		done["organization"] = writeback.link_organization(chat_id, result["organization"])
+		done["organization"] = _step(
+			chat_id, "organization", lambda: writeback.link_organization(chat_id, result["organization"])
+		)
 	return done
+
+
+def _step(chat_id: str, what: str, write):
+	"""One CRM write of the analysis. A failing one is undone and logged, and the others still run."""
+	frappe.db.savepoint("periskope_analyse_step")
+	try:
+		return write()
+	except Exception:
+		frappe.db.rollback(save_point="periskope_analyse_step")
+		frappe.log_error(title=f"Periskope: could not write the {what} of chat {chat_id}")
+		return None

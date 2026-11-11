@@ -11,6 +11,7 @@ export const QUICK_FILTERS = [
 	{ key: "unread", label: "Unread", filters: { unread: 1 } },
 	{ key: "breached", label: "SLA breached", filters: { sla: "breached" } },
 	{ key: "my_team", label: "My team", filters: { status: "active", my_team: 1 } },
+	{ key: "review", label: "Check CRM link", filters: { status: "active", review: 1 } },
 ];
 
 // The sidebar's choice (quick filter + number) is shared by the chat view and the list view, so

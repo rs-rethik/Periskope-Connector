@@ -85,7 +85,10 @@
 		</Dropdown>
 
 		<!-- a customer who asked for no broadcasts -->
-		<Dropdown v-if="!compact && !chat.is_group" :options="[broadcastOption]">
+		<Dropdown
+			v-if="!compact && !chat.is_group"
+			:options="[broadcastOption, ...privacyOptions]"
+		>
 			<Button
 				size="sm"
 				variant="ghost"
@@ -103,6 +106,8 @@
 				</template>
 			</Button>
 		</Dropdown>
+
+		<PrivacyDialog v-if="privacyOpen" v-model="privacyOpen" :number="chat.contact_number" />
 
 		<!-- a phone: everything but the status, in one menu -->
 		<Dropdown v-if="compact" :options="moreOptions" @update:open="(o) => o && loadPeople()">
@@ -130,7 +135,9 @@ import LucideBot from "~icons/lucide/bot";
 import LucideBotOff from "~icons/lucide/bot-off";
 import LucideMegaphone from "~icons/lucide/megaphone";
 import LucideMegaphoneOff from "~icons/lucide/megaphone-off";
+import LucideShieldUser from "~icons/lucide/shield-user";
 import SlaBadge from "@/components/SlaBadge.vue";
+const PrivacyDialog = defineAsyncComponent(() => import("@/components/PrivacyDialog.vue"));
 import { boot } from "@/boot";
 import { inbox, loadTeams } from "@/stores/inbox";
 
@@ -298,9 +305,23 @@ const moreOptions = computed(() => [
 		icon: props.chat.ai_off ? LucideBotOff : LucideBot,
 		onClick: toggleAi,
 	},
-	...(props.chat.is_group ? [] : [broadcastOption.value]),
+	...(props.chat.is_group ? [] : [broadcastOption.value, ...privacyOptions.value]),
 	...props.more,
 ]);
+
+// A privacy request: download or erase this customer's WhatsApp data (managers).
+const privacyOpen = ref(false);
+const privacyOptions = computed(() =>
+	boot.is_manager && props.chat.contact_number
+		? [
+				{
+					label: "This customer's data…",
+					icon: LucideShieldUser,
+					onClick: () => (privacyOpen.value = true),
+				},
+		  ]
+		: []
+);
 
 // The customer asked for no broadcasts (also set when they write STOP), or agreed to them again.
 const broadcastOption = computed(() => ({

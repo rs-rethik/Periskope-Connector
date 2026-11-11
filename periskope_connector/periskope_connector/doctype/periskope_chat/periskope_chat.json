@@ -24,6 +24,7 @@
   "organization",
   "summary_note",
   "linked_by_hand",
+  "link_review",
   "linked_by",
   "section_inbox",
   "last_message_preview",
@@ -190,6 +191,15 @@
    "description": "Someone chose this lead or deal in the inbox; the automatic match by number no longer changes it."
   },
   {
+   "default": "0",
+   "fieldname": "link_review",
+   "fieldtype": "Check",
+   "label": "Check the CRM Link",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The number matches more than one open deal (or lead): the best one was picked; a person should confirm it or choose another in the CRM panel."
+  },
+  {
    "fieldname": "linked_by",
    "fieldtype": "Link",
    "options": "User",
@@ -330,7 +340,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-11 17:45:34.420939",
+ "modified": "2026-11-11 18:23:44.577613",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

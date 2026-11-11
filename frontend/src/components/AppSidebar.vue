@@ -175,6 +175,8 @@ import LucideUserX from "~icons/lucide/user-x";
 import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
 import LucideMail from "~icons/lucide/mail";
 import LucideTimerOff from "~icons/lucide/timer-off";
+import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideLink2Off from "~icons/lucide/link-2-off";
 import LucideUsersRound from "~icons/lucide/users-round";
 import LucideBookmark from "~icons/lucide/bookmark";
 import LucideBookmarkCheck from "~icons/lucide/bookmark-check";
@@ -237,6 +239,12 @@ const manage = [
 		active: (r) => r.name === "Knowledge",
 	},
 	{
+		label: "Reports",
+		icon: LucideFileChartColumn,
+		to: { name: "Reports" },
+		active: (r) => r.name === "Reports",
+	},
+	{
 		label: "Health and flow",
 		icon: LucideActivity,
 		to: { name: "Health" },
@@ -265,6 +273,7 @@ const filterIcons = {
 	unread: LucideMail,
 	breached: LucideTimerOff,
 	my_team: LucideUsersRound,
+	review: LucideLink2Off,
 };
 
 // Views and numbers filter the chat list, so on any other page (Health, Flow, ...) a click opens

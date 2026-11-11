@@ -379,7 +379,10 @@ const phoneActions = computed(() => {
 		});
 	return out;
 });
-const hasMenu = computed(() => !!props.chat && (canAct.value || phoneActions.value.length > 0));
+// a customer's message always has one: "What the AI decided" (MessageMenu)
+const hasMenu = computed(
+	() => !!props.chat && (canAct.value || phoneActions.value.length > 0 || !outgoing.value)
+);
 // A reply quotes a message WhatsApp knows: not one still being sent or that never went.
 const canReply = computed(
 	() =>

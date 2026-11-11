@@ -143,6 +143,7 @@ Have these ready. Setup takes about fifteen minutes.
 | An Anthropic API key | The AI agent runs on it. Without it messages are captured and linked, but nothing is decided. |
 | An outgoing Email Account on the site | Alerts and escalations are sent by email. Without one they fail and are logged in the Error Log. |
 | The Frappe scheduler and a worker running | The AI analysis, saving files, auto reply, reminders and the hourly catch-up run as background jobs. |
+| One company per site | Every manager sees every chat on the site. With ERPNext, set the **Company** on each WhatsApp Number so orders and quotations from its chats go to that company; separate businesses whose managers must not see each other's chats need separate sites. |
 
 > **Important** The key, the signing secret and the Anthropic key are secrets. Enter them in the settings form yourself and do not share them.
 
@@ -430,7 +431,7 @@ Managers open **Dashboard** in the `/whatsapp` sidebar. Filter it by period (tod
 - **Volume:** pending and resolved chats, messages received and sent, leads from WhatsApp and how many became deals; messages per day and per AI tag.
 - **People:** a leaderboard per rep, and the list of SLA breaches (click one to open the chat).
 
-**Reports** in the sidebar runs each report below with its filters. **Logs** opens the lists of what the agent did (Agent Actions, Agent Runs, AI Usage, Webhook Log, Auto Replies, Reply Reminders).
+**Reports** in the `/whatsapp` sidebar runs each report below for a date range and downloads it as CSV, without Desk (managers; a report opens for the roles it allows). The dashboard's figures are worked out at most every 5 minutes. To get a report by email regularly, set up an *Auto Email Report* for it in Desk. **Logs** opens the lists of what the agent did (Agent Actions, Agent Runs, AI Usage, Webhook Log, Auto Replies, Reply Reminders).
 
 | Report | What it answers |
 |---|---|
@@ -441,6 +442,8 @@ Managers open **Dashboard** in the `/whatsapp` sidebar. Filter it by period (tod
 | AI Usage | Tokens used per day and model. |
 | Sync Health | Messages per company number, to spot a silent number. |
 | Unmatched Numbers | Numbers and groups that could not be linked to a lead or deal. |
+| WhatsApp Funnel | WhatsApp leads per owner: how many became deals, were won, and the value of the sales orders made from them. |
+| Auto Reply Quality | How often the AI could answer customers itself, per rep, and how sure it was. |
 
 ![Open Escalations.](docs/manual/27-open-escalations.jpg)
 *Open Escalations.*
@@ -528,6 +531,8 @@ Low: ordinary. Medium: a real problem that is not yet serious. High: an angry cu
 ## Privacy
 
 The AI agent sends message text, images and PDFs (and, for a reply, the matching item, price and order data) to the AI provider. Message text is sent to the AI provider you configure — Anthropic by default; the GLM/Z.ai and Jarvis options send it to those providers instead, so choose them only if that fits your policy. Only company numbers linked in Periskope are captured; personal or mixed-use numbers can be excluded on the ignore list, and staff should be told that business WhatsApp numbers are monitored for record-keeping. Raw webhook payloads are cleared after 90 days; message text and files are kept. Under India's DPDP Act 2023 the operator remains the data fiduciary for this processing.
+
+**A person's own data.** A manager opens a chat's ⋮ menu > *This customer's data…* to download everything the app keeps for that number (messages, calls and files, as a zip) or to erase it: the chats, messages, files, calls and what the AI wrote from them. The CRM lead or deal stays (erase it in the CRM if the request covers it). Each erase is recorded in *Periskope Erasure Log* (who, when, why, how much) without the number.
 
 ## Roadmap
 

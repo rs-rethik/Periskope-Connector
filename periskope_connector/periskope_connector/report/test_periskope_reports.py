@@ -12,6 +12,8 @@ REPORTS = {
 	"Periskope Sync Health",
 	"Periskope Tagging Review",
 	"Periskope Unmatched Numbers",
+	"Periskope WhatsApp Funnel",
+	"Periskope Auto Reply Quality",
 }
 
 

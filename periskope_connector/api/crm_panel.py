@@ -28,6 +28,7 @@ CHAT_FIELDS = [
 	"summary_note",
 	"linked_by_hand",
 	"organization",
+	"whatsapp_number",
 ]
 
 
@@ -383,6 +384,8 @@ def _relink(row, lead: str | None, deal: str | None, by_hand: bool):
 			"crm_deal": deal,
 			"linked_by_hand": 1 if by_hand else 0,
 			"linked_by": frappe.session.user if by_hand else None,
+			# a person chose (or confirmed) the record: nothing left to check
+			**({"link_review": 0} if by_hand else {}),
 		},
 	)
 	from periskope_connector import workflow

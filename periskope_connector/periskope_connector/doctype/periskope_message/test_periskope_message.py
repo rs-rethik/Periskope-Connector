@@ -209,7 +209,7 @@ class TestPeriskopeMessage(FrappeTestCase):
 			("vcard", "contact"),
 			("multi_vcard", "contact"),
 			("poll_creation", "poll"),
-			("sticker", "other"),
+			("sticker", "image"),  # a sticker is kept and shown as a picture
 		):
 			doc = frappe.get_doc(
 				"Periskope Message",
@@ -325,8 +325,10 @@ class TestEscalationAlert(FrappeTestCase):
 		self.assertEqual(kwargs["recipients"], [self.email])
 		self.assertIn("Angry about torn fabric", kwargs["subject"])
 		self.assertIn("&lt;b&gt;now&lt;/b&gt;", kwargs["message"])  # customer text is escaped
+		# the bell points at the chat (shown in the inbox's bell), or at the message when it has none
+		chat = frappe.db.get_value("Periskope Message", name, "periskope_chat")
 		self.assertTrue(
-			frappe.db.exists("Notification Log", {"for_user": "Administrator", "document_name": name})
+			frappe.db.exists("Notification Log", {"for_user": "Administrator", "document_name": chat or name})
 		)
 		self.assertEqual(frappe.db.get_value("Periskope Message", name, "high_alert_sent"), 1)
 		self.assertFalse(alerts.escalate(name))  # not a second time
@@ -1251,8 +1253,10 @@ class TestClassify(FrappeTestCase):
 			row = frappe.db.get_value(
 				"Periskope Message", doc.name, ["classification_status", "classification_error"], as_dict=True
 			)
+			# a sticker is shown as a picture now, and never sent to the AI either
+			expected = "Sticker" if kind == "sticker" else "Not a text message"
 			self.assertEqual(
-				(row.classification_status, row.classification_error), ("Skipped", "Not a text message"), kind
+				(row.classification_status, row.classification_error), ("Skipped", expected), kind
 			)
 
 	def test_a_caption_is_tagged_and_a_bare_photo_is_not(self):

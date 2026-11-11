@@ -158,6 +158,13 @@
 							size="sm"
 						/>
 						<Badge
+							v-if="c.link_review"
+							label="Check CRM link"
+							variant="subtle"
+							theme="orange"
+							size="sm"
+						/>
+						<Badge
 							v-if="c.status !== 'Open'"
 							:label="c.status"
 							variant="subtle"
@@ -182,6 +189,29 @@
 				</div>
 			</button>
 
+			<!-- what was written: the messages that have the searched words -->
+			<div v-if="found.length" class="mt-2 border-t border-outline-gray-1 pt-2">
+				<div class="px-3 pb-1 text-xs font-medium uppercase text-ink-gray-5">
+					In messages
+				</div>
+				<button
+					v-for="m in found"
+					:key="m.name"
+					class="mb-0.5 flex w-full flex-col rounded-xl px-3 py-2 text-left hover:bg-surface-gray-1"
+					@click="openFound(m)"
+				>
+					<span class="flex items-center gap-2">
+						<span class="truncate text-sm font-medium text-ink-gray-8">{{
+							m.title
+						}}</span>
+						<span class="ml-auto shrink-0 text-xs text-ink-gray-5">{{
+							listTime(m.message_timestamp)
+						}}</span>
+					</span>
+					<span class="line-clamp-2 text-sm text-ink-gray-6">{{ m.snippet }}</span>
+				</button>
+			</div>
+
 			<div v-if="loading && (!chats.length || appending)" class="flex justify-center p-4">
 				<LoadingIndicator class="size-5" />
 			</div>
@@ -204,6 +234,7 @@
 
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { Badge, Button, Dropdown, LoadingIndicator, TextInput, Tooltip, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import LucideSearch from "~icons/lucide/search";
@@ -226,6 +257,7 @@ const NewGroupDialog = defineAsyncComponent(() => import("@/components/NewGroupD
 const JoinGroupDialog = defineAsyncComponent(() => import("@/components/JoinGroupDialog.vue"));
 
 const props = defineProps({ selected: { type: String, default: "" } });
+const router = useRouter();
 const emit = defineEmits(["select"]);
 
 // Opening a chat reads it: show that at once rather than after the next live update.
@@ -332,6 +364,26 @@ watch(
 	() => inbox.version,
 	() => load()
 );
+
+// The messages that have the searched words (3 letters or more), under the chats.
+const found = ref([]);
+let findTicket = 0;
+watch(search, async (q) => {
+	const ticket = ++findTicket;
+	if ((q || "").trim().length < 3) {
+		found.value = [];
+		return;
+	}
+	try {
+		const rows = await call("periskope_connector.api.inbox.search_messages", { query: q });
+		if (ticket === findTicket) found.value = rows || [];
+	} catch (e) {
+		if (ticket === findTicket) found.value = [];
+	}
+});
+function openFound(m) {
+	router.push({ name: "Inbox", params: { chat: m.chat }, query: { msg: m.name } });
+}
 onMounted(() => load());
 
 defineExpose({ chats, reload: load });

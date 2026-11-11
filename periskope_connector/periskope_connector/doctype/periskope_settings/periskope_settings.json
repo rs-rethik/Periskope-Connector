@@ -40,6 +40,9 @@
   "section_agent",
   "enable_auto_reply",
   "reply_delay_minutes",
+  "auto_reply_hours",
+  "auto_reply_daily_limit",
+  "holding_message",
   "welcome_new_numbers",
   "column_agent",
   "working_hours_start",
@@ -91,6 +94,8 @@
   "reminder_levels",
   "section_broadcasts",
   "broadcast_daily_limit",
+  "vapid_public_key",
+  "vapid_private_key",
   "section_voice",
   "gemini_api_key",
   "column_voice",
@@ -313,6 +318,31 @@
    "default": "15",
    "description": "",
    "depends_on": "enable_auto_reply"
+  },
+  {
+   "default": "Working hours only",
+   "fieldname": "auto_reply_hours",
+   "fieldtype": "Select",
+   "label": "Reply When",
+   "options": "Working hours only\nAny time",
+   "depends_on": "enable_auto_reply",
+   "description": "Working hours only: a message that comes at night is answered at the start of the next working day (if no rep has answered by then)."
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_reply_daily_limit",
+   "fieldtype": "Int",
+   "label": "AI Replies per Chat per Day",
+   "non_negative": 1,
+   "depends_on": "enable_auto_reply",
+   "description": "After this many AI replies in one chat in a day, the rep gets a task instead of another AI reply. 0: no limit."
+  },
+  {
+   "fieldname": "holding_message",
+   "fieldtype": "Small Text",
+   "label": "Holding Message",
+   "depends_on": "enable_auto_reply",
+   "description": "Sent when the AI cannot write its own holding reply (no AI key, budget used up). Empty: an English and Tamil message saying the sales team will contact them shortly."
   },
   {
    "fieldname": "welcome_new_numbers",
@@ -621,6 +651,20 @@
    "non_negative": 1
   },
   {
+   "fieldname": "vapid_public_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "read_only": 1,
+   "label": "Push Public Key",
+   "description": "Made by the app for web push notifications."
+  },
+  {
+   "fieldname": "vapid_private_key",
+   "fieldtype": "Password",
+   "hidden": 1,
+   "label": "Push Private Key"
+  },
+  {
    "fieldname": "section_voice",
    "fieldtype": "Section Break",
    "label": "Voice Notes",
@@ -660,7 +704,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-11 17:44:38.097879",
+ "modified": "2026-11-11 18:25:43.938575",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

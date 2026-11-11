@@ -54,7 +54,10 @@ MESSAGE_FIELDS = [
 ]
 # What a sent row makes of its WhatsApp copy (Periskope Message.agent_reply).
 AGENT_REPLY = {"Sent": "Answer", "Holding Sent": "Holding", "Welcome Sent": "Welcome"}
-DEFAULT_HOLDING = "Thanks for reaching out! We've noted your request, and our sales representative will contact you shortly."
+# Sent when the AI cannot write its own holding reply (no key, budget out): both languages, since
+# the customer's cannot be read without the AI. Periskope Settings.holding_message replaces it.
+DEFAULT_HOLDING = "Thanks for reaching out! Our sales team will contact you shortly.\nதொடர்பு கொண்டதற்கு நன்றி! எங்கள் விற்பனைக் குழு விரைவில் உங்களைத் தொடர்பு கொள்ளும்."
+WORKING_HOURS_ONLY = "Working hours only"
 
 
 def _settings():
@@ -65,6 +68,27 @@ def delay_for(settings) -> timedelta:
 	"""How long a rep has to answer before the AI does."""
 	minutes = settings.reply_delay_minutes
 	return timedelta(minutes=max(float(DEFAULT_DELAY_MINUTES if minutes is None else minutes), 0))
+
+
+def holding_text(settings) -> str:
+	return (settings.get("holding_message") or "").strip() or DEFAULT_HOLDING
+
+
+def due_time(settings, now=None):
+	"""When a reply to a message arriving now is due: after the delay, and with "Working hours only"
+	not before the next working moment (a night message is answered in the morning)."""
+	due = (now or now_datetime()) + delay_for(settings)
+	if (settings.get("auto_reply_hours") or WORKING_HOURS_ONLY) != WORKING_HOURS_ONLY:
+		return due
+	return reminders.next_working_moment(due, reminders.get_config(settings))
+
+
+def _replies_today(chat_id: str) -> int:
+	midnight = now_datetime().replace(hour=0, minute=0, second=0, microsecond=0)
+	return frappe.db.count(
+		"Periskope Auto Reply",
+		{"chat_id": chat_id, "status": ["in", ["Sent", "Holding Sent"]], "sent_on": [">=", midnight]},
+	)
 
 
 def on_message(doc) -> str:
@@ -91,6 +115,10 @@ def schedule(doc) -> str:
 		return ""  # never in a group: the team talks there
 	if not readable_text(doc) or not reminders.needs_reply(doc):
 		return ""  # nothing to answer yet (a voice note is scheduled once it is transcribed)
+	from periskope_connector.api.broadcast import is_stop
+
+	if is_stop(doc.body):
+		return ""  # "STOP": not answered (the customer gets no broadcasts from now on)
 	if doc.message_timestamp and get_datetime(doc.message_timestamp) < now_datetime() - timedelta(
 		minutes=FRESH_MINUTES
 	):
@@ -109,7 +137,7 @@ def schedule(doc) -> str:
 			"chat_id": doc.chat_id,
 			"contact_number": doc.contact_number,
 			"status": "Waiting",
-			"due_on": now_datetime() + delay_for(settings),
+			"due_on": due_time(settings),
 			**values,
 		}
 	)
@@ -337,6 +365,11 @@ def process(name: str) -> str:
 		"sources": [],
 		"holding": "",
 	}
+	limit = frappe.utils.cint(settings.get("auto_reply_daily_limit"))  # 0: no limit
+	if limit and _replies_today(row.chat_id) >= limit:
+		# Enough AI replies in this chat today: a person takes over (the rep's follow-up task).
+		frappe.db.set_value("Periskope Auto Reply", name, "follow_up", _follow_up(row, pending, rep))
+		return end("Skipped", _("{0} AI replies in this chat today: left to the rep").format(limit))
 	ready, reason = assistant.readiness()
 	if not ready:
 		# No AI call at all: the customer gets the holding message, the rep a task, the admin one email.
@@ -353,7 +386,7 @@ def process(name: str) -> str:
 	if not confident and held_before:
 		# The customer was already told a rep will come back; do not repeat it.
 		return end("Skipped", _("The holding message was already sent"))
-	text = result["answer"] if confident else (result.get("holding") or DEFAULT_HOLDING)
+	text = result["answer"] if confident else (result.get("holding") or holding_text(settings))
 	status = "Sent" if confident else "Holding Sent"
 
 	# A rep may have written while the answer was prepared.
