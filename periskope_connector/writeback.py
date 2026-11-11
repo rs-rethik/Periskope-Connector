@@ -425,4 +425,4 @@ def on_task_update(doc, method=None):
 
 	reminder = reminders._open_reminder(key.split("|", 1)[0])
 	if reminder:
-		reminders.close(reminder, now_datetime())
+		reminders.close(reminder, now_datetime(), handled=True)

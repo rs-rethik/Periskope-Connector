@@ -17,6 +17,9 @@ from periskope_connector.system import insert_as_system
 
 MAX_BYTES = 15 * 1024 * 1024
 TIMEOUT = 60
+MAX_ATTEMPTS = 3  # a voice note whose transcription fails is tried again (retry_failed) this often
+RETRY_DAYS = 2
+GAVE_UP = "Voice note could not be transcribed"
 DEFAULT_MODEL = "gemini-2.5-flash"
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 PROMPT = (
@@ -55,6 +58,48 @@ def _download(url: str) -> tuple[bytes, str]:
 			if len(data) > MAX_BYTES:
 				raise ValueError("The voice note is too large to transcribe")
 		return data, (response.headers.get("content-type") or "audio/ogg").split(";")[0]
+
+
+def _audio(doc) -> tuple[bytes, str]:
+	"""The voice note, from a fresh link when the saved one has expired."""
+	try:
+		return _download(doc.media_path)
+	except requests.RequestException:
+		from periskope_connector.api.message_actions import fresh_media_path
+
+		fresh = doc.message_id and fresh_media_path(doc.message_id, doc.whatsapp_number or doc.org_phone)
+		if not fresh or fresh == doc.media_path:
+			raise
+		frappe.db.set_value("Periskope Message", doc.name, "media_path", fresh, update_modified=False)
+		return _download(fresh)
+
+
+def retry_failed() -> int:
+	"""Scheduler, every 30 minutes: transcribe again the customers' voice notes of the last RETRY_DAYS
+	days that have no transcript yet (a Gemini error, a link that expired, a job that never ran), up to
+	MAX_ATTEMPTS tries. Returns how many were queued."""
+	if not configured():
+		return 0
+	now = frappe.utils.now_datetime()
+	names = frappe.get_all(
+		"Periskope Message",
+		filters={
+			"message_type": "audio",
+			"direction": "Incoming",
+			"transcript": ["is", "not set"],
+			"media_path": ["like", "http%"],
+			"transcript_attempts": ["<", MAX_ATTEMPTS],
+			"creation": [
+				"between",
+				[frappe.utils.add_days(now, -RETRY_DAYS), frappe.utils.add_to_date(now, minutes=-30)],
+			],
+		},
+		pluck="name",
+		limit=100,
+	)
+	for name in names:
+		queue(name)
+	return len(names)
 
 
 def _record_usage(message: str, model: str, usage: dict, started: float, error: str = ""):
@@ -125,9 +170,23 @@ def run(message: str) -> str:
 		health.notify_admin_once(reason)
 		return ""
 	try:
-		audio, mime = _download(doc.media_path)
+		audio, mime = _audio(doc)
 		text = transcribe(audio, mime, message)
 	except Exception:
+		# Kept for retry_failed; after the last try it shows among the failed messages.
+		attempts = (doc.transcript_attempts or 0) + 1
+		values = {"transcript_attempts": attempts}
+		if attempts >= MAX_ATTEMPTS and doc.direction == "Incoming":
+			from periskope_connector.ai.classifier import MAX_ATTEMPTS as TAG_ATTEMPTS
+
+			# Failed, but not tagged from "[voice note]" alone: a manager can retry it (failed list).
+			values.update(
+				classification_status="Failed",
+				classification_error=GAVE_UP,
+				classification_attempts=TAG_ATTEMPTS,
+			)
+		frappe.db.set_value("Periskope Message", message, values, update_modified=False)
+		frappe.db.commit()  # a background job: the count must survive the failure
 		health.log_once("Periskope: could not transcribe a voice note")
 		return ""
 	if not text:

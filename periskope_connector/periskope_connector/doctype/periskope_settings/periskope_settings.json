@@ -13,6 +13,7 @@
   "test_periskope",
   "column_status",
   "connection_status",
+  "webhook_status",
   "last_checked",
   "section_webhook",
   "webhook_url",
@@ -86,6 +87,10 @@
   "health_last_problem",
   "tab_advanced",
   "base_url",
+  "section_reminder_levels",
+  "reminder_levels",
+  "section_broadcasts",
+  "broadcast_daily_limit",
   "section_voice",
   "gemini_api_key",
   "column_voice",
@@ -140,6 +145,13 @@
    "fieldname": "connection_status",
    "fieldtype": "Data",
    "label": "Connection Status",
+   "read_only": 1
+  },
+  {
+   "description": "Whether this site's webhook could be registered in Periskope (set by Test Connection).",
+   "fieldname": "webhook_status",
+   "fieldtype": "Data",
+   "label": "Webhook Status",
    "read_only": 1
   },
   {
@@ -584,6 +596,31 @@
    "reqd": 1
   },
   {
+   "fieldname": "section_reminder_levels",
+   "fieldtype": "Section Break",
+   "label": "Reminder Ladder",
+   "description": "What happens while a customer keeps waiting for a reply, counted in working hours. Empty: the starting ladder (1 h bell, 3 h task and managers, 8 h escalation list; 30 minutes for High)."
+  },
+  {
+   "fieldname": "reminder_levels",
+   "fieldtype": "Table",
+   "label": "Reminder Levels",
+   "options": "Periskope Reminder Level"
+  },
+  {
+   "fieldname": "section_broadcasts",
+   "fieldtype": "Section Break",
+   "label": "Broadcasts"
+  },
+  {
+   "default": "250",
+   "description": "The most chats one WhatsApp number may broadcast to in a day (empty or 0: 250). Many identical messages at once is what gets a number banned.",
+   "fieldname": "broadcast_daily_limit",
+   "fieldtype": "Int",
+   "label": "Broadcast Chats per Number per Day",
+   "non_negative": 1
+  },
+  {
    "fieldname": "section_voice",
    "fieldtype": "Section Break",
    "label": "Voice Notes",
@@ -623,7 +660,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-02 16:00:00.000000",
+ "modified": "2026-11-11 17:44:38.097879",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

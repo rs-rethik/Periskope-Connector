@@ -35,6 +35,30 @@ def _periskope(s) -> dict:
 		return _step("periskope", title, False, _("Click Test Connection."))
 	if not frappe.db.count("WhatsApp Number", {"is_active": 1}):
 		return _step("periskope", title, False, _("No WhatsApp number is linked in Periskope yet."))
+	if (s.get("webhook_status") or "").startswith("Failed"):
+		return _step(
+			"periskope",
+			title,
+			False,
+			_("The webhook could not be registered in Periskope ({0}). Click Test Connection again.").format(
+				s.webhook_status[len("Failed: ") :]
+			),
+		)
+	from periskope_connector import health, query
+
+	last_valid = query.latest("Periskope Webhook Log", "creation")
+	if health.rejected_webhooks() and not (
+		last_valid and frappe.utils.time_diff_in_hours(frappe.utils.now_datetime(), last_valid) < 24
+	):
+		return _step(
+			"periskope",
+			title,
+			False,
+			_(
+				"Periskope's webhook calls are rejected: the signing secret does not match. Copy it from "
+				"the Periskope console."
+			),
+		)
 	return _step("periskope", title, True, s.connection_status)
 
 
@@ -98,10 +122,26 @@ def get_status(settings=None) -> dict:
 
 	return {
 		"steps": steps,
+		"warnings": warnings(),
 		"ready": all(step["ok"] for step in steps[:3]),
 		"done": all(step["ok"] for step in steps),
 		"test_mode": test_mode(),
 	}
+
+
+def warnings() -> list[str]:
+	"""What would make the app fail quietly: no background jobs (nothing is tagged, reminded or
+	recovered) or no outgoing email (no alert reaches anyone)."""
+	from frappe.utils.scheduler import is_scheduler_inactive
+
+	found = []
+	if is_scheduler_inactive(verbose=False):
+		found.append(
+			_("Background jobs are off on this site: messages are not tagged, reminded or recovered.")
+		)
+	if not frappe.db.exists("Email Account", {"default_outgoing": 1, "enable_outgoing": 1}):
+		found.append(_("No outgoing Email Account: alerts and escalations cannot be emailed."))
+	return found
 
 
 def missing_before_agent(settings) -> list[str]:

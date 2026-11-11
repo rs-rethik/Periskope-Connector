@@ -147,6 +147,10 @@ def _ensure_crm_indexes():
 	frappe.db.add_index(
 		"Periskope Message", ["periskope_chat", "message_timestamp"], index_name="periskope_chat_time"
 	)
+	# the hourly catch-up's newest saved message per number (backfill._cutoff)
+	frappe.db.add_index(
+		"Periskope Message", ["org_phone", "message_timestamp"], index_name="periskope_phone_time"
+	)
 
 
 def before_uninstall():

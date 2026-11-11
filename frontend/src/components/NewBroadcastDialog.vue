@@ -25,21 +25,14 @@
 								{ label: 'Not in the CRM', value: '0' },
 							]"
 						/>
-						<FormControl
-							v-model="filters.groups"
-							type="select"
-							:options="[
-								{ label: 'Chats and groups', value: '' },
-								{ label: 'Chats only', value: '0' },
-								{ label: 'Groups only', value: '1' },
-							]"
-						/>
 						<FormControl v-model="filters.search" placeholder="Search" />
 					</div>
 					<div class="flex items-center justify-between text-xs text-ink-gray-6">
 						<span
 							>{{ picked.length }} of {{ chats.length
-							}}{{ more ? "+" : "" }} picked</span
+							}}{{ more ? "+" : "" }} picked<template v-if="leftToday !== null">
+								· {{ leftToday }} left today on this number</template
+							></span
 						>
 						<span class="flex gap-2">
 							<button class="hover:text-ink-gray-9" @click="pickAll">
@@ -69,10 +62,9 @@
 								class="rounded"
 							/>
 							<span class="min-w-0 flex-1 truncate">{{ c.title }}</span>
-							<LucideUsersRound v-if="c.is_group" class="size-3.5 text-ink-gray-5" />
-							<span v-if="!c.allowed" class="text-xs text-ink-amber-7"
-								>test mode</span
-							>
+							<span v-if="c.blocked" class="shrink-0 text-xs text-ink-amber-7">{{
+								c.blocked
+							}}</span>
 						</label>
 						<p
 							v-if="!loading && !chats.length"
@@ -129,9 +121,9 @@
 						type="select"
 						label="Gap between messages"
 						:options="[
-							{ label: '1 second', value: '1' },
-							{ label: '3 seconds (suggested)', value: '3' },
-							{ label: '10 seconds', value: '10' },
+							{ label: '5 seconds', value: '5' },
+							{ label: '8 seconds (suggested)', value: '8' },
+							{ label: '15 seconds', value: '15' },
 							{ label: '30 seconds', value: '30' },
 							{ label: '60 seconds', value: '60' },
 						]"
@@ -174,7 +166,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { Button, DateTimePicker, Dialog, ErrorMessage, FormControl, call, toast } from "frappe-ui";
-import LucideUsersRound from "~icons/lucide/users-round";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideMegaphone from "~icons/lucide/megaphone";
 import { boot } from "@/boot";
@@ -195,9 +186,10 @@ const labelOptions = computed(() => [
 	{ label: "Any label", value: "" },
 	...(boot.tags || []).map((t) => ({ label: t, value: t })),
 ]);
-const blank = () => ({ number: "", title: "", message: "", scheduled_at: "", delay: "3" });
+const blank = () => ({ number: "", title: "", message: "", scheduled_at: "", delay: "8" });
 const form = ref(blank());
-const filters = ref({ label: "", linked: "", groups: "0", search: "" });
+const filters = ref({ label: "", linked: "", groups: "0", search: "" }); // never groups
+const leftToday = ref(null);
 const chats = ref([]);
 const more = ref(false);
 const picked = ref([]);
@@ -220,6 +212,7 @@ async function load() {
 		});
 		chats.value = r.chats;
 		more.value = r.more;
+		leftToday.value = r.left_today;
 		const allowed = new Set(r.chats.filter((c) => c.allowed).map((c) => c.name));
 		picked.value = picked.value.filter((n) => allowed.has(n));
 	} catch (e) {
@@ -249,7 +242,11 @@ watch(open, (o) => {
 });
 
 function pickAll() {
-	picked.value = chats.value.filter((c) => c.allowed).map((c) => c.name);
+	const room = leftToday.value ?? Infinity;
+	picked.value = chats.value
+		.filter((c) => c.allowed)
+		.slice(0, room)
+		.map((c) => c.name);
 }
 
 async function onFile(e) {

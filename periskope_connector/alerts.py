@@ -6,7 +6,9 @@ bell for those who are Frappe users. Nothing here sends WhatsApp messages.
 
 A flood of messages is not a flood of emails: one chat raises at most one alert every CHAT_GAP_MINUTES
 (a rise from Managers to MD still goes out), and the site at most HOURLY_CAP an hour. A message held
-back this way counts as handled; the alert already sent points the team to the chat.
+back by its chat's gap counts as handled (the alert already sent points the team to that chat); one
+held back by the hourly cap waits and goes out in a later hour (send_held), for it is about another
+customer nobody has heard of yet.
 """
 
 import frappe
@@ -57,8 +59,13 @@ def recipients(level: str) -> list[str]:
 	return list(dict.fromkeys(emails))
 
 
-def _may_alert(doc) -> bool:
-	"""Whether this escalation may email now (see the module notes); counts it when it may."""
+HELD = "held"  # _may_alert: over the hourly cap, to be sent later
+HELD_HOURS = 24  # a held escalation older than this is no longer sent
+
+
+def _may_alert(doc) -> bool | str:
+	"""Whether this escalation may email now (see the module notes); counts it when it may. HELD when
+	only the hourly cap stops it."""
 	cache = frappe.cache()
 	chat_key = f"periskope_escalated:{doc.chat_id}"
 	last = cache.get_value(chat_key, expires=True)
@@ -68,8 +75,8 @@ def _may_alert(doc) -> bool:
 	if (cache.get_value(hour_key, expires=True) or 0) >= HOURLY_CAP:
 		from periskope_connector.health import log_once
 
-		log_once("Periskope: escalation emails paused for the rest of the hour (too many at once)")
-		return False
+		log_once("Periskope: escalation emails held for the next hour (too many at once)")
+		return HELD
 	cache.set_value(chat_key, doc.escalation, expires_in_sec=CHAT_GAP_MINUTES * 60)
 	cache.set_value(hour_key, (cache.get_value(hour_key, expires=True) or 0) + 1, expires_in_sec=3600)
 	return True
@@ -86,7 +93,10 @@ def escalate(message: str) -> bool:
 		emails = recipients(doc.escalation)
 		if not emails:
 			return False
-		if not _may_alert(doc):
+		allowed = _may_alert(doc)
+		if allowed == HELD:
+			return False  # high_alert_sent stays 0: send_held tries again next hour
+		if not allowed:
 			frappe.db.set_value("Periskope Message", message, "high_alert_sent", 1, update_modified=False)
 			return False
 
@@ -132,3 +142,31 @@ def escalate(message: str) -> bool:
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not send the escalation for {message}")
 		return False
+
+
+def held() -> list[str]:
+	"""The escalations of the last HELD_HOURS hours that were not sent yet, oldest first."""
+	now = frappe.utils.now_datetime()
+	return frappe.get_all(
+		"Periskope Message",
+		filters={
+			"escalation": ["in", list(LEVEL_RANK)],
+			"high_alert_sent": 0,
+			"classification_status": "Done",
+			"creation": [
+				"between",
+				[
+					frappe.utils.add_to_date(now, hours=-HELD_HOURS),
+					frappe.utils.add_to_date(now, minutes=-10),
+				],
+			],
+		},
+		pluck="name",
+		order_by="creation asc",
+		limit=HOURLY_CAP,
+	)
+
+
+def send_held() -> int:
+	"""Scheduler, hourly: send the escalations the hourly cap held back. Returns how many went out."""
+	return sum(1 for name in held() if escalate(name))

@@ -12,6 +12,10 @@ from periskope_connector.system import insert_as_system
 # Far above what a few linked phones send, so it only stops floods.
 RATE_LIMIT = 3000
 RATE_LIMIT_SECONDS = 60
+# A valid request copied and sent again (a replay) must not change anything: each signature is
+# accepted once in this time, and an event that says when it was sent must be younger than that.
+REPLAY_WINDOW_HOURS = 24
+SEEN_KEY = "periskope:webhook_seen:{}"
 
 
 def _signatures(secret: str, raw: bytes) -> list[str]:
@@ -25,14 +29,40 @@ def _signatures(secret: str, raw: bytes) -> list[str]:
 	return [hmac.new(secret.encode(), c, hashlib.sha256).hexdigest() for c in candidates]
 
 
+def _provided() -> str:
+	return (frappe.get_request_header("x-periskope-signature") or "").strip().lower()
+
+
 def _has_valid_signature(raw: bytes) -> bool:
 	secret = frappe.get_single("Periskope Settings").get_password(
 		"webhook_signing_secret", raise_exception=False
 	)
-	provided = (frappe.get_request_header("x-periskope-signature") or "").strip().lower()
+	provided = _provided()
 	if not secret or not provided:
 		return False
 	return any(hmac.compare_digest(sig, provided) for sig in _signatures(secret, raw))
+
+
+def _replayed(payload: dict) -> str:
+	"""Why a validly signed call is not taken, or "": the same signed body came before, or the event
+	says it was sent longer ago than REPLAY_WINDOW_HOURS."""
+	if frappe.cache().get_value(SEEN_KEY.format(_provided()), expires=True):
+		return "seen"
+	sent = payload.get("timestamp")
+	if sent:
+		try:
+			when = frappe.utils.get_datetime(sent)
+		except Exception:
+			return ""
+		if when.tzinfo:
+			import datetime
+
+			age = datetime.datetime.now(datetime.timezone.utc) - when
+		else:
+			age = frappe.utils.now_datetime() - when
+		if age.total_seconds() > REPLAY_WINDOW_HOURS * 3600:
+			return "old"
+	return ""
 
 
 def _log(payload: dict, raw: bytes) -> str:
@@ -69,6 +99,9 @@ def receive() -> dict:
 		frappe.throw(_("Integration is disabled"), frappe.ValidationError)
 
 	if not _has_valid_signature(raw):
+		from periskope_connector.health import count_rejected_webhook
+
+		count_rejected_webhook()
 		frappe.logger("periskope_connector").warning(
 			"Rejected a Periskope webhook call with a missing or invalid signature "
 			f"(ip: {frappe.local.request_ip})"
@@ -82,8 +115,14 @@ def receive() -> dict:
 		payload = {}
 	if not isinstance(payload, dict):
 		payload = {}
+	replay = _replayed(payload)
+	if replay:
+		# Answered with success, so a sender that repeats a call it already made stops; nothing is saved.
+		frappe.logger("periskope_connector").warning(f"Ignored a repeated Periskope webhook call ({replay})")
+		return {"ok": True, "ignored": replay}
 
 	log = _log(payload, raw)
+	frappe.cache().set_value(SEEN_KEY.format(_provided()), 1, expires_in_sec=REPLAY_WINDOW_HOURS * 3600)
 	if payload.get("event_type") in HANDLED_EVENTS:
 		# Save in the background so Periskope gets its 200 straight away.
 		frappe.enqueue(

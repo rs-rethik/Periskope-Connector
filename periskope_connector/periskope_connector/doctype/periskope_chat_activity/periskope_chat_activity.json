@@ -22,7 +22,7 @@
    "fieldtype": "Select",
    "label": "Action",
    "in_list_view": 1,
-   "options": "Assigned\nUnassigned\nStatus\nReopened\nTeam\nLabel\nLinked\nSLA Breached\nTerritory\nGroup"
+   "options": "Assigned\nUnassigned\nStatus\nReopened\nTeam\nLabel\nLinked\nSLA Breached\nTerritory\nGroup\nAI\nBroadcasts"
   },
   {
    "fieldname": "details",
@@ -33,7 +33,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-03 17:30:00.000000",
+ "modified": "2026-11-11 17:59:53.514532",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat Activity",

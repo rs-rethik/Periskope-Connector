@@ -37,8 +37,11 @@ def is_ready(settings=None) -> bool:
 
 def complete_json(system: str, user: str, schema: dict, max_tokens: int = DEFAULT_MAX_TOKENS) -> dict:
 	"""Ask the model for one JSON object that follows `schema`. Raises on any failure."""
+	from periskope_connector.text_rules import UNTRUSTED_TEXT_RULE
+
 	settings = classifier.get_settings()
 	model = settings.ai_model or classifier.DEFAULT_MODEL
+	system += UNTRUSTED_TEXT_RULE
 	reply_rule = (
 		"\n\nReply with ONLY one JSON object that follows this JSON schema, with no commentary and no "
 		"code fences:\n" + json.dumps(schema)

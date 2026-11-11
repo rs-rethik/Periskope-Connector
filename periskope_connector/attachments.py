@@ -15,6 +15,7 @@ import mimetypes
 
 import frappe
 import requests
+from frappe.query_builder.functions import Coalesce
 
 MAX_BYTES = 15 * 1024 * 1024  # saved in Frappe
 TIMEOUT = 60
@@ -38,7 +39,13 @@ FIELDS = [
 	"crm_lead",
 	"crm_deal",
 	"chat_id",
+	"message_id",
+	"whatsapp_number",
+	"org_phone",
+	"attachment_attempts",
 ]
+MAX_ATTEMPTS = 3  # saving a file is tried again by retry_missing up to this many times
+RETRY_DAYS = 3  # Periskope's links stop working; older files are not chased
 
 
 def has_file(doc) -> bool:
@@ -77,6 +84,54 @@ def download(url: str, limit: int = MAX_BYTES) -> bytes:
 		return data
 
 
+def fetch(doc, limit: int = MAX_BYTES) -> bytes:
+	"""The file of a message from its link. Periskope's links are signed and expire: when the saved one
+	no longer works, a new one is asked for (Get Message) and kept."""
+	try:
+		return download(doc.media_path, limit)
+	except requests.RequestException:
+		from periskope_connector.api.message_actions import fresh_media_path
+
+		row = doc
+		if not getattr(doc, "message_id", None):
+			row = frappe.db.get_value(
+				"Periskope Message", doc.name, ["message_id", "whatsapp_number", "org_phone"], as_dict=True
+			)
+		fresh = (
+			row and row.message_id and fresh_media_path(row.message_id, row.whatsapp_number or row.org_phone)
+		)
+		if not fresh or fresh == doc.media_path:
+			raise
+		frappe.db.set_value("Periskope Message", doc.name, "media_path", fresh, update_modified=False)
+		doc.media_path = fresh
+		return download(fresh, limit)
+
+
+def retry_missing() -> int:
+	"""Scheduler, every 30 minutes: save the attachments still not saved (a link that had expired,
+	Periskope or the network down, a job that never ran), up to MAX_ATTEMPTS tries, for messages of
+	the last RETRY_DAYS days. Returns how many were queued."""
+	msg = frappe.qb.DocType("Periskope Message")
+	names = (
+		frappe.qb.from_(msg)
+		.select(msg.name)
+		.where(
+			msg.message_type.isin(list(KINDS))
+			& msg.media_path.like("http%")
+			& (msg.attachment_file.isnull() | (msg.attachment_file == ""))
+			& (Coalesce(msg.attachment_attempts, 0) < MAX_ATTEMPTS)
+			& ((msg.media_size.isnull()) | (msg.media_size <= MAX_BYTES))
+			& (msg.creation >= frappe.utils.add_days(frappe.utils.now_datetime(), -RETRY_DAYS))
+			# a new one is still with its own job (queue)
+			& (msg.creation < frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=-30))
+		)
+		.limit(200)
+	).run(pluck=True)
+	for name in names:
+		queue(name)
+	return len(names)
+
+
 def _file_name(doc) -> str:
 	name = (doc.media_filename or "").strip() or doc.name
 	if "." not in name[-6:]:
@@ -99,8 +154,9 @@ def save(message: str) -> str | None:
 		return doc.attachment_file if doc else None
 	if (doc.media_size or 0) > MAX_BYTES:
 		return None
+	frappe.db.savepoint("periskope_attachment")
 	try:
-		content = download(doc.media_path)
+		content = fetch(doc)
 		file = frappe.get_doc(
 			{
 				"doctype": "File",
@@ -114,6 +170,15 @@ def save(message: str) -> str | None:
 		file.flags.ignore_permissions = True
 		file.insert()
 	except Exception:
+		frappe.db.rollback(save_point="periskope_attachment")  # only the half-made File
+		frappe.db.set_value(
+			"Periskope Message",
+			message,
+			"attachment_attempts",
+			(doc.attachment_attempts or 0) + 1,
+			update_modified=False,
+		)
+		frappe.db.commit()
 		frappe.log_error(title=f"Periskope: could not save the attachment of message {message}")
 		return None
 	frappe.db.set_value("Periskope Message", message, "attachment_file", file.name, update_modified=False)
@@ -192,7 +257,7 @@ def _content(doc) -> bytes:
 			return _read(doc.attachment_file)
 		except Exception:
 			pass
-	return download(doc.media_path, READABLE[_mime(doc)][1])
+	return fetch(doc, READABLE[_mime(doc)][1])
 
 
 def content_block(doc) -> dict | None:

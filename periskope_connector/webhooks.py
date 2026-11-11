@@ -22,6 +22,8 @@ DEFAULT_EVENTS = [
 	"message.ack.updated",
 	"reaction.created",
 	"reaction.updated",
+	"org.phone.connected",
+	"org.phone.disconnected",
 ]
 WEBHOOK_METHOD = "periskope_connector.api.webhook.receive"
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1")

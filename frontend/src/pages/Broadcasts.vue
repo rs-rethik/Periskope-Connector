@@ -70,8 +70,13 @@
 							waiting
 						</span>
 					</div>
-					<p v-if="failed[b.name]?.length" class="text-xs text-ink-red-7">
-						Not sent to: {{ failed[b.name].join(", ") }}
+					<p v-if="b.failed_titles?.length" class="text-xs text-ink-red-7">
+						Not sent to: {{ b.failed_titles.slice(0, 50).join(", ")
+						}}{{
+							b.failed_titles.length > 50
+								? ` and ${b.failed_titles.length - 50} more`
+								: ""
+						}}
 					</p>
 					<div class="flex items-center gap-2">
 						<span class="text-xs text-ink-gray-5">
@@ -87,6 +92,13 @@
 							label="Check progress"
 							:loading="busy === b.name"
 							@click="check(b)"
+						/>
+						<Button
+							v-if="b.failed_titles?.length"
+							size="sm"
+							label="Resend to failed"
+							:loading="busy === 'resend' + b.name"
+							@click="resend(b)"
 						/>
 						<Button
 							v-if="['Scheduled', 'Sending'].includes(b.status)"
@@ -131,7 +143,6 @@ const STATUS = {
 	Cancelled: "bg-surface-gray-2 text-ink-gray-6",
 };
 const rows = ref([]);
-const failed = ref({});
 const loading = ref(false);
 const busy = ref("");
 const creating = ref(false);
@@ -166,9 +177,29 @@ async function check(b, quiet = false) {
 	try {
 		const r = await call(API + "progress", { broadcast: b.name });
 		replace(r.broadcast);
-		failed.value = { ...failed.value, [b.name]: r.failed };
 	} catch (e) {
 		if (!quiet) showError(e, "Could not read the progress from Periskope.");
+	} finally {
+		busy.value = "";
+	}
+}
+
+async function resend(b) {
+	const n = b.failed_titles.length;
+	const ok = await ask(
+		`The same message goes again to the ${n} ${
+			n === 1 ? "chat" : "chats"
+		} it did not reach, as a new broadcast.`,
+		{ title: "Resend to failed?", confirmLabel: "Resend" }
+	);
+	if (!ok) return;
+	busy.value = "resend" + b.name;
+	try {
+		const made = await call(API + "resend_failed", { broadcast: b.name });
+		rows.value = [made, ...rows.value];
+		toast.success("Broadcast started");
+	} catch (e) {
+		showError(e, "Could not resend.");
 	} finally {
 		busy.value = "";
 	}

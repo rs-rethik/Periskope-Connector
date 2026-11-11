@@ -103,8 +103,12 @@ scheduler_events = {
 			"periskope_connector.agent.run",
 			# The connection state of every WhatsApp number; managers hear when one drops.
 			"periskope_connector.numbers.health_check",
+			# Webhook calls rejected (wrong signing secret) or none arriving: managers hear at once.
+			"periskope_connector.health.capture_check",
 			# Scheduled messages (scheduled.py): Periskope's list, failed runs, the test-mode pause.
 			"periskope_connector.scheduled.run",
+			# The progress of broadcasts still sending, recipient by recipient.
+			"periskope_connector.api.broadcast.refresh_all",
 		],
 		# Send the AI replies that are due (after the delay; a rep's reply or a new message moves or cancels them).
 		"* * * * *": [
@@ -113,9 +117,22 @@ scheduler_events = {
 			"periskope_connector.api.compose.retry_failed",
 		],
 		# Re-queue webhook logs whose background job never ran (dead-letter recovery).
-		"*/30 * * * *": ["periskope_connector.messages.sweep_unprocessed"],
+		"*/30 * * * *": [
+			"periskope_connector.messages.sweep_unprocessed",
+			# Attachments whose saving failed, with a fresh link (attachments.retry_missing).
+			"periskope_connector.attachments.retry_missing",
+			# Voice notes whose transcription failed (ai/transcribe.retry_failed).
+			"periskope_connector.ai.transcribe.retry_failed",
+		],
 		# Read the chat history from Periskope and save messages a missed webhook never delivered.
-		"15 * * * *": ["periskope_connector.backfill.run"],
+		"15 * * * *": [
+			"periskope_connector.backfill.run",
+			# The monthly AI token budget: warnings at 70% and 90%, and when it is spent (also
+			# enforced before every AI call).
+			"periskope_connector.health.spend_check",
+			# Escalation emails the hourly cap held back (alerts.send_held).
+			"periskope_connector.alerts.send_held",
+		],
 		# Once a day the AI searches the web for today's festival (the Today page's festive look).
 		"5 * * * *": ["periskope_connector.ai.festival.refresh"],
 	},
@@ -124,10 +141,10 @@ scheduler_events = {
 		"periskope_connector.meta.remove_shared_files",
 		# Yesterday's unmatched contacts to the sales head, ranked by activity.
 		"periskope_connector.contacts.send_digest",
+		# The knowledge answers the assistant applied by itself, each with an Undo link.
+		"periskope_connector.suggestions.send_applied_digest",
 		# Per-phone message counts: alert when a linked number goes silent.
 		"periskope_connector.health.sync_check",
-		# Monthly AI token budget check (also enforced before each classification batch).
-		"periskope_connector.health.spend_check",
 	],
 	"weekly": [
 		# The numbers and groups that could not be matched to a lead or deal, for sales to add.

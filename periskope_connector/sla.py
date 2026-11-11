@@ -171,21 +171,63 @@ def check_breaches() -> int:
 			_("Reply overdue since {0}").format(row.response_due),
 			user="Administrator",
 		)
+	late = _resolution_breaches(cfg, managers)
 	frappe.db.commit()
+	return len(rows) + late
+
+
+def _resolution_breaches(cfg, managers: list[str]) -> int:
+	"""Open chats past their resolution deadline: the assignee and the managers hear once (the same
+	way as a late reply); reopening the chat starts a new deadline and a new alert."""
+	c = frappe.qb.DocType("Periskope Chat")
+	rows = (
+		frappe.qb.from_(c)
+		.select(c.name, c.chat_name, c.contact_number, c._assign, c.resolution_due)
+		.where(
+			c.status.isin(["Open", "Pending"])
+			& c.resolution_due.isnotnull()
+			& (c.resolution_due < now_datetime())
+			& c.resolved_on.isnull()
+			& (c.resolution_alerted == 0)
+		)
+		.limit(50)
+	).run(as_dict=True)
+	from periskope_connector import workflow
+
+	for row in rows:
+		who = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.name)
+		subject = _("WhatsApp chat not resolved in time: {0}").format(who)
+		frappe.db.set_value("Periskope Chat", row.name, "resolution_alerted", 1, update_modified=False)
+		assignees = frappe.parse_json(row._assign or "[]") or []
+		_bell(sorted(set(assignees + managers)), row.name, subject)
+		if cfg.emails:
+			_email(
+				cfg.emails,
+				frappe._dict(row, response_due=row.resolution_due),
+				who,
+				subject,
+				_("{0}'s chat was due to be resolved by {1} and is still open. Open the chat: {2}"),
+			)
+		workflow.log(
+			row.name,
+			"SLA Breached",
+			_("Not resolved by {0}").format(row.resolution_due),
+			user="Administrator",
+		)
 	return len(rows)
 
 
-def _email(recipients: list[str], row, who: str, subject: str):
-	"""The managers' email about a late reply. Never raises: its own writes are undone and the
-	failure logged, the breach stays recorded."""
+def _email(recipients: list[str], row, who: str, subject: str, text: str | None = None):
+	"""The managers' email about a late reply (or a chat not resolved in time: `text`). Never raises:
+	its own writes are undone and the failure logged, the breach stays recorded."""
 	frappe.db.savepoint("periskope_sla_email")
 	try:
 		safety.sendmail(
 			recipients=recipients,
 			subject=subject,
-			message=_("{0} has been waiting for a reply since before {1}. Open the chat: {2}").format(
-				who, row.response_due, frappe.utils.get_url(f"/whatsapp/inbox/{row.name}")
-			),
+			message=(
+				text or _("{0} has been waiting for a reply since before {1}. Open the chat: {2}")
+			).format(who, row.response_due, frappe.utils.get_url(f"/whatsapp/inbox/{row.name}")),
 			delayed=True,
 		)
 	except Exception:
