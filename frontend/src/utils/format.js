@@ -43,3 +43,11 @@ export function initials(name) {
 			.toUpperCase() || "#"
 	);
 }
+
+// A readable name from a user id (an email): "ravi.kumar@example.com" is "Ravi Kumar".
+export function nameFromEmail(user) {
+	return (user || "")
+		.split("@")[0]
+		.replace(/[._]/g, " ")
+		.replace(/\b\w/g, (c) => c.toUpperCase());
+}

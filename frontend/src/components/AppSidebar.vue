@@ -3,16 +3,22 @@
 		<Sidebar v-model:collapsed="collapsed" class="border-r border-outline-gray-1">
 			<div class="flex h-full flex-col p-2">
 				<div class="flex shrink-0 items-center gap-2 px-2 py-1.5">
-					<img
-						:src="boot.brand?.logo || logo"
-						class="size-7 shrink-0 rounded object-contain"
-						alt=""
-					/>
+					<span class="relative shrink-0">
+						<BrandLogo class="size-7" />
+						<span v-if="collapsed" class="absolute -right-1 -top-1 flex">
+							<TestModeBadge dot />
+						</span>
+					</span>
 					<div v-if="!collapsed" class="min-w-0">
 						<div class="truncate text-base font-medium text-ink-gray-9">
 							{{ boot.brand?.name || "WhatsApp" }}
 						</div>
-						<div class="truncate text-xs text-ink-gray-5">{{ boot.full_name }}</div>
+						<div class="flex min-w-0 items-center gap-1.5">
+							<TestModeBadge />
+							<span class="truncate text-xs text-ink-gray-5">{{
+								boot.full_name
+							}}</span>
+						</div>
 					</div>
 				</div>
 
@@ -110,38 +116,6 @@
 						</SidebarItem>
 					</template>
 
-					<SidebarLabel class="mt-3" divider
-						><span class="text-sm">Numbers</span></SidebarLabel
-					>
-					<SidebarItem
-						label="All numbers"
-						:active="onList && !inbox.number"
-						@click="pick({ number: '' })"
-					>
-						<template #prefix><LucidePhone class="size-4 text-ink-gray-6" /></template>
-					</SidebarItem>
-					<SidebarItem
-						v-for="n in boot.numbers"
-						:key="n.name"
-						:label="n.label"
-						:active="onList && inbox.number === n.name"
-						:suffix="unreadOn(n.name) ? String(unreadOn(n.name)) : ''"
-						@click="pick({ number: n.name })"
-					>
-						<template #prefix>
-							<!-- a 16px box, like the icons, so the number lines up with the rows above -->
-							<Tooltip
-								:text="n.is_ready ? 'Connected' : n.wa_state || 'Not connected'"
-								><span class="grid size-4 place-items-center">
-									<span
-										class="size-2 rounded-full"
-										:class="
-											n.is_ready ? 'bg-surface-green-6' : 'bg-surface-red-6'
-										"
-									/> </span
-							></Tooltip>
-						</template>
-					</SidebarItem>
 					<div
 						v-if="!boot.numbers.length && !collapsed"
 						class="px-2 py-1 text-xs text-ink-gray-5"
@@ -152,11 +126,13 @@
 				</div>
 
 				<div class="mt-auto shrink-0 border-t border-outline-gray-1 pt-2">
-					<SidebarItem
-						v-if="boot.is_manager"
-						label="Settings"
-						@click="settingsOpen = true"
-					>
+					<!-- a phone hides the floating Assistant button where it would cover the page -->
+					<SidebarItem v-if="mobile" label="Assistant" @click="assistant.open = true">
+						<template #prefix
+							><LucideMessageCircleQuestion class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
+					<SidebarItem v-if="boot.is_manager" label="Settings" @click="openSettings">
 						<template #prefix
 							><LucideSettings class="size-4 text-ink-gray-6"
 						/></template>
@@ -180,27 +156,18 @@
 				</div>
 			</div>
 		</Sidebar>
-		<SettingsModal v-if="boot.is_manager" v-model="settingsOpen" />
 	</div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-	Sidebar,
-	SidebarCollapseToggle,
-	SidebarItem,
-	SidebarLabel,
-	Tooltip,
-	useTheme,
-} from "frappe-ui";
+import { Sidebar, SidebarCollapseToggle, SidebarItem, SidebarLabel, useTheme } from "frappe-ui";
 import LucideMoon from "~icons/lucide/moon";
 import LucideSun from "~icons/lucide/sun";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideSunrise from "~icons/lucide/sunrise";
 import LucideList from "~icons/lucide/list";
-import LucidePhone from "~icons/lucide/phone";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideUser from "~icons/lucide/user";
@@ -211,25 +178,27 @@ import LucideTimerOff from "~icons/lucide/timer-off";
 import LucideUsersRound from "~icons/lucide/users-round";
 import LucideBookmark from "~icons/lucide/bookmark";
 import LucideBookmarkCheck from "~icons/lucide/bookmark-check";
+import TestModeBadge from "@/components/TestModeBadge.vue";
 import NotificationsBell from "@/components/NotificationsBell.vue";
-import SettingsModal from "@/components/settings/SettingsModal.vue";
 import LucideSettings from "~icons/lucide/settings";
 import LucideChartColumn from "~icons/lucide/chart-column";
 import LucideUserSearch from "~icons/lucide/user-search";
 import LucideUsers from "~icons/lucide/users";
 import LucideLightbulb from "~icons/lucide/lightbulb";
 import LucideBookOpen from "~icons/lucide/book-open";
-import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideMegaphone from "~icons/lucide/megaphone";
 import LucideActivity from "~icons/lucide/activity";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import { boot } from "@/boot";
-import { QUICK_FILTERS, inbox, loadBell, loadCounts, loadViews } from "@/stores/inbox";
+import BrandLogo from "@/components/BrandLogo.vue";
+import { assistant } from "@/stores/assistant";
+import { QUICK_FILTERS, inbox } from "@/stores/inbox";
+import { openSettings } from "@/stores/shell";
 
-const logo = "/assets/periskope_connector/images/logo.svg";
 defineProps({ mobile: { type: Boolean, default: false } });
 const collapsed = ref(false);
 const { currentTheme, toggleTheme } = useTheme();
-const settingsOpen = ref(false);
 const manage = [
 	{
 		label: "Contact queue",
@@ -250,16 +219,22 @@ const manage = [
 		active: (r) => r.params.kind === "suggestions",
 	},
 	{
+		label: "Scheduled",
+		icon: LucideCalendarClock,
+		to: { name: "Scheduled" },
+		active: (r) => r.name === "Scheduled",
+	},
+	{
+		label: "Broadcasts",
+		icon: LucideMegaphone,
+		to: { name: "Broadcasts" },
+		active: (r) => r.name === "Broadcasts",
+	},
+	{
 		label: "Knowledge base",
 		icon: LucideBookOpen,
 		to: { name: "Knowledge" },
 		active: (r) => r.name === "Knowledge",
-	},
-	{
-		label: "Reports",
-		icon: LucideFileChartColumn,
-		to: { name: "Reports" },
-		active: (r) => r.name === "Reports",
 	},
 	{
 		label: "Health and flow",
@@ -292,7 +267,7 @@ const filterIcons = {
 	my_team: LucideUsersRound,
 };
 
-// Views and numbers filter the chat list, so on any other page (Health, Reports, ...) a click opens
+// Views and numbers filter the chat list, so on any other page (Health, Flow, ...) a click opens
 // the inbox with that filter; they show as selected only where the list is.
 const route = useRoute();
 const router = useRouter();
@@ -303,17 +278,7 @@ function pick(choice) {
 	if (!onList.value) router.push({ name: "Inbox" });
 }
 
-function unreadOn(number) {
-	return (inbox.counts.unread_by_number || {})[number] || 0;
-}
-
 function goTo(url) {
 	window.location.href = url;
 }
-
-onMounted(() => {
-	loadCounts();
-	loadViews();
-	loadBell();
-});
 </script>

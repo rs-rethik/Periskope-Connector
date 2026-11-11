@@ -86,11 +86,15 @@ def _from_deals(rows) -> list[tuple]:
 
 
 def _from_leads(rows) -> list[tuple]:
-	found = []
-	for r in rows:
-		deal = frappe.db.get_value("CRM Deal", {"lead": r.name}, "name") if r.converted else None
-		found.append((r.name, deal))
-	return found
+	# the deals of the converted leads in one query, not one per lead
+	converted = [r.name for r in rows if r.converted]
+	deal_of = {}
+	if converted:
+		for lead, deal in frappe.get_all(
+			"CRM Deal", filters={"lead": ["in", converted]}, fields=["lead", "name"], as_list=True
+		):
+			deal_of.setdefault(lead, deal)
+	return [(r.name, deal_of.get(r.name)) for r in rows]
 
 
 def by_mobile(number: str | None) -> list[tuple]:
@@ -115,8 +119,10 @@ def by_mobile(number: str | None) -> list[tuple]:
 def update_phone_fields(doc, method: str | None = None):
 	"""Keep the normalised, indexed phone fields of a lead or deal in step with mobile_no / phone.
 
-	Runs as a doc_event on every save; a failure here must never stop a sales save.
+	Runs as a doc_event on every save; a failure here must never stop a sales save. A save may add or
+	change an organization, so the cached list of organizations is dropped too.
 	"""
+	frappe.cache().delete_value(ORGANIZATIONS_KEY)
 	try:
 		value = phone_e164(doc.mobile_no or doc.phone)
 		frappe.db.set_value(
@@ -171,9 +177,23 @@ def own_companies() -> list[str]:
 	return frappe.get_all("Company", pluck="name") if frappe.db.exists("DocType", "Company") else []
 
 
+ORGANIZATIONS_KEY = "periskope:organizations"
+ORGANIZATIONS_SECONDS = 600
+
+
 def organizations() -> list[str]:
 	"""Company names used by leads and deals, except our own company: a group called
-	'Pranera ~ Some Customer' is about the customer, not about us."""
+	'Pranera ~ Some Customer' is about the customer, not about us. Every group message needs this
+	list, so it is kept for 10 minutes and dropped whenever a lead or deal is saved."""
+	cache = frappe.cache()
+	names = cache.get_value(ORGANIZATIONS_KEY, expires=True)
+	if names is None:
+		names = _organizations()
+		cache.set_value(ORGANIZATIONS_KEY, names, expires_in_sec=ORGANIZATIONS_SECONDS)
+	return names
+
+
+def _organizations() -> list[str]:
 	own = own_companies()
 	names = [
 		r[0]
@@ -306,15 +326,20 @@ def ensure_group(chat_id: str, phone: str | None = None):
 			"group_type": "Customer" if group_name and by_organization(group_name) else "Internal",
 		}
 	)
+	frappe.db.savepoint("periskope_new_group")
 	try:
 		insert_as_system(group)
-	except frappe.DuplicateEntryError:
-		frappe.db.rollback()
+	except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+		# Saved by another message of the group at the same moment: undo only this insert (the
+		# caller's own work stays) and use that row; a locking read sees it though it is new.
+		frappe.db.rollback(save_point="periskope_new_group")
+		frappe.clear_last_message()
 		return frappe.db.get_value(
 			"Periskope Group",
 			{"chat_id": chat_id},
 			["name", "chat_id", "group_name", "group_type"],
 			as_dict=True,
+			for_update=True,
 		)
 	return group
 
@@ -429,6 +454,77 @@ def _after_link(message: str):
 	row = frappe.db.get_value("Periskope Message", message, CHAT_FIELDS, as_dict=True)
 	if row and row.chat_id:
 		chat.ensure(row)
+
+
+def relink_chats(chat_id: str, values: dict):
+	"""A link changed by hand (a chat linked or unlinked in the inbox, a group mapped to a customer or
+	an organization): every chat row of the contact or group gets `values` at once, and its messages
+	are linked again. Only the newest message is linked here, which is what the inbox shows next; a
+	chat can hold thousands, so the rest follow in a background job."""
+	from periskope_connector import chat
+
+	chat.set_on_all(chat_id, values)
+	if frappe.flags.in_test:
+		relink_messages(chat_id)  # a test has no worker: the whole chat, now
+		return
+	newest = frappe.get_all(
+		"Periskope Message",
+		filters={"chat_id": chat_id},
+		pluck="name",
+		order_by="message_timestamp desc",
+		limit=1,
+	)
+	if newest:
+		link_message(newest[0])
+	frappe.enqueue(
+		"periskope_connector.linking.relink_messages",
+		chat_id=chat_id,
+		queue="long",
+		enqueue_after_commit=True,
+	)
+
+
+def relink_messages(chat_id: str) -> int:
+	"""Link every message of a contact's (or group's) chats again. Returns how many."""
+	names = frappe.get_all("Periskope Message", filters={"chat_id": chat_id}, pluck="name")
+	for name in names:
+		link_message(name)
+	return len(names)
+
+
+def group_target(group) -> tuple[str | None, str | None]:
+	"""(lead, deal) a mapped group's chats show: the lead or deal it is mapped to, else the best deal
+	or lead of its organization."""
+	if group.crm_lead or group.crm_deal:
+		return group.crm_lead, group.crm_deal
+	if not group.organization:
+		return None, None
+	deals = frappe.get_all("CRM Deal", filters={"organization": group.organization}, fields=["name", "lead"])
+	leads = frappe.get_all(
+		"CRM Lead", filters={"organization": group.organization}, fields=["name", "converted"]
+	)
+	lead, deal, _status = resolve(_from_deals(deals) + _from_leads(leads))
+	return lead, deal
+
+
+def relink_group(group: str, user: str | None = None):
+	"""A group's mapping was saved: its chat rows show the customer (and that it was chosen by hand),
+	and its messages are linked again."""
+	row = frappe.db.get_value(
+		"Periskope Group", group, ["chat_id", "crm_lead", "crm_deal", "organization"], as_dict=True
+	)
+	lead, deal = group_target(row)
+	mapped = bool(lead or deal or row.organization)
+	relink_chats(
+		row.chat_id,
+		{
+			"organization": row.organization,
+			"crm_lead": lead,
+			"crm_deal": deal,
+			"linked_by_hand": 1 if mapped else 0,
+			"linked_by": user if mapped else None,
+		},
+	)
 
 
 def link_unlinked(limit: int = 5000) -> int:

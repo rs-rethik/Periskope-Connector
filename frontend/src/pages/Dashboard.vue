@@ -175,9 +175,11 @@
 
 			<!-- Reps, numbers, teams -->
 			<div class="mt-5 grid gap-4 xl:grid-cols-2">
-				<section class="rounded-lg border border-outline-gray-1 bg-surface-base p-4">
+				<section
+					class="rounded-lg border border-outline-gray-1 bg-surface-base p-4 max-md:overflow-x-auto"
+				>
 					<h2 class="mb-2 text-base font-medium text-ink-gray-9">Reps</h2>
-					<table class="w-full text-sm">
+					<table class="w-full text-sm max-md:min-w-[30rem]">
 						<thead class="text-left text-xs text-ink-gray-5">
 							<tr>
 								<th class="py-1.5">Rep</th>
@@ -214,9 +216,11 @@
 					</table>
 				</section>
 
-				<section class="rounded-lg border border-outline-gray-1 bg-surface-base p-4">
+				<section
+					class="rounded-lg border border-outline-gray-1 bg-surface-base p-4 max-md:overflow-x-auto"
+				>
 					<h2 class="mb-2 text-base font-medium text-ink-gray-9">WhatsApp numbers</h2>
-					<table class="w-full text-sm">
+					<table class="w-full text-sm max-md:min-w-[30rem]">
 						<thead class="text-left text-xs text-ink-gray-5">
 							<tr>
 								<th class="py-1.5">Number</th>
@@ -266,10 +270,10 @@
 
 				<section
 					v-if="d.by_team.length"
-					class="rounded-lg border border-outline-gray-1 bg-surface-base p-4"
+					class="rounded-lg border border-outline-gray-1 bg-surface-base p-4 max-md:overflow-x-auto"
 				>
 					<h2 class="mb-2 text-base font-medium text-ink-gray-9">Teams</h2>
-					<table class="w-full text-sm">
+					<table class="w-full text-sm max-md:min-w-[30rem]">
 						<thead class="text-left text-xs text-ink-gray-5">
 							<tr>
 								<th class="py-1.5">Team</th>
@@ -360,6 +364,7 @@ import StatTile from "@/components/dashboard/StatTile.vue";
 import DayBars from "@/components/dashboard/DayBars.vue";
 import TagBars from "@/components/dashboard/TagBars.vue";
 import { boot } from "@/boot";
+import { errorText } from "@/utils/errors";
 import { inbox, loadTeams } from "@/stores/inbox";
 
 const router = useRouter();
@@ -438,8 +443,7 @@ const load = debounce(async () => {
 		d.value = out;
 		reps.value = out.reps || [];
 	} catch (e) {
-		if (ticket === latest)
-			error.value = e?.messages?.[0] || e?.message || "The dashboard could not be loaded.";
+		if (ticket === latest) error.value = errorText(e, "The dashboard could not be loaded.");
 	} finally {
 		if (ticket === latest) loading.value = false;
 	}

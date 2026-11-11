@@ -33,32 +33,22 @@
 			</svg>
 		</div>
 		<div class="relative flex items-start gap-3">
-			<div class="min-w-0 pr-8">
+			<div class="min-w-0">
 				<p class="text-xs font-semibold uppercase tracking-[0.14em] text-white/75">
 					{{ festival.festival }}
 				</p>
 				<p class="mt-0.5 text-lg font-semibold leading-snug">{{ festival.greeting }}</p>
 			</div>
-			<Tooltip text="Hide for today"
-				><button
-					class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/15 hover:text-white"
-					aria-label="Hide for today"
-					@click="hide"
-				>
-					<LucideX class="size-4" /></button
-			></Tooltip>
 		</div>
 	</div>
 </template>
 
 <script setup>
-import { Tooltip } from "frappe-ui";
 import { computed } from "vue";
-import LucideX from "~icons/lucide/x";
-import { LOOKS, festival, hideFestival as hide, motifs } from "@/utils/festival";
+import { LOOKS, festival, motifs } from "@/utils/festival";
 
-// Today's festival greeting, as the AI found it on the web (ai/festival.py). Hiding it also takes
-// the festival colours off the app for the day.
+// Today's festival greeting, as the AI found it on the web (ai/festival.py). It stays up all day:
+// there is no close button.
 
 const look = computed(() => {
 	const l = LOOKS[festival.value?.look] || LOOKS.festive;

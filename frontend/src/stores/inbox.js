@@ -21,6 +21,9 @@ export const inbox = reactive({
 	counts: {},
 	version: 0, // bumped on every live update; views watch it to reload
 	changed: [], // the chats in the latest update
+	viewing: "", // the chat open in ChatView
+	tickVersion: 0, // bumped when delivery ticks change; only the open chat reloads
+	ticked: [], // the chats whose ticks changed
 	views: [], // saved list views (own and shared)
 	bell: { notifications: [], unread: 0 },
 	teams: [],
@@ -29,8 +32,28 @@ export const inbox = reactive({
 // Chats opened recently (ChatView), kept for the session so reopening one is instant.
 export const chatCache = new Map();
 
-// Unsent text and files per chat (Composer), so a draft stays with its own chat.
-export const drafts = new Map();
+// Unsent text and files per chat (Composer), so a draft stays with its own chat. Also kept in the
+// tab's session storage: a phone that drops the installed app from memory gives the drafts back.
+const DRAFTS_KEY = "periskope-drafts";
+function storedDrafts() {
+	try {
+		return new Map(Object.entries(JSON.parse(sessionStorage.getItem(DRAFTS_KEY) || "{}")));
+	} catch {
+		return new Map(); // no session storage, or not ours: start without drafts
+	}
+}
+export const drafts = storedDrafts();
+
+// Keep (or, with nothing, forget) a chat's draft.
+export function saveDraft(chat, draft = null) {
+	if (draft) drafts.set(chat, draft);
+	else drafts.delete(chat);
+	try {
+		sessionStorage.setItem(DRAFTS_KEY, JSON.stringify(Object.fromEntries(drafts)));
+	} catch {
+		// no session storage: the drafts last while the page is open
+	}
+}
 
 export async function loadViews() {
 	try {
@@ -78,7 +101,26 @@ export function changed(chat) {
 	return inbox.changed.includes(chat) || inbox.changed.includes("*");
 }
 
+// The update is about the open chat only, in a tab that is looked at: ChatView reloads it, marks it
+// read and loads the counts after that, so they are not loaded here as well.
+export function viewedAlone() {
+	return !document.hidden && inbox.changed.length === 1 && inbox.changed[0] === inbox.viewing;
+}
+
+let tickTimer;
+let ticked = new Set();
 onInboxUpdate((data) => {
+	if (data.kind === "ack" && !data.reconnected) {
+		// delivery ticks change only the open conversation: no list, counter or panel reload
+		ticked.add(data.chat);
+		clearTimeout(tickTimer);
+		tickTimer = setTimeout(() => {
+			inbox.ticked = [...ticked];
+			ticked = new Set();
+			inbox.tickVersion++;
+		}, 300);
+		return;
+	}
 	// Several messages can land at once (a forwarded batch): reload once, for every chat that changed.
 	pending.add(data.reconnected ? "*" : data.chat);
 	clearTimeout(timer);
@@ -86,7 +128,7 @@ onInboxUpdate((data) => {
 		inbox.changed = [...pending];
 		pending = new Set();
 		inbox.version++;
-		loadCounts();
+		if (!viewedAlone()) loadCounts();
 	}, 300);
 });
 

@@ -9,6 +9,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Max
 
 from periskope_connector import access, workflow
 from periskope_connector.inbox_realtime import _recipients, chat_changed
@@ -148,31 +149,60 @@ def add_label(chats, tag: str) -> dict:
 	chats = _chats(chats)
 	if not frappe.db.exists("Periskope Tag", tag):
 		frappe.throw(_("Unknown label {0}").format(tag))
+	labelled = set(_label_rows(chats, tag))
+	last_idx = _last_label_idx(chats)
 	for chat in chats:
-		if frappe.db.exists(
-			"Periskope Chat Label", {"parent": chat, "parenttype": "Periskope Chat", "tag": tag}
-		):
+		if chat in labelled:
 			continue
-		doc = frappe.get_doc("Periskope Chat", chat)
-		doc.append("labels", {"tag": tag})
-		doc.flags.ignore_permissions = True
-		doc.save()
+		# The label row itself, not a save of the chat: a save would write back every field of the
+		# copy it loaded (losing what a webhook wrote meanwhile) and run the assignment rules.
+		row = frappe.get_doc(
+			{
+				"doctype": "Periskope Chat Label",
+				"parent": chat,
+				"parenttype": "Periskope Chat",
+				"parentfield": "labels",
+				"idx": last_idx.get(chat, 0) + 1,
+				"tag": tag,
+			}
+		)
+		row.db_insert()
 		workflow.log(chat, "Label", _("Added {0}").format(tag), user=frappe.session.user)
 	return _done(chats)
+
+
+def _label_rows(chats: list[str], tag: str) -> list[str]:
+	"""The chats (of these) that carry the label."""
+	return frappe.get_all(
+		"Periskope Chat Label",
+		filters={"parent": ["in", chats], "parenttype": "Periskope Chat", "tag": tag},
+		pluck="parent",
+	)
+
+
+def _last_label_idx(chats: list[str]) -> dict:
+	label = frappe.qb.DocType("Periskope Chat Label")
+	rows = (
+		frappe.qb.from_(label)
+		.select(label.parent, Max(label.idx))
+		.where(label.parent.isin(chats) & (label.parenttype == "Periskope Chat"))
+		.groupby(label.parent)
+	).run()
+	return {parent: idx or 0 for parent, idx in rows}
 
 
 @frappe.whitelist(methods=["POST"])
 def remove_label(chats, tag: str) -> dict:
 	access.require_inbox_user()
 	chats = _chats(chats)
-	for chat in chats:
-		doc = frappe.get_doc("Periskope Chat", chat)
-		kept = [row for row in doc.labels if row.tag != tag]
-		if len(kept) == len(doc.labels):
-			continue
-		doc.set("labels", kept)
-		doc.flags.ignore_permissions = True
-		doc.save()
+	labelled = list(dict.fromkeys(_label_rows(chats, tag)))
+	if labelled:
+		# A child row has no hooks of its own; deleted directly for the same reason as in add_label.
+		frappe.db.delete(
+			"Periskope Chat Label",
+			{"parent": ["in", labelled], "parenttype": "Periskope Chat", "tag": tag},
+		)
+	for chat in labelled:
 		workflow.log(chat, "Label", _("Removed {0}").format(tag), user=frappe.session.user)
 	return _done(chats)
 
@@ -180,11 +210,13 @@ def remove_label(chats, tag: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 def mark_read(chats) -> dict:
 	access.require_inbox_user()
+	from periskope_connector import read_state
 	from periskope_connector.api.inbox import mark_seen
 
 	chats = _chats(chats)
 	for chat in chats:
 		mark_seen(chat)
+		read_state.mark_read(chat)  # read for everyone, even when a manager marks it
 	frappe.db.commit()
 	return {"updated": len(chats)}
 

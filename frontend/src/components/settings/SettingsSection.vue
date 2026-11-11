@@ -89,6 +89,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Button, Dialog, ErrorMessage, call, toast } from "frappe-ui";
 import FieldInput from "@/components/settings/FieldInput.vue";
 import { ask as confirmAction } from "@/utils/confirm";
+import { errorText } from "@/utils/errors";
 
 const props = defineProps({
 	sectionKey: { type: String, required: true },
@@ -207,7 +208,7 @@ async function save() {
 		toast.success("Saved");
 		emit("saved", data);
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "Not saved.";
+		error.value = errorText(e, "Not saved.");
 	} finally {
 		saving.value = false;
 	}
@@ -227,7 +228,7 @@ async function run(a) {
 		toast.success(`${a.label}: done`);
 		emit("saved", null, r);
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || `${a.label} failed.`;
+		error.value = errorText(e, `${a.label} failed.`);
 		emit("saved");
 	} finally {
 		running.value = "";

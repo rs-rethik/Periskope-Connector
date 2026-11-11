@@ -2,16 +2,12 @@
 
 import json
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from periskope_connector import messages
-from periskope_connector.ai import classifier
 from periskope_connector.api import webhook
-from periskope_connector.system import insert_as_system
 
 
 class TestWebhookTimeBudget(FrappeTestCase):

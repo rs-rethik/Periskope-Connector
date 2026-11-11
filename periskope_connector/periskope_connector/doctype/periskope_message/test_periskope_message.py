@@ -1,9 +1,7 @@
 """Tests for the Periskope Message doctype and the code that works on it."""
 
 import json
-import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -12,11 +10,15 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, now_datetime
 
 from periskope_connector import alerts, backfill, leads, linking, messages, retention, tags, unmatched
-from periskope_connector import timeline_comments as timeline
 from periskope_connector.ai import classifier
-from periskope_connector.api import webhook
 from periskope_connector.system import insert_as_system
-from periskope_connector.tests.utils import GROUP_CHAT, OTHER_APP_DOCTYPES, event, without_site_teams
+from periskope_connector.tests.utils import (
+	GROUP_CHAT,
+	OTHER_APP_DOCTYPES,
+	event,
+	settings,
+	without_site_teams,
+)
 from periskope_connector.text_rules import analysis_skip_reason, is_acknowledgement
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
@@ -587,6 +589,8 @@ class TestNewEnquiryLead(FrappeTestCase):
 		frappe.db.savepoint("periskope_enquiry_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_enquiry_test")
 		without_site_teams(self, "periskope_enquiry_test")
+		# live: in test mode a chat that is not on the allow list gets no lead (TestTestModeCrm)
+		settings(test_mode=0)
 
 	def _tagged(self, message_id="enq1", category="order_or_enquiry", **data):
 		name = messages.create_message(event(message_id=message_id, **data))
@@ -654,6 +658,8 @@ class TestTimelineComment(FrappeTestCase):
 		frappe.db.savepoint("periskope_comment_test")
 		self.addCleanup(frappe.db.rollback, save_point="periskope_comment_test")
 		without_site_teams(self, "periskope_comment_test")
+		# live: in test mode a chat that is not on the allow list gets no comment (TestTestModeCrm)
+		settings(test_mode=0)
 		lead = frappe.get_doc({"doctype": "CRM Lead", "first_name": "Known", "mobile_no": "9600000001"})
 		lead.flags.ignore_mandatory = True
 		self.lead = lead.insert(ignore_permissions=True)

@@ -135,7 +135,8 @@
 											>
 										</span>
 										<span class="block truncate text-xs text-ink-gray-5">
-											{{ d.name }} · {{ person(d.deal_owner) || "No owner" }}
+											{{ d.name }} ·
+											{{ nameFromEmail(d.deal_owner) || "No owner" }}
 											<template v-if="d.expected_closure_date">
 												· closes
 												{{ date(d.expected_closure_date) }}</template
@@ -335,6 +336,7 @@ import LucidePackage from "~icons/lucide/package";
 import LucideIndianRupee from "~icons/lucide/indian-rupee";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
 import { errorText } from "@/utils/errors";
+import { nameFromEmail } from "@/utils/format";
 
 // The customer's full picture: the lead, all its deals, and their quotations and sales orders.
 const show = defineModel({ type: Boolean, default: false });
@@ -359,7 +361,7 @@ async function load() {
 		loading.value = false;
 	}
 }
-watch(show, (open) => open && load());
+watch(show, (open) => open && load(), { immediate: true });
 watch(
 	() => props.chat?.name,
 	() => {
@@ -441,13 +443,6 @@ function money(value, currency) {
 }
 
 const date = (value) => (value ? dayjs(value).format("D MMM YYYY") : "—");
-
-function person(user) {
-	return (user || "")
-		.split("@")[0]
-		.replace(/[._]/g, " ")
-		.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 // CRM status colours are names; show them as a dot.
 const COLORS = {

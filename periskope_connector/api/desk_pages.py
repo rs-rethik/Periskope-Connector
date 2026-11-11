@@ -1,13 +1,13 @@
 """The Desk screens of the app, served to the WhatsApp inbox so managers never need Desk: the data
 lists (contact queue, groups, auto replies, reminders, the agent's log, AI usage, webhook logs), the
-learning agent's suggestions, and the reports.
+learning agent's suggestions. (The reports page was taken out of the app for now; the Periskope
+reports are still in Desk.)
 
 Everything here is read-only except what the screens offered in Desk: a contact can be made a lead,
 linked or ignored (api/contacts.py), a group mapped to a lead, deal or organization, and a suggestion
-approved or rejected (suggestions.decide). Managers only; each report also keeps its own roles.
+approved or rejected (suggestions.decide). Managers only.
 """
 
-import importlib
 import json
 
 import frappe
@@ -115,15 +115,6 @@ LISTS = {
 		"order_by": "creation desc",
 	},
 }
-REPORTS = [
-	"Periskope Response Time",
-	"Periskope Open Escalations",
-	"Periskope Lead Source",
-	"Periskope Unmatched Numbers",
-	"Periskope Tagging Review",
-	"Periskope Sync Health",
-	"Periskope AI Usage",
-]
 
 
 def _manager():
@@ -228,10 +219,16 @@ def map_group(
 ) -> dict:
 	"""Map a WhatsApp group to its customer (a lead, a deal or an organization), or mark it internal.
 	A new customer replaces the old one; an internal group has none; saving only the type keeps the
-	customer it has. Its messages are linked again."""
+	customer it has. Its chats in the inbox show the customer and its messages are linked again."""
 	access.require_inbox_user()
 	_manager()
 	doc = frappe.get_doc("Periskope Group", group)
+	if organization and not (crm_lead or crm_deal):
+		# a company: the group follows its best deal or lead, like linking it from the chat
+		from periskope_connector.api.crm_panel import set_group_organization
+
+		set_group_organization(doc.chat_id, doc.name, organization, frappe.session.user)
+		return frappe.get_doc("Periskope Group", group).as_dict()
 	if group_type:
 		doc.group_type = group_type
 	if crm_lead or crm_deal or organization or doc.group_type == "Internal":
@@ -240,10 +237,10 @@ def map_group(
 		doc.organization = organization or None
 	doc.flags.ignore_permissions = True
 	doc.save()
-	from periskope_connector.linking import link_message
+	from periskope_connector.linking import relink_group
 
-	for name in frappe.get_all("Periskope Message", filters={"chat_id": doc.chat_id}, pluck="name"):
-		link_message(name)
+	# the same as linking it from the chat: the chat rows follow, the messages are linked again
+	relink_group(doc.name, frappe.session.user)
 	return doc.as_dict()
 
 
@@ -255,53 +252,3 @@ def decide_suggestion(name: str, decision: str) -> str:
 	from periskope_connector.suggestions import decide
 
 	return decide(name, decision)
-
-
-# --- Reports --------------------------------------------------------------------------------------
-
-
-@frappe.whitelist()
-def reports() -> list[dict]:
-	"""The app's reports the user may run."""
-	access.require_inbox_user()
-	_manager()
-	roles = set(frappe.get_roles())
-	out = []
-	for name in REPORTS:
-		allowed = {
-			r.role
-			for r in frappe.get_all(
-				"Has Role", filters={"parent": name, "parenttype": "Report"}, fields=["role"]
-			)
-		}
-		if frappe.session.user == "Administrator" or not allowed or allowed & roles:
-			out.append(
-				{"name": name, "label": name.replace("Periskope ", ""), "filters": _report_filters(name)}
-			)
-	return out
-
-
-def _report_filters(name: str) -> list[dict]:
-	if name == "Periskope Unmatched Numbers":
-		return [
-			{"fieldname": "from_date", "label": _("From"), "fieldtype": "Date", "default_days": -7},
-			{"fieldname": "to_date", "label": _("To"), "fieldtype": "Date", "default_days": 0},
-		]
-	return []
-
-
-@frappe.whitelist()
-def run_report(name: str, filters: str | dict | None = None) -> dict:
-	"""Run one of the app's script reports with its own execute(), as Desk does."""
-	access.require_inbox_user()
-	_manager()
-	if name not in REPORTS or name not in [r["name"] for r in reports()]:
-		frappe.throw(_("You cannot run that report."), frappe.PermissionError)
-	filters = frappe._dict(json.loads(filters) if isinstance(filters, str) else (filters or {}))
-	module = importlib.import_module(
-		f"periskope_connector.periskope_connector.report.{frappe.scrub(name)}.{frappe.scrub(name)}"
-	)
-	result = module.execute(filters)
-	columns, data = result[0], result[1]
-	columns = [c if isinstance(c, dict) else {"label": c, "fieldname": c} for c in columns]
-	return {"columns": columns, "data": data}

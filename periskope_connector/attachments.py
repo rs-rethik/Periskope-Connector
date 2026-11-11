@@ -37,6 +37,7 @@ FIELDS = [
 	"attachment_file",
 	"crm_lead",
 	"crm_deal",
+	"chat_id",
 ]
 
 
@@ -123,7 +124,10 @@ def save(message: str) -> str | None:
 
 
 def attach_to_record(message: str, doc=None) -> str | None:
-	"""Show the saved file in the Attachments of the message's lead or deal. Never raises."""
+	"""Show the saved file in the Attachments of the message's lead or deal. Never raises. Test mode:
+	a dry run for a chat that is not on the allow list (safety.py)."""
+	from periskope_connector import safety
+
 	try:
 		doc = doc or frappe.db.get_value("Periskope Message", message, FIELDS, as_dict=True)
 		record = doc and _record(doc)
@@ -142,21 +146,35 @@ def attach_to_record(message: str, doc=None) -> str | None:
 		)
 		if existing:
 			return existing
-		# The bytes themselves, not the file's address: Frappe v16 copies an address by reading it as
-		# text, which spoils a PDF or a photo. (v15 shares the stored file when the content is the same.)
-		file = frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": source.file_name,
-				"content": _read(doc.attachment_file),
-				"is_private": 1,
-				"attached_to_doctype": record[0],
-				"attached_to_name": record[1],
-			}
+
+		def write():
+			# The bytes themselves, not the file's address: Frappe v16 copies an address by reading it
+			# as text, which spoils a PDF or a photo. (v15 shares the stored file when the content is
+			# the same.)
+			file = frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": source.file_name,
+					"content": _read(doc.attachment_file),
+					"is_private": 1,
+					"attached_to_doctype": record[0],
+					"attached_to_name": record[1],
+				}
+			)
+			file.flags.ignore_permissions = True
+			file.insert()
+			return file.name
+
+		return safety.crm_write(
+			doc.get("chat_id"),
+			"Attach File",
+			f"Attached {source.file_name} to {record[1]}",
+			write,
+			once=f"file:{message}:{record[1]}",
+			target_doctype="File",
+			reference_doctype=record[0],
+			reference_name=record[1],
 		)
-		file.flags.ignore_permissions = True
-		file.insert()
-		return file.name
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not attach the file of message {message} to the CRM")
 		return None

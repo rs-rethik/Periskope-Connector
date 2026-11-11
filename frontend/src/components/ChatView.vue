@@ -2,10 +2,11 @@
 	<div class="flex h-full min-w-0 flex-col bg-surface-base">
 		<div
 			v-if="chat"
-			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-3"
+			class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-outline-gray-1 bg-surface-base px-4 py-3 max-md:flex-nowrap max-md:gap-x-2 max-md:px-2 max-md:py-2"
 		>
 			<Button
 				v-if="back"
+				class="tap"
 				variant="ghost"
 				tooltip="Back to the chats"
 				aria-label="Back to the chats"
@@ -14,21 +15,31 @@
 				<template #icon><LucideArrowLeft class="size-5" /></template>
 			</Button>
 			<InitialsAvatar :name="chat.chat_name || chat.contact_number || chat.title" />
-			<div class="min-w-[10rem] flex-1 sm:min-w-[14rem]">
+			<div class="min-w-0 flex-1 md:min-w-[14rem]">
 				<div class="flex items-center gap-2">
 					<LucideUsers v-if="chat.is_group" class="size-4 shrink-0 text-ink-gray-5" />
 					<span class="truncate text-base font-semibold text-ink-gray-9">{{
 						chat.title
 					}}</span>
 				</div>
-				<div class="truncate text-sm text-ink-gray-5">
-					<span v-if="chat.contact_number">+{{ chat.contact_number }} · </span>
-					on {{ chat.number_label }}{{ chat.source === "Meta" ? " (Meta)" : "" }}
+				<div class="flex items-center gap-1.5 text-sm text-ink-gray-5">
+					<span class="truncate">
+						<span v-if="chat.contact_number">+{{ chat.contact_number }} · </span>
+						on {{ chat.number_label }}{{ chat.source === "Meta" ? " (Meta)" : "" }}
+					</span>
+					<SlaBadge v-if="isMobile" :chat="chat" />
 				</div>
 			</div>
-			<ChatActions ref="actions" :chat="chat" @changed="load({ keepPosition: true })" />
+			<!-- a phone keeps the status here; the other actions and Full view go in its More menu -->
+			<ChatActions
+				ref="actions"
+				:chat="chat"
+				:compact="isMobile"
+				:more="fullViewAction"
+				@changed="load({ keepPosition: true })"
+			/>
 			<Button
-				v-if="chat.crm_lead || chat.crm_deal"
+				v-if="!isMobile && fullViewAction.length"
 				tooltip="The lead, all its deals, quotations and sales orders"
 				aria-label="The lead, all its deals, quotations and sales orders"
 				@click="fullView = true"
@@ -80,6 +91,7 @@
 							</div>
 						</div>
 					</div>
+					<CallRow v-else-if="item.kind === 'call'" :call="item.call" />
 					<MessageBubble
 						v-else
 						:message="item.message"
@@ -89,6 +101,7 @@
 						@updated="replace"
 						@view="viewing = $event.name"
 						:can-create-deal="!!chat"
+						:chat="chat"
 						:can-create-order="!!chat && boot.can_create_order"
 						@create-deal="dealFrom = $event"
 						@create-order="orderFrom = $event"
@@ -106,14 +119,16 @@
 			</div>
 		</div>
 
+		<ScheduledStrip v-if="chat" ref="strip" :key="'s' + chat.name" :chat="chat.name" />
 		<Composer
-			v-if="chat && !error"
+			v-if="chat"
 			:key="chat.name"
 			ref="composer"
 			:chat="chat"
 			:reply-to="replyTo"
 			@sent="addMessage"
 			@noted="addNote"
+			@scheduled="$refs.strip?.add($event)"
 			@clear-reply="replyTo = null"
 		/>
 		<CreateDealDialog
@@ -135,24 +150,41 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+	computed,
+	defineAsyncComponent,
+	nextTick,
+	onBeforeUnmount,
+	onMounted,
+	ref,
+	watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Button, LoadingIndicator, call } from "frappe-ui";
 import InitialsAvatar from "@/components/InitialsAvatar.vue";
-import FullView from "@/components/FullView.vue";
-import CreateDealDialog from "@/components/CreateDealDialog.vue";
-import CreateSalesOrderDialog from "@/components/CreateSalesOrderDialog.vue";
 import { boot } from "@/boot";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideUsers from "~icons/lucide/users";
 import LucideLock from "~icons/lucide/lock";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
 import MessageBubble from "@/components/MessageBubble.vue";
+import CallRow from "@/components/CallRow.vue";
+import ScheduledStrip from "@/components/ScheduledStrip.vue";
 import Composer from "@/components/Composer.vue";
 import ChatActions from "@/components/ChatActions.vue";
 import MediaViewer from "@/components/MediaViewer.vue";
-import { changed, chatCache, inbox, loadCounts } from "@/stores/inbox";
+import SlaBadge from "@/components/SlaBadge.vue";
+import { changed, chatCache, inbox, loadCounts, viewedAlone } from "@/stores/inbox";
 import { dayLabel, messageTime, sameDay } from "@/utils/format";
+import { loadFailed } from "@/utils/load";
+import { isMobile } from "@/utils/screen";
+
+// Opened now and then: loaded apart from the chat itself.
+const FullView = defineAsyncComponent(() => import("@/components/FullView.vue"));
+const CreateDealDialog = defineAsyncComponent(() => import("@/components/CreateDealDialog.vue"));
+const CreateSalesOrderDialog = defineAsyncComponent(() =>
+	import("@/components/CreateSalesOrderDialog.vue")
+);
 
 const fullView = ref(false);
 const dealFrom = ref(null); // the message a deal is being made from
@@ -177,6 +209,7 @@ function remember() {
 		chat: chat.value,
 		messages: messages.value,
 		notes: notes.value,
+		calls: calls.value,
 		hasMore: hasMore.value,
 	});
 	while (chatCache.size > CACHE_SIZE) chatCache.delete(chatCache.keys().next().value);
@@ -187,6 +220,7 @@ function restore() {
 	chat.value = hit.chat;
 	messages.value = hit.messages;
 	notes.value = hit.notes;
+	calls.value = hit.calls || [];
 	hasMore.value = hit.hasMore;
 	emit("loaded", hit.chat);
 	stuck.value = true;
@@ -196,8 +230,21 @@ function restore() {
 const emit = defineEmits(["loaded", "back"]);
 
 const chat = ref(null);
+// "Full view" (FullView): a button beside the chat's actions, an entry of their More menu on a phone.
+const fullViewAction = computed(() =>
+	chat.value?.crm_lead || chat.value?.crm_deal
+		? [
+				{
+					label: "Full view",
+					icon: LucideLayoutDashboard,
+					onClick: () => (fullView.value = true),
+				},
+		  ]
+		: []
+);
 const messages = ref([]);
 const notes = ref([]);
+const calls = ref([]); // WhatsApp calls (calls.py), shown in the conversation by time
 const hasMore = ref(false);
 const loading = ref(false);
 const loadingOlder = ref(false);
@@ -216,7 +263,7 @@ const images = computed(() =>
 // that finish loading after the jump to the bottom do not push the latest messages out of view.
 const stuck = ref(true);
 
-// Messages and the team's private notes, in time order.
+// Messages, the team's private notes and the calls, in time order.
 const timeline = computed(() =>
 	[
 		...messages.value.map((m) => ({
@@ -226,6 +273,7 @@ const timeline = computed(() =>
 			message: m,
 		})),
 		...notes.value.map((n) => ({ kind: "note", name: n.name, at: n.creation, note: n })),
+		...calls.value.map((c) => ({ kind: "call", name: c.name, at: c.call_time, call: c })),
 	].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0))
 );
 
@@ -257,22 +305,55 @@ function follow() {
 	if (stuck.value && scroller.value) scroller.value.scrollTop = scroller.value.scrollHeight;
 }
 
+function mergeCalls(list) {
+	const byName = new Map(calls.value.map((c) => [c.name, c]));
+	for (const c of list) byName.set(c.name, c);
+	calls.value = [...byName.values()];
+}
+
 function mergeNotes(list) {
 	const byName = new Map(notes.value.map((n) => [n.name, n]));
 	for (const n of list) byName.set(n.name, n);
 	notes.value = [...byName.values()];
 }
 
-async function load({ keepPosition = false } = {}) {
+// Opening a chat reads it, and the counts follow. Not in a hidden tab: there it is marked when the
+// reader comes back to it. Says whether it will load the counts.
+function markSeen() {
+	if (document.hidden || !chat.value?.unread) return false;
+	const seen = chat.value;
+	call("periskope_connector.api.inbox.mark_seen", { chat: seen.name })
+		.then(() => {
+			seen.unread = false;
+			loadCounts();
+		})
+		.catch(() => {}); // the chat is open either way; it is marked read on the next visit
+	return true;
+}
+
+let loadSeq = 0; // only the newest load fills the view
+let loadingFor = ""; // the chat a load is running for
+let loadAgain = null; // a refresh asked for while one runs: one more load when it ends
+
+// `counts`: a live update of this chat alone leaves the counts to this load (stores/inbox.js), so
+// they are loaded once, after the chat is marked read.
+async function load({ keepPosition = false, counts = false } = {}) {
+	const name = props.name;
+	if (loadingFor === name) {
+		loadAgain = { keepPosition: true, counts: counts || !!loadAgain?.counts };
+		return;
+	}
+	const seq = ++loadSeq;
+	loadingFor = name;
+	loadAgain = null;
 	const stick = !keepPosition || nearBottom();
 	loading.value = !messages.value.length;
-	const name = props.name;
 	try {
 		const [c, r] = await Promise.all([
 			call("periskope_connector.api.inbox.get_chat", { chat: name }),
 			call("periskope_connector.api.inbox.get_messages", { chat: name }),
 		]);
-		if (name !== props.name) return; // the reader moved on to another chat meanwhile
+		if (seq !== loadSeq) return; // the reader moved on to another chat meanwhile
 		chat.value = c;
 		emit("loaded", c);
 		// Keep the older pages already loaded; the newest page replaces the tail.
@@ -281,40 +362,55 @@ async function load({ keepPosition = false } = {}) {
 			keepPosition && first ? messages.value.filter((m) => m.message_timestamp < first) : [];
 		messages.value = [...older, ...r.messages];
 		mergeNotes(r.notes || []);
+		mergeCalls(r.calls || []);
 		if (!older.length) hasMore.value = r.has_more;
 		if (stick) scrollToBottom();
 		error.value = "";
 		remember();
-		call("periskope_connector.api.inbox.mark_seen", { chat: name })
-			.then(loadCounts)
-			.catch(() => {}); // the chat is open either way; it is marked read on the next visit
+		if (!markSeen() && counts) loadCounts();
 		if (!keepPosition && hasPendingTicks()) refreshTicks();
 	} catch (e) {
-		error.value =
-			e?.exc_type === "PermissionError" ||
-			/PermissionError|403/.test(String(e?.message || e))
-				? "You cannot open this chat. It may be on a number or for a customer that is not yours."
-				: "This chat could not be loaded.";
+		if (seq !== loadSeq) return;
+		if (counts) loadCounts();
+		// a failed refresh keeps the chat and its composer; only a chat that never loaded says why
+		if (chat.value) loadFailed(e, "This chat could not be refreshed.");
+		else
+			error.value =
+				e?.exc_type === "PermissionError" ||
+				/PermissionError|403/.test(String(e?.message || e))
+					? "You cannot open this chat. It may be on a number or for a customer that is not yours."
+					: "This chat could not be loaded.";
 	} finally {
-		loading.value = false;
+		if (seq === loadSeq) {
+			loadingFor = "";
+			loading.value = false;
+			if (loadAgain) load(loadAgain);
+		}
 	}
 }
 
 async function loadOlder() {
 	if (!messages.value.length) return;
 	loadingOlder.value = true;
+	const name = props.name;
+	const seq = loadSeq;
 	const el = scroller.value;
 	const before = el.scrollHeight;
 	try {
 		const r = await call("periskope_connector.api.inbox.get_messages", {
-			chat: props.name,
+			chat: name,
 			before: messages.value[0].message_timestamp,
 		});
+		// another chat was opened, or this one was loaded afresh, meanwhile: the page is not for it
+		if (name !== props.name || seq !== loadSeq) return;
 		messages.value = [...r.messages, ...messages.value];
 		mergeNotes(r.notes || []);
+		mergeCalls(r.calls || []);
 		hasMore.value = r.has_more;
 		await nextTick();
 		el.scrollTop = el.scrollHeight - before;
+	} catch (e) {
+		loadFailed(e, "Could not load the earlier messages.");
 	} finally {
 		loadingOlder.value = false;
 	}
@@ -362,11 +458,16 @@ function replace(m) {
 	messages.value = messages.value.map((x) => (x.name === m.name ? { ...x, ...m } : x));
 }
 
+// A dialog, a menu or the image viewer is open: the keys are theirs.
+function overlayOpen() {
+	return !!document.querySelector('[role="dialog"], [role="menu"]');
+}
+
 // Keyboard: r reply, a assign to me, e resolve, Esc close.
 function onKey(e) {
 	if (e.metaKey || e.ctrlKey || e.altKey) return;
 	if (e.key === "Escape") return onEscape(e);
-	if (e.target.closest("input, textarea, [contenteditable]")) return;
+	if (e.target.closest("input, textarea, [contenteditable]") || overlayOpen()) return;
 	const keys = {
 		r: () => composer.value?.focus(),
 		a: () => actions.value?.assignToMe(),
@@ -383,7 +484,7 @@ function onKey(e) {
 const route = useRoute();
 const router = useRouter();
 function onEscape(e) {
-	if (e.defaultPrevented || document.querySelector('[role="dialog"], [role="menu"]')) return;
+	if (e.defaultPrevented || overlayOpen()) return;
 	if (e.target.closest("input, textarea, [contenteditable]")) return e.target.blur();
 	if (replyTo.value) return (replyTo.value = null);
 	router.push(
@@ -393,9 +494,15 @@ function onEscape(e) {
 
 watch(
 	() => props.name,
+	(name) => (inbox.viewing = name),
+	{ immediate: true }
+);
+watch(
+	() => props.name,
 	() => {
 		messages.value = [];
 		notes.value = [];
+		calls.value = [];
 		chat.value = null;
 		replyTo.value = null;
 		viewing.value = null;
@@ -406,13 +513,20 @@ watch(
 watch(
 	() => inbox.version,
 	() => {
-		if (changed(props.name)) load({ keepPosition: true });
+		if (changed(props.name)) load({ keepPosition: true, counts: viewedAlone() });
+	}
+);
+watch(
+	() => inbox.tickVersion,
+	() => {
+		if (inbox.ticked.includes(props.name)) load({ keepPosition: true });
 	}
 );
 onMounted(() => {
 	restore();
 	load();
 	window.addEventListener("keydown", onKey);
+	document.addEventListener("visibilitychange", markSeen);
 	resizer = new ResizeObserver(follow);
 	resizer.observe(content.value);
 });
@@ -420,7 +534,9 @@ onBeforeUnmount(() => {
 	remember();
 	resizer?.disconnect();
 	window.removeEventListener("keydown", onKey);
+	document.removeEventListener("visibilitychange", markSeen);
 	timers.forEach(clearTimeout);
+	if (inbox.viewing === props.name) inbox.viewing = "";
 });
 
 defineExpose({ reload: () => load({ keepPosition: true }), chat });

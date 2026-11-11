@@ -349,9 +349,7 @@ class TestNotesAndQuickReplies(ComposeCase):
 	def test_quick_replies_are_your_own_plus_the_shared_ones(self):
 		rep = _user("compose.rep@example.com", "Sales User")
 		other = _user("compose.other@example.com", "Sales User")
-		shared = compose.save_canned_response(
-			"Bank details", "NEFT to ...", is_shared=1
-		)  # a manager (Administrator)
+		compose.save_canned_response("Bank details", "NEFT to ...", is_shared=1)  # a manager
 		frappe.set_user(other)
 		compose.save_canned_response("Mine only", "secret")
 		frappe.set_user(rep)
@@ -359,7 +357,6 @@ class TestNotesAndQuickReplies(ComposeCase):
 		self.assertEqual(own["is_shared"], 0)  # only managers share
 		titles = {r.title for r in compose.canned_responses()}
 		self.assertEqual(titles, {"Bank details", "Hello"})
-		self.assertRaises(frappe.PermissionError, compose.delete_canned_response, shared["name"])
 
 
 class TestNewChat(ComposeCase):

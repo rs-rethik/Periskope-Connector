@@ -30,8 +30,6 @@ class TestLists(DeskPagesCase):
 		for call in (
 			lambda: desk_pages.list_meta("contacts"),
 			lambda: desk_pages.list_rows("agent_actions"),
-			lambda: desk_pages.reports(),
-			lambda: desk_pages.run_report("Periskope AI Usage"),
 			lambda: desk_pages.decide_suggestion("x", "approve"),
 		):
 			self.assertRaises(frappe.PermissionError, call)
@@ -106,16 +104,6 @@ class TestLists(DeskPagesCase):
 		desk_pages.decide_suggestion(doc.name, "reject")
 		self.assertEqual(frappe.db.get_value("Periskope Suggestion", doc.name, "status"), "Rejected")
 		self.assertRaises(frappe.ValidationError, desk_pages.decide_suggestion, doc.name, "approve")
-
-
-class TestReports(DeskPagesCase):
-	def test_every_report_runs_and_unknown_ones_are_refused(self):
-		names = [r["name"] for r in desk_pages.reports()]
-		self.assertEqual(sorted(names), sorted(desk_pages.REPORTS))
-		for name in names:
-			out = desk_pages.run_report(name, {"from_date": "2026-10-01", "to_date": "2026-10-23"})
-			self.assertTrue(out["columns"], name)
-		self.assertRaises(frappe.PermissionError, desk_pages.run_report, "Stock Balance")
 
 
 class TestDeskRetired(DeskPagesCase):

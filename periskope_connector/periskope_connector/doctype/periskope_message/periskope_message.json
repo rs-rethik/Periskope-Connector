@@ -401,7 +401,8 @@
    "fieldname": "chat_id",
    "fieldtype": "Data",
    "label": "Chat ID",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "chat_name",
@@ -667,7 +668,8 @@
    "label": "Send Status",
    "read_only": 1,
    "in_standard_filter": 1,
-   "description": "Sending: saved, being handed to Periskope. Queued: Periskope took it (the ticks then show delivery). Failed: Periskope did not take it (see Send Error). Not Sent: stopped by test mode."
+   "description": "Sending: saved, being handed to Periskope. Queued: Periskope took it (the ticks then show delivery). Failed: Periskope did not take it (see Send Error). Not Sent: stopped by test mode.",
+   "search_index": 1
   },
   {
    "fieldname": "send_error",
@@ -710,7 +712,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-02 16:00:00.000000",
+ "modified": "2026-11-11 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

@@ -11,9 +11,10 @@ import re
 
 import frappe
 from frappe import _
+from frappe.query_builder import Criterion
 from frappe.utils import cint
 
-from periskope_connector import access, attachments, branding, meta, numbers, shared_items
+from periskope_connector import access, attachments, branding, meta, numbers, safety, shared_items
 from periskope_connector.ai import festival
 
 PAGE = 50
@@ -31,7 +32,7 @@ SORTS = {
 STATUSES = ("Open", "Pending", "Resolved", "Closed")
 CHAT_COLUMNS = """c.name, c.chat_id, c.chat_name, c.is_group, c.contact_number, c.whatsapp_number,
 	c.status, c.last_message_at, c.last_message_preview, c.last_message_direction, c.last_incoming_at,
-	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign, c.team, c.waiting_since,
+	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign, c.team, c.waiting_since, c.read_at,
 	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached, c.ai_off,
 	(select m.ai_category from `tabPeriskope Message` m where m.periskope_chat = c.name
 		and ifnull(m.ai_category, '') != '' order by m.message_timestamp desc limit 1) as ai_tag"""
@@ -75,11 +76,17 @@ def _parse(value):
 	return value
 
 
-def _where(filters: dict) -> tuple[list[str], dict]:
-	"""SQL conditions and values for the chat list filters. Unknown keys are ignored."""
+UNREAD = """(c.last_incoming_at is not null and c.last_message_direction = 'Incoming'
+	and (c.read_at is null or c.read_at < c.last_incoming_at))"""
+
+
+def _where(filters: dict, condition: str | None = None) -> tuple[list[str], dict]:
+	"""SQL conditions and values for the chat list filters. Unknown keys are ignored. `condition` is
+	the user's access condition when the caller already has it (counts builds it once)."""
 	user = frappe.session.user
 	conditions, values = [], {"user": user, "assign": access.assigned_like(user)}
-	condition = access.chat_condition(user, "c")
+	if condition is None:
+		condition = access.chat_condition(user, "c")
 	if condition:
 		conditions.append(condition)
 	if filters.get("number"):
@@ -97,13 +104,17 @@ def _where(filters: dict) -> tuple[list[str], dict]:
 	if filters.get("unanswered"):
 		conditions.append("c.last_message_direction = 'Incoming'")
 	if filters.get("unread"):
-		conditions.append(
-			"""c.last_incoming_at is not null and not exists (select 1 from `tabPeriskope Chat Seen` s
-			where s.chat = c.name and s.user = %(user)s and s.seen_at >= c.last_incoming_at)"""
-		)
+		# read for everyone once its own reader opened it (read_state.py); our reply means it was seen
+		conditions.append(UNREAD)
+	# a group by its flag or by its WhatsApp id (some older rows lack the flag)
+	is_group = "(c.is_group = 1 or c.chat_id like '%%@g.us')"
 	if filters.get("groups") is not None and filters.get("groups") != "":
-		conditions.append("c.is_group = %(groups)s")
-		values["groups"] = 1 if cint(filters["groups"]) else 0
+		conditions.append(is_group if cint(filters["groups"]) else f"not {is_group}")
+	# internal (team) groups have their own tab; the other tabs leave them out
+	internal = """exists (select 1 from `tabPeriskope Group` g where g.chat_id = c.chat_id
+		and g.group_type = 'Internal')"""
+	if filters.get("internal") is not None and filters.get("internal") != "":
+		conditions.append(f"{is_group} and {internal}" if cint(filters["internal"]) else f"not {internal}")
 	if filters.get("linked") is not None and filters.get("linked") != "":
 		linked = "(ifnull(c.crm_lead, '') != '' or ifnull(c.crm_deal, '') != '')"
 		conditions.append(linked if cint(filters["linked"]) else f"not {linked}")
@@ -176,15 +187,10 @@ def _decorate(rows: list[dict]) -> list[dict]:
 	lead or deal's title."""
 	if not rows:
 		return rows
+	for r in rows:
+		# some older rows lack the flag; a WhatsApp group id says it all
+		r.is_group = 1 if r.is_group or (r.chat_id or "").endswith("@g.us") else 0
 	names = [r.name for r in rows]
-	seen = dict(
-		frappe.get_all(
-			"Periskope Chat Seen",
-			filters={"chat": ["in", names], "user": frappe.session.user},
-			fields=["chat", "seen_at"],
-			as_list=True,
-		)
-	)
 	rows_of_numbers = numbers.all_numbers()
 	labels = {n.name: n.display_name or n.number for n in rows_of_numbers}
 	sources = {n.name: n.source or "Periskope" for n in rows_of_numbers}
@@ -202,8 +208,11 @@ def _decorate(rows: list[dict]) -> list[dict]:
 	leads = _titles("CRM Lead", [r.crm_lead for r in rows if r.crm_lead], "lead_name")
 	deals = _titles("CRM Deal", [r.crm_deal for r in rows if r.crm_deal], "organization")
 	for row in rows:
-		last_seen = seen.get(row.name)
-		row.unread = bool(row.last_incoming_at and (not last_seen or last_seen < row.last_incoming_at))
+		row.unread = bool(
+			row.last_incoming_at
+			and row.last_message_direction == "Incoming"
+			and (not row.read_at or row.read_at < row.last_incoming_at)
+		)
 		row.assigned_to = json.loads(row.pop("_assign") or "[]")
 		row.number_label = labels.get(row.whatsapp_number, row.whatsapp_number or "")
 		row.lead_title = leads.get(row.crm_lead) if row.crm_lead else None
@@ -233,23 +242,23 @@ def _titles(doctype: str, names: list[str], field: str) -> dict:
 
 @frappe.whitelist()
 def counts() -> dict:
-	"""The sidebar badges: chats per quick filter, and unread chats per number."""
+	"""The sidebar badges: chats per quick filter, and unread chats per number. One query for all the
+	badges, with the user's access condition built once."""
 	access.require_inbox_user()
-	out = {}
-	for key, flt in {
-		"all": {"status": "active"},
-		"mine": {"status": "active", "mine": 1},
-		"unassigned": {"status": "active", "unassigned": 1},
-		"unanswered": {"status": "active", "unanswered": 1},
-		"unread": {"unread": 1},
-		"breached": {"sla": "breached"},
-		"my_team": {"status": "active", "my_team": 1},
-	}.items():
-		conditions, values = _where(flt)
-		out[key] = frappe.db.sql(
-			f"select count(*) from `tabPeriskope Chat` c where {' and '.join(conditions) or '1=1'}", values
-		)[0][0]
-	conditions, values = _where({"unread": 1})
+	condition = access.chat_condition(frappe.session.user, "c")
+	parts, values = [], {}
+	for key, flt in COUNT_FILTERS.items():
+		conditions, where_values = _where(flt, condition)
+		values.update(where_values)
+		# the access condition is the outer where; each badge adds its own filters
+		own = [c for c in conditions if c != condition] or ["1=1"]
+		parts.append(f"sum(case when {' and '.join(own)} then 1 else 0 end) as `{key}`")
+	where = condition or "1=1"
+	row = frappe.db.sql(
+		f"select {', '.join(parts)} from `tabPeriskope Chat` c where {where}", values, as_dict=True
+	)[0]
+	out = {key: int(row.get(key) or 0) for key in COUNT_FILTERS}
+	conditions, values = _where({"unread": 1}, condition)
 	out["unread_by_number"] = dict(
 		frappe.db.sql(
 			f"""select c.whatsapp_number, count(*) from `tabPeriskope Chat` c
@@ -258,6 +267,17 @@ def counts() -> dict:
 		)
 	)
 	return out
+
+
+COUNT_FILTERS = {
+	"all": {"status": "active"},
+	"mine": {"status": "active", "mine": 1},
+	"unassigned": {"status": "active", "unassigned": 1},
+	"unanswered": {"status": "active", "unanswered": 1},
+	"unread": {"unread": 1},
+	"breached": {"sla": "breached"},
+	"my_team": {"status": "active", "my_team": 1},
+}
 
 
 def _chat_or_403(chat: str):
@@ -293,7 +313,9 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 		limit=limit + 1,
 	)
 	more = len(rows) > limit
-	rows = list(reversed(rows[:limit]))
+	if more:
+		rows, more = _whole_seconds(chat, rows[:limit], rows[limit])
+	rows = list(reversed(rows))
 	names = _participant_names([r.sender_phone for r in rows if r.sender_phone])
 	quoted = _quoted(chat, [r.quoted_message_id for r in rows if r.quoted_message_id])
 	senders = {u: frappe.utils.get_fullname(u) for u in {r.sent_by for r in rows if r.sent_by}}
@@ -311,7 +333,37 @@ def get_messages(chat: str, before: str | None = None, limit: int = MESSAGE_PAGE
 		row.shared = shared_items.from_row(row)
 	_deals_made(rows)
 	_orders_made(rows)
-	return {"messages": rows, "has_more": more, "notes": _notes(chat, rows, more, before)}
+	return {
+		"messages": rows,
+		"has_more": more,
+		"notes": _notes(chat, rows, more, before),
+		"calls": _calls(chat, rows, more, before),
+	}
+
+
+SAME_SECOND_CAP = 500
+
+
+def _whole_seconds(chat: str, page: list, next_row) -> tuple[list, bool]:
+	"""(page, has_more) for a page that never ends inside one second. Message times are whole
+	seconds and the next page is asked for as "before <the oldest time shown>": messages sharing
+	that second with the oldest one shown would otherwise never be loaded. So the page takes them
+	all (newest first, like `page`)."""
+	boundary = page[-1].message_timestamp
+	if not boundary or next_row.message_timestamp != boundary:
+		return page, True
+	shown = [r.name for r in page if r.message_timestamp == boundary]
+	page += frappe.get_all(
+		"Periskope Message",
+		filters={"periskope_chat": chat, "message_timestamp": boundary, "name": ["not in", shown]},
+		fields=MESSAGE_FIELDS,
+		order_by="creation desc",
+		limit=SAME_SECOND_CAP,
+	)
+	more = bool(
+		frappe.db.exists("Periskope Message", {"periskope_chat": chat, "message_timestamp": ["<", boundary]})
+	)
+	return page, more
 
 
 def _deals_made(rows: list) -> None:
@@ -371,6 +423,40 @@ def _notes(chat: str, rows: list, more: bool, before: str | None) -> list[dict]:
 	]
 
 
+CALL_FIELDS = [
+	"name",
+	"direction",
+	"result",
+	"call_time",
+	"duration",
+	"handled_via",
+	"answered_by",
+	"summary",
+	"transcript_status",
+	"transcript",
+	"has_recording",
+	"recording_duration",
+]
+
+
+def _calls(chat: str, rows: list, more: bool, before: str | None) -> list[dict]:
+	"""The WhatsApp calls (calls.py) in the same stretch of time as this page of messages."""
+	filters = {"periskope_chat": chat}
+	if more and rows:
+		filters["call_time"] = [">=", rows[0].message_timestamp]
+	if before:
+		filters["call_time"] = (
+			["between", [rows[0].message_timestamp, before]] if more and rows else ["<", before]
+		)
+	calls = frappe.get_all(
+		"Periskope Call", filters=filters, fields=CALL_FIELDS, order_by="call_time asc", limit=500
+	)
+	names = {u: frappe.utils.get_fullname(u) for u in {c.answered_by for c in calls if c.answered_by}}
+	for c in calls:
+		c.answered_by_name = names.get(c.answered_by) or c.answered_by or ""
+	return calls
+
+
 def _participant_names(phones: list[str]) -> dict:
 	"""Names for the people writing in a group, from the contact queue."""
 	if not phones:
@@ -386,16 +472,22 @@ def _participant_names(phones: list[str]) -> dict:
 def _quoted(chat: str, ids: list[str]) -> dict:
 	"""The text of the messages that others reply to (Periskope gives the short WhatsApp id, the end
 	of our stored message id)."""
+	shorts = {s for s in ids if s}
+	if not shorts:
+		return {}
+	# one query for the whole page (each id is the ending of a stored message id)
+	msg = frappe.qb.DocType("Periskope Message")
+	rows = (
+		frappe.qb.from_(msg)
+		.select(msg.name, msg.body, msg.direction, msg.message_type, msg.message_id)
+		.where((msg.periskope_chat == chat) & Criterion.any([msg.message_id.like(f"%{s}") for s in shorts]))
+	).run(as_dict=True)
 	out = {}
-	for short in set(ids):
-		row = frappe.db.get_value(
-			"Periskope Message",
-			{"periskope_chat": chat, "message_id": ["like", f"%{short}"]},
-			["name", "body", "direction", "message_type"],
-			as_dict=True,
-		)
-		if row:
-			out[short] = row
+	for row in rows:
+		message_id = row.pop("message_id") or ""
+		for short in shorts:
+			if message_id.endswith(short):
+				out.setdefault(short, row)
 	return out
 
 
@@ -412,6 +504,9 @@ def mark_seen(chat: str) -> None:
 			{"doctype": "Periskope Chat Seen", "chat": chat, "user": frappe.session.user, "seen_at": now}
 		)
 		doc.insert(ignore_permissions=True)  # the user's own read mark, after the chat check above
+	from periskope_connector import read_state
+
+	read_state.opened(chat)  # the chat's own reader makes it read for everyone (and the customer)
 
 
 SAFE_NAME = re.compile(r"[^\w.\- ]+")
@@ -420,9 +515,11 @@ INLINE_PREFIXES = ("video/", "audio/")
 
 
 @frappe.whitelist()
-def media(message: str):
+def media(message: str, thumb: int = 0):
 	"""The file of a message, for the user's browser: the saved private File, else downloaded from
-	Periskope on the server (its link and key stay on the server)."""
+	Periskope on the server (its link and key stay on the server). With `thumb` an image comes
+	reduced to at most THUMB_PIXELS on its long side (for the chat's bubbles); any other file ignores
+	it."""
 	access.require_inbox_user()
 	doc = frappe.db.get_value(
 		"Periskope Message",
@@ -435,6 +532,8 @@ def media(message: str):
 			"media_filename",
 			"media_mimetype",
 			"message_type",
+			"message_id",
+			"whatsapp_number",
 		],
 		as_dict=True,
 	)
@@ -444,12 +543,14 @@ def media(message: str):
 	if doc.attachment_file:
 		content = attachments._read(doc.attachment_file)
 	elif attachments.has_file(frappe._dict(doc)):
-		content = attachments.download(doc.media_path)
+		content = _download_media(doc)
 	else:
 		raise frappe.DoesNotExistError
 	name = SAFE_NAME.sub("", doc.media_filename or "") or doc.name
 	# WhatsApp names images by id, with no extension, so the type comes from the message.
 	content_type = attachments._mime(doc) or mimetypes.guess_type(name)[0] or "application/octet-stream"
+	if cint(thumb) and content_type in THUMB_TYPES:
+		content, content_type = _thumbnail(content, content_type)
 	frappe.local.response.filename = name
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
@@ -458,6 +559,52 @@ def media(message: str):
 	frappe.local.response.display_content_as = (
 		"inline" if content_type in INLINE_TYPES or content_type.startswith(INLINE_PREFIXES) else "attachment"
 	)
+
+
+THUMB_PIXELS = 480
+THUMB_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
+
+
+def _thumbnail(content: bytes, content_type: str) -> tuple[bytes, str]:
+	"""(bytes, type) of the image reduced to THUMB_PIXELS on its long side: a JPEG, or a PNG when it
+	has transparency. An image that is small already, or that cannot be read, is returned as it is."""
+	import io
+
+	from PIL import Image, ImageOps, UnidentifiedImageError
+
+	try:
+		with Image.open(io.BytesIO(content)) as image:
+			if max(image.size) <= THUMB_PIXELS:
+				return content, content_type
+			image = ImageOps.exif_transpose(image)  # a phone photo keeps its upright position
+			image.thumbnail((THUMB_PIXELS, THUMB_PIXELS))
+			transparent = image.mode in ("RGBA", "LA", "P") and (
+				image.mode != "P" or "transparency" in image.info
+			)
+			out = io.BytesIO()
+			if transparent:
+				image.convert("RGBA").save(out, "PNG", optimize=True)
+				return out.getvalue(), "image/png"
+			image.convert("RGB").save(out, "JPEG", quality=80, optimize=True)
+			return out.getvalue(), "image/jpeg"
+	except (UnidentifiedImageError, OSError, ValueError):
+		return content, content_type
+
+
+def _download_media(doc) -> bytes:
+	"""The file from its saved link; when that link has expired, from a new one (Get Message), which
+	is then kept."""
+	try:
+		return attachments.download(doc.media_path)
+	except Exception:
+		from periskope_connector.api.message_actions import fresh_media_path
+
+		path = doc.message_id and fresh_media_path(doc.message_id, doc.whatsapp_number)
+		if not path or path == doc.media_path:
+			raise
+		content = attachments.download(path)
+		frappe.db.set_value("Periskope Message", doc.name, "media_path", path, update_modified=False)
+		return content
 
 
 @frappe.whitelist()
@@ -493,6 +640,8 @@ def boot() -> dict:
 		],
 		"tags": frappe.get_all("Periskope Tag", pluck="name", order_by="name asc"),
 		"brand": branding.brand(),
+		# a "Test mode" badge beside the app's name while nothing reaches real customers (safety.py)
+		"test_mode": safety.test_mode(),
 		# "Create sales order" on a customer's message (api/sales_order.py)
 		"can_create_order": bool(
 			frappe.db.exists("DocType", "Sales Order") and frappe.has_permission("Sales Order", "create")

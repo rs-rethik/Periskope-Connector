@@ -441,3 +441,51 @@ body {
 	background: oklch(32% 0.06 var(--fest-h1));
 	box-shadow: inset 3px 0 0 oklch(75% 0.14 var(--fest-h1));
 }
+
+/* Phones. The page reaches under the notch and the home bar (viewport-fit=cover in index.html):
+   bars and full-screen sheets pad themselves clear of them. */
+.safe-top {
+	padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+	padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-x {
+	padding-left: env(safe-area-inset-left);
+	padding-right: env(safe-area-inset-right);
+}
+@media (max-width: 767px) {
+	/* a small control keeps its look and takes a finger: at least 40 px to tap */
+	.tap {
+		position: relative;
+	}
+	.tap::after {
+		content: "";
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: max(100%, 40px);
+		height: max(100%, 40px);
+		transform: translate(-50%, -50%);
+	}
+	/* a row of tabs that scrolls sideways fades out where more follows */
+	.fade-right {
+		padding-right: 1.75rem;
+		mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+	}
+	/* the buttons of a row shown as a card (pages/DataList.vue) */
+	.row-actions button {
+		height: 2.5rem;
+		margin-left: 0;
+		padding-inline: 1rem;
+	}
+	/* Settings fills the screen (components/settings/SettingsModal.vue) */
+	.dialog-scroll-container > div:has(.settings-sheet) {
+		padding: 0;
+	}
+	.dialog-content:has(.settings-sheet) {
+		margin: 0;
+		max-width: none;
+		border-radius: 0;
+	}
+}

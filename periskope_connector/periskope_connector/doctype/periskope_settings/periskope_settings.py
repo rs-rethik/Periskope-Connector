@@ -34,6 +34,18 @@ class PeriskopeSettings(Document):
 		self.validate_reminders()
 		self.validate_assistant()
 
+	def on_update(self):
+		from periskope_connector import safety
+
+		# Periskope sends scheduled messages and broadcasts without asking this site: when test mode
+		# is turned on, the schedules to customers who are not test numbers are paused and the
+		# broadcasts to them stopped (scheduled.on_test_mode_on).
+		before = self.get_doc_before_save()
+		if safety.test_mode() and before and not before.test_mode:
+			frappe.enqueue(
+				"periskope_connector.scheduled.on_test_mode_on", queue="short", enqueue_after_commit=True
+			)
+
 	def validate_assistant(self):
 		from frappe.utils import validate_email_address
 

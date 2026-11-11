@@ -2,21 +2,43 @@
 	<div class="flow flex h-full min-h-0 flex-col">
 		<div class="page-head gap-x-4">
 			<h1 class="mr-2 text-lg font-semibold text-ink-gray-9">How a message moves</h1>
-			<span
-				v-for="s in legend"
-				:key="s.label"
-				class="inline-flex items-center gap-1.5 text-xs text-ink-gray-6"
-			>
-				<component :is="s.icon" class="size-3.5" :class="s.cls" />{{ s.label }}
-			</span>
-			<span class="text-xs text-ink-gray-5"
-				>Click a step. Drag to move, Ctrl + scroll to zoom.</span
-			>
+			<template v-if="!isMobile">
+				<span
+					v-for="s in legend"
+					:key="s.label"
+					class="inline-flex items-center gap-1.5 text-xs text-ink-gray-6"
+				>
+					<component :is="s.icon" class="size-3.5" :class="s.cls" />{{ s.label }}
+				</span>
+				<span class="text-xs text-ink-gray-5"
+					>Click a step. Drag to move, Ctrl + scroll to zoom.</span
+				>
+			</template>
 			<Button class="ml-auto" label="Refresh figures" :loading="loading" @click="load" />
 			<Button label="Health" @click="$router.push({ name: 'Health' })" />
 		</div>
 
-		<div class="panel-frame page-card flex min-h-0 flex-1 overflow-hidden">
+		<!-- a phone has no room for the diagram: its steps as a list -->
+		<div v-if="isMobile" class="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+			<p class="rounded-lg bg-surface-amber-1 px-3 py-2 text-sm text-ink-amber-8">
+				The diagram, with its live figures and switches, needs a larger screen. These are
+				its steps.
+			</p>
+			<section v-for="(lane, i) in LANES" :key="lane[1]" class="mt-4">
+				<h2 class="mb-1.5 text-sm font-medium text-ink-gray-9">{{ lane[1] }}</h2>
+				<ul class="panel divide-y divide-outline-gray-1">
+					<li
+						v-for="n in NODES.filter((x) => x.row === i + 1)"
+						:key="n.id"
+						class="px-3 py-2"
+					>
+						<div class="text-sm font-medium text-ink-gray-8">{{ n.title }}</div>
+						<div class="text-xs text-ink-gray-5">{{ n.sub }}</div>
+					</li>
+				</ul>
+			</section>
+		</div>
+		<div v-else class="panel-frame page-card flex min-h-0 flex-1 overflow-hidden">
 			<!-- The diagram -->
 			<div
 				ref="canvas"
@@ -303,13 +325,15 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Button, FormControl, Switch, call, toast } from "frappe-ui";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideCircleX from "~icons/lucide/circle-x";
 import LucideCircleMinus from "~icons/lucide/circle-minus";
 import { boot } from "@/boot";
+import { showError } from "@/utils/errors";
+import { isMobile } from "@/utils/screen";
 
 // The Flow diagram (flow.py): four lanes,
 // the steps at fixed places, and the arrows between them.
@@ -385,7 +409,6 @@ const list = (kind, label, primary) => ({
 	to: { name: "DataList", params: { kind } },
 	primary,
 });
-const report = (name, label) => ({ label, to: { name: "Reports", params: { report: name } } });
 
 const panel = computed(() => {
 	const d = data.value;
@@ -421,10 +444,7 @@ const panel = computed(() => {
 				["Ambiguous", d.link.counts.Ambiguous],
 				["No match", d.link.counts["No Match"]],
 			],
-			links: [
-				report("Periskope Unmatched Numbers", "Unmatched numbers"),
-				list("groups", "Groups"),
-			],
+			links: [list("groups", "Groups")],
 		}),
 		queue: () => ({
 			kick: "Step 3b",
@@ -459,10 +479,7 @@ const panel = computed(() => {
 				["Corrected by managers", d.ai.corrected],
 				["Tokens this month", d.ai.tokens],
 			],
-			links: [
-				report("Periskope Tagging Review", "Tagging review"),
-				list("ai_usage", "AI usage"),
-			],
+			links: [list("ai_usage", "AI usage")],
 		}),
 		tags: () => ({
 			kick: "Step 5",
@@ -610,7 +627,7 @@ async function save(field, value) {
 		toast.success("Saved");
 		load();
 	} catch (e) {
-		toast.error(e?.messages?.[0] || e?.message || "Not saved.");
+		showError(e, "Not saved.");
 		load();
 	}
 }
@@ -623,7 +640,7 @@ async function tagActive(t, on) {
 		});
 		t.active = on;
 	} catch (e) {
-		toast.error(e?.messages?.[0] || e?.message || "Not saved.");
+		showError(e, "Not saved.");
 	}
 }
 
@@ -685,6 +702,7 @@ function fit() {
 }
 
 const onResize = () => fit();
+watch(isMobile, () => nextTick(fit)); // the diagram comes back when the window grows
 onMounted(async () => {
 	await load();
 	fit();

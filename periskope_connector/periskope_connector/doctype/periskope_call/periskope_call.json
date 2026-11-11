@@ -1,0 +1,192 @@
+{
+ "actions": [],
+ "autoname": "field:call_id",
+ "creation": "2026-11-03 13:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "description": "WhatsApp calls on the company numbers, read from Periskope (calls.py).",
+ "field_order": [
+  "call_id",
+  "periskope_chat",
+  "whatsapp_number",
+  "chat_id",
+  "chat_name",
+  "direction",
+  "result",
+  "column_1",
+  "call_time",
+  "duration",
+  "handled_via",
+  "answered_by",
+  "section_ai",
+  "summary",
+  "transcript_status",
+  "transcript",
+  "has_recording",
+  "recording_duration",
+  "section_crm",
+  "crm_call_log",
+  "alerted"
+ ],
+ "fields": [
+  {
+   "fieldname": "call_id",
+   "fieldtype": "Data",
+   "label": "Call ID",
+   "reqd": 1,
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "periskope_chat",
+   "fieldtype": "Link",
+   "label": "Chat",
+   "options": "Periskope Chat",
+   "search_index": 1
+  },
+  {
+   "fieldname": "whatsapp_number",
+   "fieldtype": "Link",
+   "label": "WhatsApp Number",
+   "options": "WhatsApp Number"
+  },
+  {
+   "fieldname": "chat_id",
+   "fieldtype": "Data",
+   "label": "Contact",
+   "search_index": 1
+  },
+  {
+   "fieldname": "chat_name",
+   "fieldtype": "Data",
+   "label": "Contact Name"
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "label": "Direction",
+   "options": "\nIncoming\nOutgoing",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Data",
+   "label": "Result",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "How the call ended, as WhatsApp reports it: connected, missed, rejected, unavailable, cancelled, failed..."
+  },
+  {
+   "fieldname": "column_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "call_time",
+   "fieldtype": "Datetime",
+   "label": "Call Time",
+   "in_list_view": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "duration",
+   "fieldtype": "Int",
+   "label": "Duration (seconds)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "handled_via",
+   "fieldtype": "Select",
+   "label": "Handled Via",
+   "options": "\nperiskope\nphone",
+   "description": "periskope: answered or placed in the Periskope app (recorded). phone: on the WhatsApp phone."
+  },
+  {
+   "fieldname": "answered_by",
+   "fieldtype": "Data",
+   "label": "Answered By",
+   "options": "Email"
+  },
+  {
+   "fieldname": "section_ai",
+   "fieldtype": "Section Break",
+   "label": "Summary and transcript"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "transcript_status",
+   "fieldtype": "Select",
+   "label": "Transcript Status",
+   "options": "\npending\ndone\nfailed"
+  },
+  {
+   "fieldname": "transcript",
+   "fieldtype": "Long Text",
+   "label": "Transcript"
+  },
+  {
+   "fieldname": "has_recording",
+   "fieldtype": "Check",
+   "label": "Has Recording"
+  },
+  {
+   "fieldname": "recording_duration",
+   "fieldtype": "Int",
+   "label": "Recording Duration (seconds)"
+  },
+  {
+   "fieldname": "section_crm",
+   "fieldtype": "Section Break",
+   "label": "CRM"
+  },
+  {
+   "fieldname": "crm_call_log",
+   "fieldtype": "Data",
+   "label": "CRM Call Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "alerted",
+   "fieldtype": "Check",
+   "label": "Missed Call Alert Sent",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-03 13:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Call",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "delete": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "WhatsApp Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "call_time",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "chat_name"
+}

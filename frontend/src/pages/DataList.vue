@@ -2,12 +2,12 @@
 	<div class="flex h-full min-h-0 flex-col">
 		<div
 			v-if="LOGS.some((l) => l.kind === kind)"
-			class="flex gap-1 border-b border-outline-gray-1 px-5 pt-3"
+			class="flex gap-1 overflow-x-auto border-b border-outline-gray-1 px-5 pt-3 [scrollbar-width:none]"
 		>
 			<button
 				v-for="l in LOGS"
 				:key="l.kind"
-				class="rounded-t px-3 py-1.5 text-sm"
+				class="shrink-0 rounded-t px-3 py-1.5 text-sm"
 				:class="
 					l.kind === kind
 						? 'bg-surface-gray-2 text-ink-gray-9'
@@ -45,9 +45,10 @@
 			class="panel page-card min-h-0 flex-1 overflow-auto transition-opacity"
 			:class="switching ? 'opacity-60' : ''"
 		>
-			<table class="w-full min-w-max text-sm">
+			<!-- a phone: each row as a card (the cells stacked, the title first, the buttons below) -->
+			<table class="w-full min-w-max text-sm max-md:block max-md:min-w-0">
 				<thead
-					class="sticky top-0 z-10 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
+					class="sticky top-0 z-10 bg-surface-gray-1 text-left text-xs text-ink-gray-5 max-md:hidden"
 				>
 					<tr>
 						<th
@@ -60,29 +61,30 @@
 						<th v-if="hasActions" class="sticky right-0 bg-surface-gray-1 px-4 py-2" />
 					</tr>
 				</thead>
-				<tbody>
+				<tbody class="max-md:block">
 					<tr
 						v-for="r in rows"
 						:key="r.name"
-						class="h-11 border-b border-outline-gray-1 hover:bg-surface-gray-1"
+						class="h-11 border-b border-outline-gray-1 hover:bg-surface-gray-1 max-md:flex max-md:h-auto max-md:flex-col max-md:gap-0.5 max-md:px-4 max-md:py-3"
 					>
 						<Tooltip
 							v-for="c in shownColumns"
 							:key="c.fieldname"
 							:text="String(r[c.fieldname] ?? '')"
-							><td class="max-w-[24rem] truncate px-4 py-2 text-ink-gray-8">
-								<template v-if="c.fieldtype === 'Check'">{{
-									r[c.fieldname] ? "Yes" : "No"
-								}}</template>
-								<template v-else-if="c.fieldtype === 'Datetime'">{{
-									r[c.fieldname] ? fromNow(r[c.fieldname]) : ""
-								}}</template>
-								<template v-else>{{ r[c.fieldname] }}</template>
+							><td
+								class="max-w-[24rem] truncate px-4 py-2 text-ink-gray-8 max-md:max-w-none max-md:whitespace-normal max-md:break-words max-md:p-0"
+								:class="cardClass(r, c)"
+							>
+								<span
+									v-if="c.fieldname !== titleField(r)"
+									class="mr-1 text-ink-gray-5 md:hidden"
+									>{{ c.label }}:</span
+								>{{ cell(r, c) }}
 							</td></Tooltip
 						>
 						<td
 							v-if="hasActions"
-							class="sticky right-0 whitespace-nowrap bg-surface-base px-4 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"
+							class="row-actions sticky right-0 whitespace-nowrap bg-surface-base px-4 py-1.5 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)] max-md:static max-md:flex max-md:flex-wrap max-md:gap-2 max-md:bg-transparent max-md:p-0 max-md:pt-2 max-md:shadow-none max-md:empty:hidden"
 						>
 							<template v-if="kind === 'contacts' && r.status === 'New'">
 								<Button
@@ -192,7 +194,11 @@
 					/>
 					<TextInput
 						v-model="query"
-						placeholder="Search leads and deals"
+						:placeholder="
+							target?.kind === 'group'
+								? 'Search organizations, leads and deals'
+								: 'Search leads and deals'
+						"
 						:debounce="300"
 					/>
 					<div class="max-h-60 overflow-y-auto">
@@ -215,7 +221,14 @@
 							<span class="text-sm text-ink-gray-8"
 								>{{ m.title }}
 								<span class="text-xs text-ink-gray-5"
-									>· {{ m.doctype === "CRM Deal" ? "Deal" : "Lead" }}</span
+									>·
+									{{
+										m.doctype === "CRM Organization"
+											? "Organization"
+											: m.doctype === "CRM Deal"
+											? "Deal"
+											: "Lead"
+									}}</span
 								></span
 							>
 							<span class="truncate text-xs text-ink-gray-5">{{ m.subtitle }}</span>
@@ -253,6 +266,7 @@ import {
 	toast,
 } from "frappe-ui";
 import LucideSearch from "~icons/lucide/search";
+import { errorText, showError } from "@/utils/errors";
 import { fromNow } from "@/utils/format";
 
 const route = useRoute();
@@ -299,6 +313,26 @@ const shownColumns = computed(() =>
 	(meta.value?.columns || []).filter((c) => c.fieldname !== "name" || kind.value === "groups")
 );
 const hasActions = computed(() => ["contacts", "groups", "suggestions"].includes(kind.value));
+
+function cell(r, c) {
+	const value = r[c.fieldname];
+	if (c.fieldtype === "Check") return value ? "Yes" : "No";
+	if (c.fieldtype === "Datetime") return value ? fromNow(value) : "";
+	return value;
+}
+
+// A phone's card leads with what people know the row by: the group's or the contact's name (its
+// number when it has none), a suggestion's or a log's summary.
+const TITLE_FIELDS = ["group_name", "display_name", "phone", "summary"];
+function titleField(r) {
+	return TITLE_FIELDS.find((f) => r[f] && shownColumns.value.some((c) => c.fieldname === f));
+}
+function cardClass(r, c) {
+	if (c.fieldname === titleField(r))
+		return "max-md:order-first max-md:text-base max-md:font-medium max-md:text-ink-gray-9";
+	const value = cell(r, c);
+	return value === "" || value == null ? "max-md:hidden" : "";
+}
 
 function filterOptions(f) {
 	const all = [{ label: `Any ${f.label.toLowerCase()}`, value: "" }];
@@ -350,7 +384,7 @@ async function load(append = false) {
 }
 
 function fail(e) {
-	toast.error(e?.messages?.[0] || e?.message || "That did not work.");
+	showError(e);
 }
 
 const DONE = { create_lead: "Lead created", ignore: "Ignored", link: "Linked" };
@@ -394,12 +428,31 @@ async function findMatches() {
 	const seq = ++searchSeq;
 	searching.value = true;
 	try {
-		const out = await call("periskope_connector.api.crm_panel.search_records", {
+		const records = call("periskope_connector.api.crm_panel.search_records", {
 			query: query.value,
 		});
+		// a group can also be mapped to a company: organizations first
+		const orgs =
+			target.value?.kind === "group"
+				? call("periskope_connector.api.crm_panel.search_organizations", {
+						query: query.value,
+				  })
+				: Promise.resolve([]);
+		const [found, companies] = await Promise.all([records, orgs]);
+		const out = [
+			...companies.map((o) => ({
+				doctype: "CRM Organization",
+				name: o.name,
+				title: o.title,
+				subtitle: `${o.deals} ${o.deals === 1 ? "deal" : "deals"} · ${o.groups} WhatsApp ${
+					o.groups === 1 ? "group" : "groups"
+				}${o.territory ? ` · ${o.territory}` : ""}`,
+			})),
+			...found,
+		];
 		if (seq === searchSeq) matches.value = out;
 	} catch (e) {
-		if (seq === searchSeq) error.value = e?.messages?.[0] || e?.message || "Search failed.";
+		if (seq === searchSeq) error.value = errorText(e, "Search failed.");
 	} finally {
 		if (seq === searchSeq) searching.value = false;
 	}
@@ -437,6 +490,8 @@ async function saveLink() {
 				group_type: groupType.value,
 				crm_lead: lead,
 				crm_deal: deal,
+				organization:
+					picked.value?.doctype === "CRM Organization" ? picked.value.name : null,
 			});
 		} else {
 			await call("periskope_connector.api.desk_pages.contact_action", {
@@ -450,7 +505,7 @@ async function saveLink() {
 		toast.success(target.value.kind === "group" ? "Group saved" : "Linked");
 		load();
 	} catch (e) {
-		error.value = e?.messages?.[0] || e?.message || "Not saved.";
+		error.value = errorText(e, "Not saved.");
 	} finally {
 		saving.value = false;
 	}

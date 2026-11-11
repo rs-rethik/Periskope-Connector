@@ -431,6 +431,39 @@ class TestAutoReply(FrappeTestCase):
 			autoreply.run_due()
 		self.send.assert_called_once()
 
+	def _waiting_twin(self):
+		"""A second Waiting row of the chat, as two messages saved at the same moment leave."""
+		first = frappe.get_doc("Periskope Auto Reply", self._row().name)
+		twin = frappe.copy_doc(first)
+		twin.insert(ignore_permissions=True)
+		for name in (first.name, twin.name):
+			frappe.db.set_value("Periskope Auto Reply", name, "due_on", now_datetime() - timedelta(minutes=1))
+		return first.name, twin.name
+
+	def test_two_waiting_rows_of_one_chat_send_one_reply(self):
+		self._incoming()
+		rows = self._waiting_twin()
+		reply = {"can_answer": True, "answer": "It is 245 per kg.", "confidence": 95, "used_sources": []}
+		with patch.object(answer, "build", return_value={**reply, "sources": [], "holding": ""}):
+			autoreply.run_due()
+		self.assertEqual(self.send.call_count, 1)
+		statuses = sorted(frappe.db.get_value("Periskope Auto Reply", r, "status") for r in rows)
+		self.assertEqual(statuses, ["Cancelled", "Sent"])
+
+	def test_a_reply_another_row_already_sent_is_not_repeated(self):
+		# the first row has sent its answer; WhatsApp's copy of it has not arrived yet
+		message = self._incoming()
+		first, late = self._waiting_twin()
+		frappe.db.set_value(
+			"Periskope Auto Reply",
+			first,
+			{"status": "Sent", "sent_on": now_datetime(), "last_customer_message": message},
+		)
+		with patch.object(answer, "build") as build:
+			self.assertEqual(autoreply.process(late), "Cancelled")
+		build.assert_not_called()
+		self.send.assert_not_called()
+
 
 class TestAnswerGuards(FrappeTestCase):
 	def setUp(self):

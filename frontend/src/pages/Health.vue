@@ -54,10 +54,16 @@ import { computed, onMounted, ref } from "vue";
 import { Button, call, toast } from "frappe-ui";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import { boot } from "@/boot";
+import { showError } from "@/utils/errors";
+import { dayLabel, fromNow, messageTime } from "@/utils/format";
 
 const h = ref(null);
 const loading = ref(false);
 const fetching = ref(false);
+
+// "Today, 6:35 PM (2 hours ago)" for a time the server sends as "2026-10-09 18:35:21.169532".
+const when = (value) =>
+	value ? `${dayLabel(value)}, ${messageTime(value)} (${fromNow(value)})` : value;
 
 const groups = computed(() =>
 	h.value
@@ -65,7 +71,7 @@ const groups = computed(() =>
 				{
 					title: "Messages in",
 					rows: [
-						["Last webhook", h.value.last_webhook],
+						["Last webhook", when(h.value.last_webhook)],
 						["Webhook logs not processed", h.value.unprocessed],
 						["Messages per number today", h.value.phones],
 					],
@@ -73,7 +79,7 @@ const groups = computed(() =>
 				{
 					title: "AI",
 					rows: [
-						["Last AI run", h.value.last_ai_run],
+						["Last AI run", when(h.value.last_ai_run)],
 						["Waiting to be tagged", h.value.pending],
 						["Failed", h.value.failed],
 						["Tokens this month", h.value.month_tokens],
@@ -110,7 +116,7 @@ async function backfill() {
 		);
 		load();
 	} catch (e) {
-		toast.error(e?.messages?.[0] || e?.message || "Could not fetch.");
+		showError(e, "Could not fetch.");
 	} finally {
 		fetching.value = false;
 	}

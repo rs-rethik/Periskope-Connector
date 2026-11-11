@@ -159,6 +159,7 @@ def _deliver(name: str) -> str:
 		name,
 		[
 			"name",
+			"message_id",
 			"chat_id",
 			"body",
 			"org_phone",
@@ -200,6 +201,12 @@ def _deliver(name: str) -> str:
 		)
 		return "Not Sent"
 	except Exception as e:
+		if _adopted_since(name, m.message_id):
+			# Periskope took the message although its answer never came (a timeout): its webhook copy
+			# has already filled in this row, so it is sent, and a retry would send it twice.
+			_set(name, send_attempts=attempts, send_error="")
+			_after_rep_reply(name)
+			return "Queued"
 		_set(name, send_status="Failed", send_attempts=attempts, send_error=str(e)[:500])
 		return "Failed"
 	_set(
@@ -212,6 +219,30 @@ def _deliver(name: str) -> str:
 	)
 	_after_rep_reply(name)
 	return "Queued"
+
+
+def _adopted_since(name: str, sent_as: str | None) -> bool:
+	"""Whether Periskope's copy of this send arrived (adopt_echo) while the send was running: the
+	row then carries Periskope's message id instead of the one it was sent with."""
+	now = frappe.db.get_value("Periskope Message", name, ["message_id", "send_status"], as_dict=True)
+	return bool(now) and now.message_id != sent_as and not (now.message_id or "").startswith("local_")
+
+
+def _claim_retry(name: str) -> bool:
+	"""Take a Failed message for one more send: one UPDATE that only the first caller wins, so a
+	double click, or the user's Retry next to the every-minute job, cannot send it twice."""
+	msg = frappe.qb.DocType("Periskope Message")
+	(
+		frappe.qb.update(msg)
+		.set(msg.send_status, "Sending")
+		.set(msg.modified, now_datetime())
+		.where((msg.name == name) & (msg.send_status == "Failed"))
+	).run()
+	claimed = bool(frappe.db._cursor.rowcount)
+	# Committed before Periskope is called (as _save_outgoing does): the claim must be visible to
+	# the other caller, and to Periskope's webhook copy, before the message can go out.
+	frappe.db.commit()
+	return claimed
 
 
 def _set(name: str, **values):
@@ -228,18 +259,30 @@ def _after_rep_reply(name: str):
 	"""The rep answered from the inbox: the same as a reply from their phone. The waiting AI reply
 	is cancelled, the customer's earlier messages count as replied, and the chat and its CRM link
 	are brought up to date."""
-	from periskope_connector import autoreply
 	from periskope_connector.linking import link_message
+
+	_mark_answered(name)
+	link_message(name)
+	frappe.db.commit()
+
+
+def _mark_answered(name: str):
+	"""Cancel the waiting AI reply and mark the customer's earlier messages of the chat replied."""
+	from periskope_connector import autoreply
 
 	m = frappe.db.get_value("Periskope Message", name, ["chat_id", "message_timestamp"], as_dict=True)
 	autoreply.cancel(m.chat_id, _("A rep replied"))
-	frappe.db.sql(
-		"""update `tabPeriskope Message` set replied = 1
-		where chat_id = %s and direction = 'Incoming' and replied = 0 and message_timestamp <= %s""",
-		(m.chat_id, m.message_timestamp),
-	)
-	link_message(name)
-	frappe.db.commit()
+	msg = frappe.qb.DocType("Periskope Message")
+	(
+		frappe.qb.update(msg)
+		.set(msg.replied, 1)
+		.where(
+			(msg.chat_id == m.chat_id)
+			& (msg.direction == "Incoming")
+			& (msg.replied == 0)
+			& (msg.message_timestamp <= m.message_timestamp)
+		)
+	).run()
 
 
 def adopt_echo(data: dict, webhook_log: str | None = None) -> str | None:
@@ -248,20 +291,7 @@ def adopt_echo(data: dict, webhook_log: str | None = None) -> str | None:
 	unique_id = data.get("unique_id") or _short_id(data.get("message_id"))
 	name = unique_id and frappe.db.get_value("Periskope Message", {"outbound_id": unique_id})
 	if not name:
-		# The copy can come before Periskope's answer to the send was saved: the newest row still
-		# sending in that chat, with the same text.
-		number = re.sub(r"\D", "", (data.get("org_phone") or "").split("@")[0])
-		name = frappe.db.get_value(
-			"Periskope Message",
-			{
-				"chat_id": data.get("chat_id"),
-				"org_phone": number,
-				"send_status": "Sending",
-				"body": (data.get("body") or "").strip(),
-				"creation": [">=", add_to_date(now_datetime(), minutes=-10)],
-			},
-			order_by="creation desc",
-		)
+		name = _echo_by_text(data)
 	if not name:
 		return None
 	values = {
@@ -271,7 +301,8 @@ def adopt_echo(data: dict, webhook_log: str | None = None) -> str | None:
 		"webhook_log": webhook_log,
 		"outbound_id": unique_id,
 	}
-	if (frappe.db.get_value("Periskope Message", name, "send_status") or "") in ("Sending", "Failed"):
+	was = frappe.db.get_value("Periskope Message", name, "send_status") or ""
+	if was in ("Sending", "Failed"):
 		values["send_status"] = "Queued"
 		values["send_error"] = ""
 	media = data.get("media") or {}
@@ -280,8 +311,34 @@ def adopt_echo(data: dict, webhook_log: str | None = None) -> str | None:
 	frappe.db.set_value("Periskope Message", name, {k: v for k, v in values.items() if v is not None})
 	from periskope_connector.linking import link_message
 
+	if was == "Failed":
+		_mark_answered(name)  # the send had been given up on, so the reply was never counted
 	link_message(name)
 	return name
+
+
+def _echo_by_text(data: dict) -> str | None:
+	"""The row of a copy that carries no id of ours: the newest row of that chat with the same text
+	that is still sending (the copy came before Periskope's answer to the send was saved), else one
+	whose send was given up on (Periskope took it, but its answer timed out) and is still unsent."""
+	number = re.sub(r"\D", "", (data.get("org_phone") or "").split("@")[0])
+	for status in ("Sending", "Failed"):
+		name = frappe.db.get_value(
+			"Periskope Message",
+			{
+				"chat_id": data.get("chat_id"),
+				"org_phone": number,
+				"direction": "Outgoing",
+				"send_status": status,
+				"message_id": ["like", "local\\_%"],
+				"body": (data.get("body") or "").strip(),
+				"creation": [">=", add_to_date(now_datetime(), minutes=-10)],
+			},
+			order_by="creation desc",
+		)
+		if name:
+			return name
+	return None
 
 
 @frappe.whitelist(methods=["POST"])
@@ -293,9 +350,8 @@ def retry(message: str) -> dict:
 	)
 	if not m or not access.can_see_chat(m.periskope_chat):
 		frappe.throw(_("You cannot retry this message."), frappe.PermissionError)
-	if m.send_status != "Failed":
+	if m.send_status != "Failed" or not _claim_retry(message):
 		frappe.throw(_("Only a failed message can be sent again."))
-	_set(message, send_status="Sending")
 	_deliver(message)
 	return _row(message)
 
@@ -318,6 +374,8 @@ def retry_failed() -> int:
 		if not RETRY_SAFE.search(row.send_error or ""):
 			continue
 		try:
+			if not _claim_retry(row.name):
+				continue  # the user's Retry (or another worker) took it first
 			if _deliver(row.name) == "Queued":
 				sent += 1
 		except Exception:
@@ -574,18 +632,6 @@ def save_canned_response(title: str, body: str, is_shared: int = 0, name: str | 
 			{"doctype": "Periskope Canned Response", "title": title, "body": body, "is_shared": shared}
 		).insert(ignore_permissions=True)
 	return {"name": doc.name, "title": doc.title, "body": doc.body, "is_shared": doc.is_shared}
-
-
-@frappe.whitelist(methods=["POST"])
-def delete_canned_response(name: str) -> None:
-	access.require_inbox_user()
-	owner = frappe.db.get_value("Periskope Canned Response", name, "owner")
-	if owner != frappe.session.user and not access.is_manager():
-		frappe.throw(_("You can only delete your own quick replies."), frappe.PermissionError)
-	frappe.delete_doc("Periskope Canned Response", name, ignore_permissions=True)
-
-
-# --- Private notes -------------------------------------------------------------------------------
 
 
 @frappe.whitelist()

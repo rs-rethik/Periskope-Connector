@@ -5,6 +5,7 @@
 				Inbox
 			</h1>
 			<div class="flex flex-wrap gap-2">
+				<NumberSwitcher v-if="boot.numbers.length > 1" />
 				<div
 					v-for="s in stats"
 					:key="s.label"
@@ -21,8 +22,9 @@
 		</div>
 		<div class="split flex min-h-0 flex-1">
 			<!-- a phone shows the list or the open chat, not both -->
+			<!-- (hidden, not unmounted: Back finds its tab, search and place as they were) -->
 			<div
-				v-if="!isMobile || !chatName"
+				v-show="!isMobile || !chatName"
 				class="pane shrink-0"
 				:class="isMobile ? 'w-full' : 'w-[340px]'"
 			>
@@ -38,8 +40,10 @@
 					@loaded="chat = $event"
 				>
 					<template v-if="!isWide" #actions>
-						<Button label="CRM" @click="panelOpen = true">
-							<template #prefix><LucideContact class="size-4" /></template>
+						<Button class="tap" label="CRM" @click="panelOpen = true">
+							<template v-if="!isMobile" #prefix
+								><LucideContact class="size-4"
+							/></template>
 						</Button>
 					</template>
 				</ChatView>
@@ -107,7 +111,7 @@
 					>
 						<template #icon><LucidePanelRightClose class="size-4" /></template>
 					</Button>
-					<ContextPanel :chat="chat" />
+					<ContextPanel :key="chatName" :chat="chat" />
 				</template>
 			</div>
 			<!-- narrower screens: the CRM panel slides over the chat on demand -->
@@ -117,13 +121,15 @@
 				class="fixed inset-0 z-30 flex justify-end"
 			>
 				<div class="hidden flex-1 bg-black/30 sm:block" @click="panelOpen = false" />
-				<div class="flex h-full w-full flex-col bg-surface-base shadow-2xl sm:w-[360px]">
+				<div
+					class="safe-top safe-bottom flex h-full w-full flex-col bg-surface-base shadow-2xl sm:w-[360px]"
+				>
 					<div
 						class="flex h-12 shrink-0 items-center border-b border-outline-gray-1 px-3"
 					>
 						<span class="text-base font-medium text-ink-gray-9">CRM</span>
 						<Button
-							class="ml-auto"
+							class="tap ml-auto"
 							variant="ghost"
 							tooltip="Close"
 							aria-label="Close"
@@ -132,7 +138,9 @@
 							<template #icon><LucideX class="size-4" /></template>
 						</Button>
 					</div>
-					<div class="min-h-0 flex-1"><ContextPanel :chat="chat" /></div>
+					<div class="min-h-0 flex-1">
+						<ContextPanel :key="chatName" :chat="chat" />
+					</div>
 				</div>
 			</div>
 		</div>
@@ -144,6 +152,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import ChatList from "@/components/ChatList.vue";
+import NumberSwitcher from "@/components/NumberSwitcher.vue";
+import { boot } from "@/boot";
 import ChatView from "@/components/ChatView.vue";
 import ContextPanel from "@/components/ContextPanel.vue";
 import { Button } from "frappe-ui";
@@ -217,6 +227,8 @@ function onKey(e) {
 	if (e.key === "Escape" && panelOpen.value) return (panelOpen.value = false);
 	if (e.target.closest("input, textarea, [contenteditable]")) return;
 	if (!["j", "k"].includes(e.key)) return;
+	// a dialog, a menu or the image viewer is open: the keys are theirs
+	if (document.querySelector('[role="dialog"], [role="menu"]')) return;
 	const rows = list.value?.chats || [];
 	const i = rows.findIndex((c) => c.name === chatName.value);
 	const next = rows[e.key === "j" ? i + 1 : Math.max(i - 1, 0)];

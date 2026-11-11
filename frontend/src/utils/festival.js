@@ -1,8 +1,8 @@
-import { computed, reactive, watchEffect } from "vue";
+import { computed, watchEffect } from "vue";
 import { boot } from "@/boot";
 
 // Today's festival (ai/festival.py) themes the whole app: <html data-festival="<look>"> switches the
-// colours in theme.css. Hiding it ("Hide for today") lasts for the day in this browser.
+// colours in theme.css.
 
 // The looks the AI can pick from: banner colours, the string of lights and the motif.
 export const LOOKS = {
@@ -67,37 +67,46 @@ export const motifs = {
 	moon: `<path d="M21 4a12 12 0 1 0 7 19A10 10 0 0 1 21 4z" fill="#fef3c7"/><path d="M25 7l.8 1.8 2 .2-1.5 1.3.5 2-1.8-1-1.8 1 .5-2L22.2 9l2-.2z" fill="#fde68a"/>`,
 };
 
-const hiddenKey = (date) => `periskope-festival-hidden-${date}`;
-
-function isHidden(date) {
-	try {
-		return localStorage.getItem(hiddenKey(date)) === "1";
-	} catch {
-		return false;
-	}
-}
-
-export const festivalState = reactive({ hiddenFor: "" });
-
 export const festival = computed(() => {
 	const f = boot.festival;
-	if (!f || festivalState.hiddenFor === f.date || isHidden(f.date)) return null;
-	return f;
+	return f || null;
 });
+
+// The browser tab's icon on a festival day: the brand logo as it is, with the festival's motif in the
+// bottom-right corner (the sidebar draws the same in BrandLogo.vue). Falls back to the plain logo.
+export async function festivalIcon(logoUrl) {
+	const l = festival.value && LOOKS[festival.value.look];
+	if (!l) return logoUrl;
+	const load = (src) =>
+		new Promise((resolve, reject) => {
+			const img = new Image();
+			img.onload = () => resolve(img);
+			img.onerror = reject;
+			img.src = src;
+		});
+	try {
+		const mark = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">${
+			motifs[l.motif]
+		}</svg>`;
+		const [logo, motif] = await Promise.all([
+			load(logoUrl),
+			load(`data:image/svg+xml,${encodeURIComponent(mark)}`),
+		]);
+		const canvas = document.createElement("canvas");
+		canvas.width = canvas.height = 64;
+		const ctx = canvas.getContext("2d");
+		ctx.drawImage(logo, 0, 0, 64, 64);
+		ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+		ctx.shadowBlur = 3;
+		ctx.drawImage(motif, 30, 30, 36, 36);
+		return canvas.toDataURL("image/png");
+	} catch {
+		return logoUrl;
+	}
+}
 
 export function setFestival(f) {
 	boot.festival = f || null;
-}
-
-export function hideFestival() {
-	const date = boot.festival?.date;
-	if (!date) return;
-	festivalState.hiddenFor = date;
-	try {
-		localStorage.setItem(hiddenKey(date), "1");
-	} catch {
-		// private window: hidden for this visit only
-	}
 }
 
 watchEffect(() => {
