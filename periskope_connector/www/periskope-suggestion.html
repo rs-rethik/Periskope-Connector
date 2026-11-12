@@ -5,6 +5,37 @@
 	<h2>Periskope assistant suggestion</h2>
 	{% if not suggestion %}
 		<p>This link is not valid.</p>
+	{% elif decision == "undo" and suggestion.status == "Applied" %}
+		<p><b>Applied by the assistant</b>{% if suggestion.target %} &middot; {{ suggestion.target }}{% endif %}</p>
+		<p>{{ suggestion.summary }}</p>
+		<pre>{{ payload_text }}</pre>
+		<div id="result" class="mb-3"></div>
+		<div id="buttons">
+			<button class="btn btn-danger btn-lg" data-decision="undo">Undo this change</button>
+		</div>
+		<script>
+			(function () {
+				var token = {{ token | tojson }};
+				var button = document.querySelector("#buttons button");
+				button.addEventListener("click", function () {
+					button.disabled = true;
+					frappe.call({
+						method: "periskope_connector.api.suggestions.decide",
+						type: "POST",
+						args: { token: token, decision: "undo" },
+						callback: function (r) {
+							var m = r.message || {};
+							document.getElementById("result").textContent = m.ok ? "Undone" : (m.message || "Could not be completed");
+							document.getElementById("buttons").style.display = "none";
+						},
+						error: function () {
+							document.getElementById("result").textContent = "Something went wrong. Please try again.";
+							button.disabled = false;
+						},
+					});
+				});
+			})();
+		</script>
 	{% elif suggestion.status != "Pending" %}
 		<p>This suggestion was already {{ suggestion.status | lower }}.</p>
 	{% else %}

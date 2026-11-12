@@ -172,6 +172,10 @@ class TestNewKinds(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 	def test_a_group_is_mapped_to_its_company(self):
+		if not frappe.db.exists("CRM Organization", "Sri Murugan Knits"):
+			frappe.get_doc({"doctype": "CRM Organization", "organization_name": "Sri Murugan Knits"}).insert(
+				ignore_permissions=True
+			)
 		doc = _make(
 			"Group Mapping",
 			"Modify",
@@ -190,6 +194,20 @@ class TestNewKinds(FrappeTestCase):
 		self.assertEqual(
 			frappe.db.get_value("CRM Organization", group.organization, "organization_name"),
 			"Sri Murugan Knits",
+		)
+
+	def test_a_group_is_never_mapped_to_a_company_the_ai_made_up(self):
+		# The AI once proposed the group's own name ('Mg Apparel - Pranera') as its company.
+		doc = _make(
+			"Group Mapping",
+			"Modify",
+			target="120363999000111@g.us",
+			payload={"group_type": "Customer", "organization": "Sri Murugan Knits Orders - Pranera"},
+		)
+		self.assertEqual(suggestions.approve(doc, "Desk", "Administrator"), "Failed")
+		self.assertFalse(frappe.db.exists("CRM Organization", "Sri Murugan Knits Orders - Pranera"))
+		self.assertIsNone(
+			frappe.db.get_value("Periskope Group", {"chat_id": "120363999000111@g.us"}, "organization")
 		)
 
 	def test_a_number_is_ignored(self):
@@ -213,6 +231,17 @@ class TestNewKinds(FrappeTestCase):
 		}
 		self.assertTrue(learner.validate(item, config, True)[0])
 		self.assertFalse(learner.validate({**item, "target": "nope@g.us"}, config, True)[0])
+		# the company must be one the code offered for that group
+		config["unmapped_groups"][0]["candidate_organizations"] = ["Mg apparels"]
+		pick = {**item, "payload_json": '{"group_type": "Customer", "organization": "Mg apparels"}'}
+		made_up = {
+			**item,
+			"payload_json": '{"group_type": "Customer", "organization": "Mg Apparel - Pranera"}',
+		}
+		ok, current = learner.validate(pick, config, True)
+		self.assertTrue(ok)
+		self.assertNotIn("candidate_organizations", current)
+		self.assertFalse(learner.validate(made_up, config, True)[0])
 		ignore = {
 			"kind": "Ignore Contact",
 			"operation": "Add",

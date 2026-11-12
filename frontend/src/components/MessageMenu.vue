@@ -14,6 +14,7 @@
 	</Dropdown>
 
 	<!-- the dialogs exist only while open: a long chat has one menu per message -->
+	<AiDetailsDialog v-if="aiOpen" v-model="aiOpen" :message="message.name" />
 	<!-- react -->
 	<Dialog v-if="reacting" v-model="reacting" :options="{ title: 'React', size: 'xs' }">
 		<template #body-content>
@@ -113,6 +114,7 @@ import dayjs from "dayjs";
 import { Button, Dialog, Dropdown, ErrorMessage, FormControl, call, toast } from "frappe-ui";
 import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
 import LucideUsersRound from "~icons/lucide/users-round";
+import AiDetailsDialog from "@/components/AiDetailsDialog.vue";
 import { boot } from "@/boot";
 import { ask } from "@/utils/confirm";
 import { errorText, showError } from "@/utils/errors";
@@ -157,7 +159,15 @@ const canEdit = computed(
 		dayjs().diff(dayjs(props.message.message_timestamp), "minute") < 15
 );
 
-const options = computed(() => [...props.extra, ...(props.whatsapp ? whatsappOptions.value : [])]);
+const options = computed(() => [
+	...props.extra,
+	// what the AI decided about a customer's message (and, for managers, correcting it)
+	...(outgoing.value
+		? []
+		: [{ label: "What the AI decided", onClick: () => (aiOpen.value = true) }]),
+	...(props.whatsapp ? whatsappOptions.value : []),
+]);
+const aiOpen = ref(false);
 const whatsappOptions = computed(() => [
 	{ label: mine.value ? "Change reaction" : "React", onClick: () => open(reacting) },
 	{ label: "Forward", onClick: openForward },

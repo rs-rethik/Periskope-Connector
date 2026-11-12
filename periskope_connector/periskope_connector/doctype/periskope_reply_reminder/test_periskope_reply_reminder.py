@@ -148,6 +148,35 @@ class TestRun(FrappeTestCase):
 		self.assertEqual(self.sendmail.call_count, 1)
 		self.assertEqual(self.sendmail.call_args.kwargs["recipients"], ["boss@example.com"])
 
+	def test_a_reply_task_marked_done_does_not_start_the_ladder_again(self):
+		# The task was done without a WhatsApp reply: the next run used to open a new reminder and fire
+		# every level again, the MD email included.
+		self.add(at(0, 9))
+		reminders.run(at(0, 12, 10))
+		row = self.reminders()[0]
+		reminders.close(frappe.get_doc("Periskope Reply Reminder", row.name), at(0, 12, 20), handled=True)
+		stats = reminders.run(at(0, 17, 30))
+		self.assertEqual((stats["notified"], stats["escalated"], stats["md_emailed"]), (0, 0, 0))
+		self.assertEqual(len(self.reminders()), 1)
+		self.add(at(0, 17, 40), body="And the delivery date?")  # a new question starts a new ladder
+		self.assertEqual(reminders.run(at(0, 18, 45))["notified"], 1)
+
+	def test_a_customer_waiting_longer_than_a_week_stays_on_the_ladder(self):
+		self.add(at(0, 9))
+		reminders.run(at(0, 10, 5))  # L1
+		self.assertEqual(self.reminders()[0].status, "Open")
+		stats = reminders.run(at(9, 10))  # nine days later, nobody answered
+		row = self.reminders()[0]
+		self.assertEqual(row.status, "Escalated")  # the week-old message was still read
+		self.assertEqual(stats["closed"], 0)
+
+	def test_a_reminder_whose_chat_has_no_messages_left_is_closed(self):
+		self.add(at(0, 9))
+		reminders.run(at(0, 10, 5))
+		frappe.db.delete("Periskope Message", {"chat_id": "919600000001@c.us"})
+		self.assertEqual(reminders.run(at(0, 10, 30))["closed"], 1)
+		self.assertEqual(self.reminders()[0].status, "Closed")
+
 	def test_l3_emails_the_escalation_list_once(self):
 		self.add(at(0, 9))
 		reminders.run(at(0, 10, 5))  # L1

@@ -21,6 +21,14 @@
 			>
 				Test mode is {{ h.test_mode }}
 			</div>
+			<div
+				v-for="w in [h.capture_problem, ...(h.warnings || [])].filter(Boolean)"
+				:key="w"
+				class="mb-4 flex items-start gap-2 rounded-lg bg-surface-red-1 px-3 py-2 text-sm text-ink-red-8"
+			>
+				<LucideCircleAlert class="mt-0.5 size-4 shrink-0" />
+				{{ w }}
+			</div>
 			<div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 				<section
 					v-for="g in groups"
@@ -36,6 +44,49 @@
 					</dl>
 				</section>
 			</div>
+			<section
+				v-if="failedRows.length"
+				class="mt-4 rounded-lg border border-outline-gray-1 bg-surface-base p-4"
+			>
+				<h2 class="mb-1 text-sm font-medium text-ink-gray-9">
+					Messages the AI could not read ({{ failedRows.length }})
+				</h2>
+				<p class="mb-2 text-xs text-ink-gray-5">
+					Their escalation, lead or tasks have not happened. Retry once the cause is
+					fixed.
+				</p>
+				<ul class="divide-y divide-outline-gray-1">
+					<li v-for="m in failedRows" :key="m.name" class="flex items-start gap-3 py-2">
+						<button
+							class="min-w-0 flex-1 text-left"
+							@click="
+								m.periskope_chat &&
+									$router.push({
+										name: 'Inbox',
+										params: { chat: m.periskope_chat },
+									})
+							"
+						>
+							<div class="truncate text-sm text-ink-gray-8">
+								{{
+									m.chat_name || (m.contact_number ? "+" + m.contact_number : "")
+								}}
+								·
+								{{ m.body || "[" + m.message_type + "]" }}
+							</div>
+							<div class="truncate text-xs text-ink-red-7">
+								{{ when(m.message_timestamp) }} · {{ m.classification_error }}
+							</div>
+						</button>
+						<Button
+							size="sm"
+							label="Retry"
+							:loading="retrying === m.name"
+							@click="retry(m)"
+						/>
+					</li>
+				</ul>
+			</section>
 			<section
 				v-if="h.has_problem"
 				class="mt-4 rounded-lg border border-outline-red-2 bg-surface-red-1 p-4"
@@ -73,6 +124,7 @@ const groups = computed(() =>
 					rows: [
 						["Last webhook", when(h.value.last_webhook)],
 						["Webhook logs not processed", h.value.unprocessed],
+						["Rejected webhook calls (24 h)", h.value.rejected_webhooks],
 						["Messages per number today", h.value.phones],
 					],
 				},
@@ -82,6 +134,7 @@ const groups = computed(() =>
 						["Last AI run", when(h.value.last_ai_run)],
 						["Waiting to be tagged", h.value.pending],
 						["Failed", h.value.failed],
+						["Escalations held (hourly limit)", h.value.held_escalations],
 						["Tokens this month", h.value.month_tokens],
 						["Budget", h.value.budget],
 					],
@@ -98,12 +151,32 @@ const groups = computed(() =>
 		: []
 );
 
+const failedRows = ref([]);
+const retrying = ref("");
+
 async function load() {
 	loading.value = true;
 	try {
 		h.value = await call("periskope_connector.api.settings.get_health");
 	} finally {
 		loading.value = false;
+	}
+	// the list is extra: the figures show even if it cannot be read
+	call("periskope_connector.api.settings.failed_messages")
+		.then((rows) => (failedRows.value = rows || []))
+		.catch(() => (failedRows.value = []));
+}
+
+async function retry(m) {
+	retrying.value = m.name;
+	try {
+		await call("periskope_connector.api.settings.retry_failed_message", { message: m.name });
+		failedRows.value = failedRows.value.filter((x) => x.name !== m.name);
+		toast.success("Sent to the AI again");
+	} catch (e) {
+		showError(e, "Could not retry.");
+	} finally {
+		retrying.value = "";
 	}
 }
 

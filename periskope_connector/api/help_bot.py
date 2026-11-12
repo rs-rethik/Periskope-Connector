@@ -36,6 +36,14 @@ REPORTS = {
 	"Periskope AI Usage": ("Tokens used per day and model.", 30),
 	"Periskope Sync Health": ("Messages per company number, to spot a silent number.", None),
 	"Periskope Unmatched Numbers": ("Numbers and groups that could not be linked to a lead or deal.", 7),
+	"Periskope WhatsApp Funnel": (
+		"WhatsApp leads per owner: how many became deals, were won, and the sales orders' value.",
+		30,
+	),
+	"Periskope Auto Reply Quality": (
+		"How often the AI could answer customers itself, per rep, and how sure it was.",
+		30,
+	),
 }
 FORMATS = ("xlsx", "csv")
 

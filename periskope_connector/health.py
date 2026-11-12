@@ -9,11 +9,13 @@ Two watchers:
 Plus get_health(), the numbers shown on the settings page's Health tab.
 """
 
+import calendar
 import re
 from datetime import timedelta
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Coalesce, Sum
 from frappe.utils import now_datetime, nowdate
 
 from periskope_connector import query, safety
@@ -114,18 +116,129 @@ def sync_check() -> list[str]:
 	return silent
 
 
+# --- Webhook capture ---------------------------------------------------------------------------------
+
+REJECTED_KEY = "periskope:webhook_rejected:{hour}"
+REJECTED_LAST_KEY = "periskope:webhook_rejected_last"
+REJECTED_ALERT_AT = 3  # rejected calls in the last hour that mean the signing secret is wrong
+STALE_HOURS = 3  # working hours without any webhook, on numbers that normally get one an hour
+
+
+def _hour_key(when) -> str:
+	return REJECTED_KEY.format(hour=f"{when:%Y%m%d%H}")
+
+
+def count_rejected_webhook():
+	"""Count a webhook call rejected for its signature (api/webhook.py). Kept in Redis, not the
+	database: the caller is an unknown guest, and a flood must not fill a table."""
+	cache = frappe.cache()
+	key = _hour_key(now_datetime())
+	cache.set_value(key, (cache.get_value(key, expires=True) or 0) + 1, expires_in_sec=26 * 3600)
+	cache.set_value(REJECTED_LAST_KEY, str(now_datetime()), expires_in_sec=7 * 24 * 3600)
+
+
+def rejected_webhooks(hours: int = 24) -> int:
+	"""Webhook calls rejected for their signature in the last `hours` hours."""
+	now = now_datetime()
+	cache = frappe.cache()
+	return sum(cache.get_value(_hour_key(now - timedelta(hours=h)), expires=True) or 0 for h in range(hours))
+
+
+def last_rejected_webhook() -> str | None:
+	return frappe.cache().get_value(REJECTED_LAST_KEY, expires=True)
+
+
+def capture_problem() -> str:
+	"""Why messages are probably not arriving, or "": calls are being rejected (the signing secret no
+	longer matches), or no webhook came for STALE_HOURS working hours although the numbers normally
+	get at least one an hour."""
+	if not frappe.db.get_single_value("Periskope Settings", "enabled"):
+		return ""
+	rejected = rejected_webhooks(1)
+	if rejected >= REJECTED_ALERT_AT:
+		return _(
+			"{0} webhook calls from Periskope were rejected in the last hour because their signature "
+			"does not match. Copy the signing secret from the Periskope console into Periskope Settings."
+		).format(rejected)
+	from periskope_connector.reminders import get_config, is_working_time, working_seconds
+
+	cfg = get_config()
+	now = now_datetime()
+	last = query.latest("Periskope Webhook Log", "creation")
+	daily = sum(stats.baseline for stats in phone_counts().values())
+	if not last or not is_working_time(now, cfg) or daily < 10 * STALE_HOURS:
+		return ""  # a quiet site: silence says nothing (sync_check covers each number daily)
+	if working_seconds(frappe.utils.get_datetime(last), now, cfg) < STALE_HOURS * 3600:
+		return ""
+	return _(
+		"No webhook has arrived since {0}, although your numbers normally get about {1} messages a "
+		"day. Check the webhook in the Periskope console and that this site is reachable."
+	).format(_when(last), int(daily))
+
+
+def _held_escalations() -> list[str]:
+	from periskope_connector.alerts import held
+
+	return held()
+
+
+def setup_warnings() -> list[str]:
+	from periskope_connector.setup_status import warnings
+
+	return warnings()
+
+
+def capture_check() -> bool:
+	"""Scheduler, every 15 minutes: email the managers when capture looks stopped (capture_problem)."""
+	problem = capture_problem()
+	if not problem or _alerted_recently("capture"):
+		return False
+	if _send(_("Periskope: WhatsApp messages may not be arriving"), f"<p>{problem}</p>"):
+		_mark_alerted("capture")
+		return True
+	return False
+
+
 # --- AI spend ------------------------------------------------------------------------------------------------
 
 
+def _tokens_since(since) -> int:
+	"""Total tokens (input + output + cache) billed since a moment."""
+	usage = frappe.qb.DocType("Periskope AI Usage")
+	total = (
+		frappe.qb.from_(usage)
+		.select(
+			Coalesce(
+				Sum(
+					usage.input_tokens
+					+ usage.output_tokens
+					+ usage.cache_read_tokens
+					+ usage.cache_creation_tokens
+				),
+				0,
+			)
+		)
+		.where((usage.status == "OK") & (usage.creation >= since))
+	).run()
+	return int(total[0][0]) if total else 0
+
+
 def month_tokens() -> int:
-	"""Total tokens (input + output + cache) billed this calendar month."""
-	row = frappe.db.sql(
-		"""select coalesce(sum(input_tokens + output_tokens + cache_read_tokens
-		+ cache_creation_tokens), 0) from `tabPeriskope AI Usage`
-		where status = 'OK' and creation >= %(since)s""",
-		{"since": now_datetime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)},
-	)
-	return int(row[0][0]) if row else 0
+	"""Total tokens billed this calendar month."""
+	return _tokens_since(now_datetime().replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+
+
+def daily_share_used() -> bool:
+	"""Background AI work (catching up on missed messages, learning) stops for the day once today's
+	tokens reach the monthly budget divided by the days of the month. A backlog, for example the
+	messages that waited while last month's budget was used up, cannot spend a new month in one
+	night; a new customer message is still tagged and answered until the whole budget is used."""
+	budget = frappe.db.get_single_value("Periskope Settings", "ai_monthly_budget_tokens") or 0
+	if not budget:
+		return False
+	now = now_datetime()
+	days = calendar.monthrange(now.year, now.month)[1]
+	return _tokens_since(now.replace(hour=0, minute=0, second=0, microsecond=0)) >= budget / days
 
 
 def budget_exceeded() -> bool:
@@ -133,9 +246,41 @@ def budget_exceeded() -> bool:
 	return bool(budget) and month_tokens() >= budget
 
 
+BUDGET_WARNINGS = (70, 90)  # % of the monthly budget at which the managers hear, once a month each
+
+
+def _budget_warning() -> bool:
+	"""Tell the managers once a month when the tokens pass 70% and 90% of the budget, so it can be
+	raised before tagging, escalations and auto replies stop."""
+	budget = frappe.db.get_single_value("Periskope Settings", "ai_monthly_budget_tokens") or 0
+	if not budget:
+		return False
+	used = month_tokens()
+	passed = [p for p in BUDGET_WARNINGS if used * 100 >= p * budget]
+	if not passed or used >= budget:
+		return False
+	level = passed[-1]
+	key = f"budget_{level}:{now_datetime():%Y%m}"
+	if frappe.cache().get_value(f"periskope_alert:{key}", expires=True) is not None:
+		return False
+	subject = _("Periskope AI budget {0}% used").format(level)
+	body = _(
+		"{0:,} of the {1:,} tokens of this month's AI budget are used. When it runs out, new messages "
+		"are no longer tagged or escalated and the auto reply sends holding messages. Raise it in "
+		"Periskope Settings if needed."
+	).format(used, budget)
+	if _send(subject, f"<p>{body}</p>"):
+		frappe.cache().set_value(f"periskope_alert:{key}", 1, expires_in_sec=32 * 24 * 3600)
+		return True
+	return False
+
+
 def spend_check() -> bool:
-	"""Scheduler, daily: tell the managers when the month's token budget is spent."""
-	if not budget_exceeded() or _alerted_recently("budget"):
+	"""Scheduler, hourly: warn the managers at 70% and 90% of the month's token budget, and tell them
+	when it is spent."""
+	if not budget_exceeded():
+		return _budget_warning()
+	if _alerted_recently("budget"):
 		return False
 	subject = _("Periskope AI budget reached: tagging paused")
 	if _send(
@@ -156,18 +301,18 @@ def spend_check() -> bool:
 
 
 def _unprocessed_logs() -> int:
-	"""message.created logs whose message never landed, ignoring duplicates that were
-	correctly rejected by the message_id guard."""
-	row = frappe.db.sql(
-		"""select count(*) from `tabPeriskope Webhook Log` l
-		left join `tabPeriskope Message` m on m.webhook_log = l.name
-		where l.event_type = 'message.created' and l.signature_valid = 1 and m.name is null
-		and not exists (
-			select 1 from `tabPeriskope Message` pm
-			where pm.message_id = json_unquote(json_extract(l.payload, '$.data.message_id'))
-		)"""
-	)
-	return int(row[0][0]) if row else 0
+	"""Webhook events of the last days not applied after half an hour (messages.unprocessed_logs)."""
+	from frappe.query_builder.functions import Count
+
+	from periskope_connector.messages import not_applied
+
+	log = frappe.qb.DocType("Periskope Webhook Log")
+	found = (
+		frappe.qb.from_(log)
+		.select(Count(log.name))
+		.where(not_applied(log) & (log.creation < frappe.utils.add_to_date(now_datetime(), minutes=-30)))
+	).run()
+	return int(found[0][0] or 0) if found else 0
 
 
 def _when(value) -> str:
@@ -185,7 +330,11 @@ def get_health() -> dict:
 		"last_ai_run": _when(query.latest("Periskope Message", "classified_at")),
 		"pending": frappe.db.count("Periskope Message", {"classification_status": "Pending"}),
 		"failed": frappe.db.count("Periskope Message", {"classification_status": "Failed"}),
+		"held_escalations": len(_held_escalations()),
 		"unprocessed": _unprocessed_logs(),
+		"rejected_webhooks": rejected_webhooks(),
+		"capture_problem": capture_problem(),
+		"warnings": setup_warnings(),
 		"month_tokens": month_tokens(),
 		"phones": ", ".join(
 			f"{number}: {stats.today} ({_('avg')} {stats.baseline})" for number, stats in phones.items()

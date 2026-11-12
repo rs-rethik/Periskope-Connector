@@ -12,6 +12,7 @@
   "team",
   "labels",
   "ai_off",
+  "no_broadcasts",
   "chat_name",
   "is_group",
   "contact_number",
@@ -23,6 +24,7 @@
   "organization",
   "summary_note",
   "linked_by_hand",
+  "link_review",
   "linked_by",
   "section_inbox",
   "last_message_preview",
@@ -41,6 +43,7 @@
   "resolved_on",
   "response_breached",
   "breach_alerted",
+  "resolution_alerted",
   "section_read",
   "read_at",
   "read_by",
@@ -188,6 +191,15 @@
    "description": "Someone chose this lead or deal in the inbox; the automatic match by number no longer changes it."
   },
   {
+   "default": "0",
+   "fieldname": "link_review",
+   "fieldtype": "Check",
+   "label": "Check the CRM Link",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The number matches more than one open deal (or lead): the best one was picked; a person should confirm it or choose another in the CRM panel."
+  },
+  {
    "fieldname": "linked_by",
    "fieldtype": "Link",
    "options": "User",
@@ -214,6 +226,13 @@
    "label": "Keep Away from the AI",
    "default": "0",
    "description": "Nothing of this customer's chats (on any of our numbers) is sent to the AI: no tags, auto reply, welcome, CRM summary, voice-note transcript or learning."
+  },
+  {
+   "default": "0",
+   "description": "The customer asked not to get broadcasts (by hand, or by writing STOP): broadcasts skip this customer on every number.",
+   "fieldname": "no_broadcasts",
+   "fieldtype": "Check",
+   "label": "No Broadcasts"
   },
   {
    "fieldname": "section_sla",
@@ -283,6 +302,15 @@
    "read_only": 1
   },
   {
+   "default": "0",
+   "fieldname": "resolution_alerted",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Resolution Breach Alerted",
+   "read_only": 1,
+   "description": "The managers were told that this chat was not resolved by its resolution deadline (sla.check_breaches)."
+  },
+  {
    "fieldname": "section_read",
    "fieldtype": "Section Break",
    "label": "Read",
@@ -312,7 +340,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-11 15:00:00.000000",
+ "modified": "2026-11-11 18:23:44.577613",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

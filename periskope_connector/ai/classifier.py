@@ -18,7 +18,12 @@ from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
-from periskope_connector.text_rules import analysis_skip_reason, readable_text, skip_fields
+from periskope_connector.text_rules import (
+	UNTRUSTED_TEXT_RULE,
+	analysis_skip_reason,
+	readable_text,
+	skip_fields,
+)
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
@@ -48,6 +53,8 @@ def ai_address_problem(base_url: str | None, trusted: bool) -> str:
 MAX_ATTEMPTS = 3
 BATCH_SIZE = 20  # messages per run of the 5-minute catch-up job
 QUEUED_GRACE_MINUTES = 3  # the catch-up leaves a message this long to its own job
+CATCH_UP_DAYS = 3  # older waiting messages are no longer worth the tokens: they are skipped
+TOO_OLD = "Too old to analyse: it waited more than 3 days"
 GROUP_MIN_CONTEXT = 15
 CONTEXT = 5  # earlier messages given with a 1-to-1 message
 MIN_LENGTH = 2  # shorter texts are never sent to the AI
@@ -113,6 +120,8 @@ def skip_reason(doc, settings) -> str | None:
 
 	if ai_off(doc.chat_id):
 		return "AI is off for this chat"
+	if (getattr(doc, "periskope_type", None) or "").lower() == "sticker":
+		return "Sticker"  # shown as a picture, but never worth the tokens
 	if can_read_attachment(doc, settings):
 		return None
 	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE and not readable_text(doc):
@@ -326,7 +335,8 @@ def build_user_message(doc, history: list[dict], quoted: str | None = None) -> s
 	if quoted:
 		lines.append(f"The message below replies to this earlier message: {quoted.strip()[:500]}")
 	lines.append("Message to classify:")
-	lines.append(f"[{_speaker(doc)} {when}] {readable_text(doc)[:2000]}")
+	# Delimited, so the message's own words cannot pose as instructions (UNTRUSTED_TEXT_RULE).
+	lines.append(f"[{_speaker(doc)} {when}] <message>{readable_text(doc)[:2000]}</message>")
 	if attachments.has_file(doc):
 		name = getattr(doc, "media_filename", None) or ""
 		lines.append(f"Attached to this message: {doc.message_type} {name}".strip())
@@ -558,7 +568,7 @@ def call_claude(settings, doc) -> dict:
 	# A short group message means little without what was said before it.
 	history = get_history(doc, GROUP_MIN_CONTEXT if doc.is_group else CONTEXT)
 	model = settings.ai_model or DEFAULT_MODEL
-	prompt = build_system_prompt(settings)
+	prompt = build_system_prompt(settings) + UNTRUSTED_TEXT_RULE
 
 	if uses_jarvis(settings):
 		reply = jarvis_complete(
@@ -741,25 +751,43 @@ def _ready_to_run() -> bool:
 	return bool(settings.get_password("anthropic_api_key", raise_exception=False))
 
 
+def _waiting(msg):
+	"""Customer messages still to analyse. The status is compared as it is stored (a list of values,
+	or NULL), so its index is used; an ifnull() around the column would read the whole table."""
+	return (
+		(msg.classification_status.isin(["Pending", "Failed", ""]) | msg.classification_status.isnull())
+		& (msg.classification_attempts < MAX_ATTEMPTS)
+		& (msg.direction == "Incoming")
+	)
+
+
 def _pending(limit: int) -> list[str]:
-	"""The customer messages still to analyse, oldest first. The status is compared as it is stored
-	(a list of values, or NULL), so its index is used; an ifnull() around the column would read the
-	whole table."""
+	"""The customer messages of the last CATCH_UP_DAYS still to analyse, oldest first."""
 	msg = frappe.qb.DocType("Periskope Message")
-	waiting = msg.classification_status.isin(["Pending", "Failed", ""]) | msg.classification_status.isnull()
 	return (
 		frappe.qb.from_(msg)
 		.select(msg.name)
 		.where(
-			waiting
-			& (msg.classification_attempts < MAX_ATTEMPTS)
-			& (msg.direction == "Incoming")
+			_waiting(msg)
+			& (msg.creation >= add_to_date(now_datetime(), days=-CATCH_UP_DAYS))
 			# a newer one is still with its own job (queue)
 			& (msg.modified < add_to_date(now_datetime(), minutes=-QUEUED_GRACE_MINUTES))
 		)
 		.orderby(msg.creation)
 		.limit(limit)
 	).run(pluck=True)
+
+
+def _skip_too_old():
+	"""Messages that waited past CATCH_UP_DAYS (the AI was off or out of budget) are skipped, so the
+	catch-up never works through weeks of old messages at once."""
+	msg = frappe.qb.DocType("Periskope Message")
+	(
+		frappe.qb.update(msg)
+		.set(msg.classification_status, "Skipped")
+		.set(msg.classification_error, TOO_OLD)
+		.where(_waiting(msg) & (msg.creation < add_to_date(now_datetime(), days=-CATCH_UP_DAYS)))
+	).run()
 
 
 def _record_failure(name: str, error: Exception):
@@ -794,9 +822,10 @@ def _classify_and_commit(name: str):
 
 
 def run_batch():
-	"""Scheduler, every 5 minutes: classify up to BATCH_SIZE waiting customer messages, oldest first.
-	Failed ones are tried again on the next run, up to MAX_ATTEMPTS times. Paused when the
-	monthly token budget is used up (health.spend_check tells the managers).
+	"""Scheduler, every 5 minutes: classify up to BATCH_SIZE waiting customer messages of the last
+	CATCH_UP_DAYS, oldest first; older ones are skipped. Failed ones are tried again on the next run,
+	up to MAX_ATTEMPTS times. Paused when the monthly token budget is used up (health.spend_check tells
+	the managers) and for the rest of the day once today's share of it is (health.daily_share_used).
 
 	A single failing message is handled by _classify_and_commit(). Anything else (for example
 	the database being unreachable) is written to the Error Log and raised again, so it also
@@ -805,10 +834,13 @@ def run_batch():
 	try:
 		if not _ready_to_run():
 			return
-		from periskope_connector.health import budget_exceeded
+		from periskope_connector.health import budget_exceeded, daily_share_used
 
-		if budget_exceeded():
-			frappe.logger("periskope_connector").info("AI classification paused: monthly budget reached")
+		_skip_too_old()
+		if budget_exceeded() or daily_share_used():
+			frappe.logger("periskope_connector").info(
+				"AI catch-up paused: today's or the month's budget reached"
+			)
 			return
 		for name in _pending(BATCH_SIZE):
 			_classify_and_commit(name)

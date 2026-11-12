@@ -148,16 +148,31 @@ def ensure_contact(doc) -> str | None:
 # --- One-click actions --------------------------------------------------------------------------------
 
 
-def _phone_fields(values: dict) -> dict:
-	values = dict(values)
-	digits = phone_e164(values.get("mobile_no") or values.get("phone"))
-	values.update(
-		{
-			"periskope_phone_e164": digits,
-			"periskope_phone_key": number_key(digits) if digits else "",
-		}
+def _add_number(doctype: str, name: str, number: str):
+	"""Give the record this number without losing the one it has: the Mobile field when empty, else
+	the Phone field (a second number, linking.phone_values). A record with two other numbers keeps
+	them; the number is then added in the CRM by hand."""
+	from periskope_connector.linking import phone_values
+
+	row = frappe.db.get_value(doctype, name, ["mobile_no", "phone"], as_dict=True)
+	have = {phone_e164(row.mobile_no), phone_e164(row.phone)}
+	if phone_e164(number) in have:
+		return
+	if not row.mobile_no:
+		row.mobile_no = f"+{number}"
+	elif not row.phone:
+		row.phone = f"+{number}"
+	else:
+		frappe.throw(
+			_("{0} {1} already has two numbers. Add +{2} to it in the CRM first.").format(
+				_(doctype), name, number
+			)
+		)
+	frappe.db.set_value(
+		doctype,
+		name,
+		{"mobile_no": row.mobile_no, "phone": row.phone, **phone_values(row.mobile_no, row.phone)},
 	)
-	return values
 
 
 def backfill_and_comment(contact):
@@ -262,12 +277,9 @@ def link_contact(contact: str, lead: str | None = None, deal: str | None = None)
 	if deal and not frappe.db.exists("CRM Deal", deal):
 		frappe.throw(_("Deal {0} does not exist").format(deal))
 
-	if lead:
-		values = frappe.db.get_value("CRM Lead", lead, ["mobile_no", "phone"], as_dict=True)
-		frappe.db.set_value("CRM Lead", lead, _phone_fields({**values, "mobile_no": f"+{doc.phone}"}))
-	if deal:
-		values = frappe.db.get_value("CRM Deal", deal, ["mobile_no", "phone"], as_dict=True)
-		frappe.db.set_value("CRM Deal", deal, _phone_fields({**values, "mobile_no": f"+{doc.phone}"}))
+	for doctype, name in (("CRM Lead", lead), ("CRM Deal", deal)):
+		if name:
+			_add_number(doctype, name, doc.phone)
 
 	frappe.db.set_value(
 		"Periskope Contact",

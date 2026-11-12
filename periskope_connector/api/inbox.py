@@ -33,7 +33,7 @@ STATUSES = ("Open", "Pending", "Resolved", "Closed")
 CHAT_COLUMNS = """c.name, c.chat_id, c.chat_name, c.is_group, c.contact_number, c.whatsapp_number,
 	c.status, c.last_message_at, c.last_message_preview, c.last_message_direction, c.last_incoming_at,
 	c.message_count, c.crm_lead, c.crm_deal, c.organization, c._assign, c.team, c.waiting_since, c.read_at,
-	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached, c.ai_off,
+	c.response_due, c.opened_on, c.resolution_due, c.resolved_on, c.response_breached, c.ai_off, c.no_broadcasts, c.link_review,
 	(select m.ai_category from `tabPeriskope Message` m where m.periskope_chat = c.name
 		and ifnull(m.ai_category, '') != '' order by m.message_timestamp desc limit 1) as ai_tag"""
 MESSAGE_FIELDS = [
@@ -115,6 +115,9 @@ def _where(filters: dict, condition: str | None = None) -> tuple[list[str], dict
 		and g.group_type = 'Internal')"""
 	if filters.get("internal") is not None and filters.get("internal") != "":
 		conditions.append(f"{is_group} and {internal}" if cint(filters["internal"]) else f"not {internal}")
+	if filters.get("review"):
+		# matched to more than one open deal or lead: the pick needs a person's check
+		conditions.append("c.link_review = 1")
 	if filters.get("linked") is not None and filters.get("linked") != "":
 		linked = "(ifnull(c.crm_lead, '') != '' or ifnull(c.crm_deal, '') != '')"
 		conditions.append(linked if cint(filters["linked"]) else f"not {linked}")
@@ -149,9 +152,19 @@ def _where(filters: dict, condition: str | None = None) -> tuple[list[str], dict
 	search = (filters.get("search") or "").strip()
 	if search:
 		values["search"] = f"%{search}%"
+		words = fulltext_words(search)
+		in_messages = ""
+		if words:
+			# what anyone wrote in the chat, not only its last message (full-text index on the text)
+			values["search_words"] = words
+			in_messages = """ or exists (select 1 from `tabPeriskope Message` sm
+				where sm.periskope_chat = c.name
+				and match(sm.body, sm.transcript) against (%(search_words)s in boolean mode))"""
 		conditions.append(
 			"""(c.chat_name like %(search)s or c.contact_number like %(search)s
-			or c.last_message_preview like %(search)s or c.chat_id like %(search)s)"""
+			or c.last_message_preview like %(search)s or c.chat_id like %(search)s"""
+			+ in_messages
+			+ ")"
 		)
 	return conditions, values
 
@@ -271,6 +284,7 @@ def counts() -> dict:
 
 COUNT_FILTERS = {
 	"all": {"status": "active"},
+	"review": {"status": "active", "review": 1},
 	"mine": {"status": "active", "mine": 1},
 	"unassigned": {"status": "active", "unassigned": 1},
 	"unanswered": {"status": "active", "unanswered": 1},
@@ -648,3 +662,69 @@ def boot() -> dict:
 		),
 		"festival": festival.current(),
 	}
+
+
+# --- Searching what was written --------------------------------------------------------------------
+
+MIN_SEARCH_WORD = 3  # the full-text index leaves shorter words out
+SNIPPET_CHARS = 60
+
+
+def fulltext_words(text: str | None) -> str:
+	"""A boolean full-text query in which every word must appear, as a word or its start
+	("price cotton" -> "+price* +cotton*"). Empty when no word is long enough."""
+	words = re.findall(r"\w+", (text or "").lower())
+	return " ".join(f"+{w}*" for w in words if len(w) >= MIN_SEARCH_WORD)[:200]
+
+
+def _snippet(text: str, query: str) -> str:
+	text = " ".join((text or "").split())
+	low = text.lower()
+	hits = [low.find(w) for w in re.findall(r"\w+", query.lower()) if len(w) >= MIN_SEARCH_WORD]
+	at = min([h for h in hits if h >= 0], default=0)
+	start = max(0, at - SNIPPET_CHARS)
+	end = min(len(text), at + SNIPPET_CHARS * 2)
+	return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else "")
+
+
+@frappe.whitelist(methods=["GET", "POST"])
+def search_messages(query: str, chat: str | None = None, limit: int = 30) -> list[dict]:
+	"""Messages whose text (or voice-note transcript) has every word of `query`, newest first, in the
+	chats the user may open (or in one `chat`): {name, chat, title, snippet, message_timestamp,
+	direction}, to open the chat at that message."""
+	access.require_inbox_user()
+	words = fulltext_words(query)
+	if not words:
+		return []
+	condition = access.chat_condition(table="c")
+	values = {"words": words, "limit": min(cint(limit) or 30, 100)}
+	where = ["match(m.body, m.transcript) against (%(words)s in boolean mode)"]
+	if chat:
+		_chat_or_403(chat)
+		where.append("m.periskope_chat = %(chat)s")
+		values["chat"] = chat
+	if condition:
+		where.append(condition)
+	# Raw SQL: MATCH ... AGAINST (full-text search) has no query-builder form.
+	rows = frappe.db.sql(
+		f"""select m.name, m.periskope_chat as chat, m.body, m.transcript, m.message_timestamp,
+			m.direction, c.chat_name, c.contact_number, c.chat_id
+		from `tabPeriskope Message` m
+		join `tabPeriskope Chat` c on c.name = m.periskope_chat
+		where {" and ".join(where)} and ifnull(m.is_deleted, 0) = 0
+		order by m.message_timestamp desc
+		limit %(limit)s""",
+		values,
+		as_dict=True,
+	)
+	return [
+		{
+			"name": r.name,
+			"chat": r.chat,
+			"title": r.chat_name or (f"+{r.contact_number}" if r.contact_number else r.chat_id),
+			"snippet": _snippet(r.body or r.transcript or "", query),
+			"message_timestamp": r.message_timestamp,
+			"direction": r.direction,
+		}
+		for r in rows
+	]

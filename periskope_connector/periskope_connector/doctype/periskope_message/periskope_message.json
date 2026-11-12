@@ -24,6 +24,7 @@
   "section_content",
   "body",
   "transcript",
+  "transcript_attempts",
   "is_deleted",
   "deleted_on",
   "edited_on",
@@ -43,6 +44,10 @@
   "high_alert_sent",
   "escalation",
   "escalation_reason",
+  "ai_lead",
+  "escalation_feedback",
+  "ai_feedback_note",
+  "ai_feedback_by",
   "ai_confidence",
   "section_facts",
   "follow_up_on",
@@ -76,6 +81,7 @@
   "media_size",
   "shared_details",
   "attachment_file",
+  "attachment_attempts",
   "section_meta",
   "chat_id",
   "chat_name",
@@ -392,6 +398,14 @@
    "description": "The attachment, saved in Frappe and attached to the lead or deal."
   },
   {
+   "default": "0",
+   "description": "How many times saving the attachment failed; it is tried again (with a fresh link) up to 3 times.",
+   "fieldname": "attachment_attempts",
+   "fieldtype": "Int",
+   "label": "Attachment Attempts",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "fieldname": "section_meta",
    "fieldtype": "Section Break",
@@ -593,6 +607,35 @@
    "read_only": 1
   },
   {
+   "fieldname": "ai_lead",
+   "fieldtype": "Link",
+   "options": "CRM Lead",
+   "label": "Lead Made by the AI",
+   "read_only": 1,
+   "description": "The lead the AI created from this message (a manager can remove it if it was wrong)."
+  },
+  {
+   "fieldname": "escalation_feedback",
+   "fieldtype": "Select",
+   "options": "\nRight\nWrong",
+   "label": "Escalation Was",
+   "read_only": 1,
+   "description": "A manager's verdict on the AI's escalation (or on its choice not to escalate). The learning agent reads it."
+  },
+  {
+   "fieldname": "ai_feedback_note",
+   "fieldtype": "Small Text",
+   "label": "Manager's Note on the AI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_feedback_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "AI Reviewed By",
+   "read_only": 1
+  },
+  {
    "fieldname": "agent_reply",
    "fieldtype": "Select",
    "label": "Agent Reply",
@@ -604,6 +647,14 @@
    "fieldname": "transcript",
    "fieldtype": "Long Text",
    "label": "Voice Note Transcript",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "How many times transcribing this voice note failed; it is tried again up to 3 times.",
+   "fieldname": "transcript_attempts",
+   "fieldtype": "Int",
+   "label": "Transcript Attempts",
    "read_only": 1
   },
   {
@@ -712,7 +763,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-11-11 12:00:00.000000",
+ "modified": "2026-11-11 18:32:51.120819",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Message",

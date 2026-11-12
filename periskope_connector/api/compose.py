@@ -384,6 +384,42 @@ def retry_failed() -> int:
 	return sent
 
 
+STALE_SENDING_MINUTES = 10
+STALE_SENDING = "No answer from Periskope: the send may not have gone out. Retry it, or wait for its copy."
+
+
+def fail_stale_sending() -> int:
+	"""Scheduler, every 5 minutes: a reply still "Sending" after STALE_SENDING_MINUTES (the worker
+	stopped mid-send, or Periskope never answered) is marked Failed, so the inbox shows Retry. Not
+	retried by itself: it may have gone out, and its copy, when it comes, still marks it sent
+	(adopt_echo takes a Failed row)."""
+	msg = frappe.qb.DocType("Periskope Message")
+	now = now_datetime()
+	stale = (
+		frappe.qb.from_(msg)
+		.select(msg.name, msg.periskope_chat)
+		.where(
+			(msg.send_status == "Sending")
+			& (msg.direction == "Outgoing")
+			& (msg.modified < add_to_date(now, minutes=-STALE_SENDING_MINUTES))
+			& (msg.creation >= add_to_date(now, days=-2))
+		)
+		.limit(100)
+	).run(as_dict=True)
+	for row in stale:
+		frappe.db.set_value(
+			"Periskope Message",
+			row.name,
+			{"send_status": "Failed", "send_error": STALE_SENDING},
+			update_modified=False,
+		)
+		if row.periskope_chat:
+			from periskope_connector import inbox_realtime
+
+			inbox_realtime.chat_changed(row.periskope_chat, kind="update")
+	return len(stale)
+
+
 TICK_LOOKUPS = 30  # per run
 
 
@@ -592,6 +628,17 @@ def start_chat(
 		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
 		workflow.new_chat(name)
 	elif not access.can_see_chat(name):
+		# Someone else's customer: knowing the number must not hand the chat over. Only a chat that
+		# nobody owns yet goes to the user who writes first.
+		owners = frappe.parse_json(frappe.db.get_value("Periskope Chat", name, "_assign") or "[]")
+		if owners:
+			names = ", ".join(frappe.utils.get_fullname(u) for u in owners)
+			frappe.throw(
+				_("This customer already has a chat with {0}. Ask your manager to assign it to you.").format(
+					names
+				),
+				frappe.PermissionError,
+			)
 		from periskope_connector import workflow
 
 		workflow.assign(name, [frappe.session.user], by=frappe.session.user)

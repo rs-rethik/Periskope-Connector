@@ -76,6 +76,21 @@ WEEKDAYS = {
 }
 
 
+def _levels(settings) -> list[SimpleNamespace]:
+	"""The ladder set in Periskope Settings > Reminder Ladder, or the starting one when none is set."""
+	rows = [
+		SimpleNamespace(
+			wait_minutes=row.wait_minutes or 0,
+			min_severity=row.min_severity or "Low",
+			action=row.action,
+			recipients=row.recipients or "",
+		)
+		for row in (settings.get("reminder_levels") or [])
+		if row.action
+	]
+	return sorted(rows, key=lambda r: r.wait_minutes) or default_levels()
+
+
 def get_config(settings=None) -> SimpleNamespace:
 	settings = settings or frappe.get_single("Periskope Settings")
 
@@ -89,7 +104,7 @@ def get_config(settings=None) -> SimpleNamespace:
 		end=get_time(settings.working_hours_end or "19:00:00"),
 		days=WEEKDAYS.get(settings.working_days or "", WEEKDAYS["Monday to Saturday"]),
 		holidays=_holiday_dates(settings.holiday_list),
-		levels=default_levels(),
+		levels=_levels(settings),
 		emails=emails,
 		md_emails=emails_of(settings.escalation_emails) or emails,
 		groups=False,
@@ -123,6 +138,18 @@ def is_working_time(moment: datetime, cfg) -> bool:
 		and moment.date() not in cfg.holidays
 		and cfg.start <= moment.time() < cfg.end
 	)
+
+
+def next_working_moment(moment: datetime, cfg) -> datetime:
+	"""The moment itself when it is working time, else the start of the next working day."""
+	if is_working_time(moment, cfg):
+		return moment
+	day = moment.date() if moment.time() < cfg.start else moment.date() + timedelta(days=1)
+	for _i in range(MAX_SPAN_DAYS):
+		if day.weekday() in cfg.days and day not in cfg.holidays:
+			return datetime.combine(day, cfg.start)
+		day += timedelta(days=1)
+	return moment  # no working day set up: as soon as possible
 
 
 def working_seconds(start: datetime, end: datetime, cfg) -> float:
@@ -235,10 +262,19 @@ def _bell(rep: str | None, last, hours: float, chat_id: str | None = None):
 			"subject": _("Customer waiting for a WhatsApp reply: {0}").format(
 				last.contact_number or _("a WhatsApp group")
 			)[:140],
-			"document_type": "Periskope Message",
-			"document_name": last.name,
+			# On the chat, so it shows in the inbox's bell and opens the conversation (a bell on the
+			# message itself never appeared there).
+			**_bell_target(last.name),
 		}
 	).insert(ignore_permissions=True)
+
+
+def _bell_target(message: str) -> dict:
+	"""Where a bell about a message points: its chat, else (no chat row yet) the message."""
+	chat = frappe.db.get_value("Periskope Message", message, "periskope_chat")
+	if chat:
+		return {"document_type": "Periskope Chat", "document_name": chat}
+	return {"document_type": "Periskope Message", "document_name": message}
 
 
 def _todo_text(last, first_waiting, hours) -> str:
@@ -381,10 +417,21 @@ def perform(row, reminder, last, cfg, now: datetime, hours: float) -> bool:
 	return _escalation_email(reminder, recipients, hours, to_md=to_md)
 
 
-def close(reminder, now: datetime, messages: list | None = None, cfg=None):
+def close(reminder, now: datetime, messages: list | None = None, cfg=None, handled: bool = False):
 	"""The rep replied (or any rep, in a group): close the reminder, its ToDo, and record how
-	long the first answer took in working hours."""
+	long the first answer took in working hours. `handled`: the rep marked the reply task done without
+	writing back; the customer's messages so far count as dealt with (handled_until), or the next run
+	would start the whole ladder again, the MD email included."""
 	values = {"status": "Closed", "closed_on": now}
+	if handled:
+		values["handled_until"] = (
+			frappe.db.get_value(
+				"Periskope Message",
+				{"chat_id": reminder.chat_id, "direction": "Incoming"},
+				"max(message_timestamp)",
+			)
+			or now
+		)
 	if messages and cfg:
 		reply = max(
 			(m.message_timestamp for m in messages if _is_reply(m)),
@@ -405,9 +452,12 @@ def close(reminder, now: datetime, messages: list | None = None, cfg=None):
 # --- The engine --------------------------------------------------------------------------------------
 
 
-def _check_chat(chat_id: str, messages: list, cfg, now: datetime, stats: dict):
-	"""Advance one chat through the SLA levels."""
+def _check_chat(chat_id: str, messages: list, cfg, now: datetime, stats: dict, handled_until=None):
+	"""Advance one chat through the SLA levels. Messages up to `handled_until` were dealt with when the
+	rep marked the reply task done (close)."""
 	pending = unanswered(messages, cfg.ack_words)
+	if handled_until:
+		pending = [m for m in pending if get_datetime(m.message_timestamp) > get_datetime(handled_until)]
 	reminder = _open_reminder(chat_id)
 
 	if not pending:
@@ -473,15 +523,22 @@ def _run(now: datetime | None) -> dict:
 		pluck="chat_id",
 		distinct=True,
 	)
-	open_reminders = frappe.get_all(
-		"Periskope Reply Reminder", filters={"status": ["in", ["Open", "Escalated"]]}, pluck="chat_id"
+	open_rows = frappe.get_all(
+		"Periskope Reply Reminder",
+		filters={"status": ["in", ["Open", "Escalated"]]},
+		fields=["chat_id", "waiting_since"],
 	)
+	open_reminders = [r.chat_id for r in open_rows]
 	candidates = list({c for c in waiting + open_reminders if c})
 	if not candidates:
 		return stats
+	# A customer who has waited longer than the week stays on the ladder: an open reminder's chat is
+	# read from when the wait began (at most MAX_SPAN_DAYS back).
+	oldest = min((get_datetime(r.waiting_since) for r in open_rows if r.waiting_since), default=since)
+	since_rows = max(min(since, oldest), now - timedelta(days=MAX_SPAN_DAYS))
 	rows = frappe.get_all(
 		"Periskope Message",
-		filters={"message_timestamp": [">=", since], "chat_id": ["in", candidates]},
+		filters={"message_timestamp": [">=", since_rows], "chat_id": ["in", candidates]},
 		fields=[
 			"name",
 			"chat_id",
@@ -499,10 +556,27 @@ def _run(now: datetime | None) -> dict:
 		],
 		order_by="message_timestamp asc",
 	)
+	handled = dict(
+		frappe.get_all(
+			"Periskope Reply Reminder",
+			filters={"chat_id": ["in", candidates], "handled_until": ["is", "set"]},
+			fields=["chat_id", "max(handled_until) as handled_until"],
+			group_by="chat_id",
+			as_list=True,
+		)
+	)
 	chats: dict[str, list] = {}
 	for row in rows:
 		if row.chat_id:
 			chats.setdefault(row.chat_id, []).append(row)
+
+	# An open reminder whose chat has no message left to read (deleted, or older than MAX_SPAN_DAYS)
+	# can never advance or close by itself: it is closed.
+	for chat_id in set(open_reminders) - set(chats):
+		reminder = _open_reminder(chat_id)
+		if reminder:
+			close(reminder, now)
+			stats["closed"] += 1
 
 	for chat_id, messages in chats.items():
 		if messages[0].is_group and not cfg.groups:
@@ -511,7 +585,7 @@ def _run(now: datetime | None) -> dict:
 		# and must not leave half of its own work behind.
 		frappe.db.savepoint("periskope_reminder_chat")
 		try:
-			_check_chat(chat_id, messages, cfg, now, stats)
+			_check_chat(chat_id, messages, cfg, now, stats, handled.get(chat_id))
 		except Exception:
 			frappe.db.rollback(save_point="periskope_reminder_chat")
 			frappe.log_error(title=f"Periskope: reply reminder failed for chat {chat_id}")

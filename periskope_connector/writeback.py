@@ -17,13 +17,16 @@ rep sees passes rep_text(): no chat ids, internal ids, confidence figures or raw
 
 import hashlib
 import re
+from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import add_to_date, escape_html, now_datetime
+from frappe.utils import add_to_date, escape_html, get_datetime, now_datetime
 
 from periskope_connector import chat, crm_context, numbers, safety
 from periskope_connector.system import insert_as_system, save_as_system
+
+EDIT_GRACE_SECONDS = 5  # the agent's own save of a note and its record are this close
 
 TOPICS = {
 	"requirements": "Requirements",
@@ -96,8 +99,19 @@ def _tracked(key: str) -> frappe._dict | None:
 	return frappe.db.get_value(
 		"Periskope CRM Record",
 		{"key": key},
-		["name", "target_doctype", "target_name", "content_hash"],
+		["name", "target_doctype", "target_name", "content_hash", "modified"],
 		as_dict=True,
+	)
+
+
+def _edited_by_person(row) -> bool:
+	"""Whether someone changed the note or task after the agent last wrote it: its last change is
+	later than the agent's record of writing it (_track refreshes that time on every write)."""
+	if not row or not frappe.db.exists(row.target_doctype, row.target_name):
+		return False
+	changed = frappe.db.get_value(row.target_doctype, row.target_name, "modified")
+	return bool(changed and row.modified) and get_datetime(changed) > get_datetime(row.modified) + timedelta(
+		seconds=EDIT_GRACE_SECONDS
 	)
 
 
@@ -113,7 +127,8 @@ def _track(key, kind, chat_id, record, target_doctype, target_name, content_hash
 		"content_hash": content_hash,
 	}
 	if row:
-		frappe.db.set_value("Periskope CRM Record", row.name, values, update_modified=False)
+		# the time of this write is kept (modified): a later change to the target is a person's
+		frappe.db.set_value("Periskope CRM Record", row.name, values)
 	else:
 		insert_as_system({"doctype": "Periskope CRM Record", "key": key, **values})
 
@@ -132,6 +147,18 @@ def _upsert_note(chat_id: str, key: str, kind: str, title: str, content_html: st
 	digest = _hash(title, content_html)
 	row = _tracked(key)
 	if row and row.content_hash == digest and frappe.db.exists("FCRM Note", row.target_name):
+		return row.target_name
+	if _edited_by_person(row):
+		# A rep rewrote the agent's note: theirs stays. The agent's new version is only logged.
+		safety.log(
+			"Update Note",
+			"Skipped",
+			f"Kept the note a person edited: {title}",
+			chat_id=chat_id,
+			target_doctype="FCRM Note",
+			target_name=row.target_name,
+			**_ref(record),
+		)
 		return row.target_name
 
 	def write():
@@ -219,6 +246,8 @@ def upsert_task(
 	digest = _hash(title, description, priority)
 	if open_task and row.content_hash == digest:
 		return row.target_name
+	if open_task and _edited_by_person(row):
+		return row.target_name  # a rep changed the task: the agent leaves it as they made it
 
 	def write():
 		if open_task:
@@ -425,4 +454,4 @@ def on_task_update(doc, method=None):
 
 	reminder = reminders._open_reminder(key.split("|", 1)[0])
 	if reminder:
-		reminders.close(reminder, now_datetime())
+		reminders.close(reminder, now_datetime(), handled=True)

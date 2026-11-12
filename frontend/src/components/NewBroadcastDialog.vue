@@ -25,21 +25,14 @@
 								{ label: 'Not in the CRM', value: '0' },
 							]"
 						/>
-						<FormControl
-							v-model="filters.groups"
-							type="select"
-							:options="[
-								{ label: 'Chats and groups', value: '' },
-								{ label: 'Chats only', value: '0' },
-								{ label: 'Groups only', value: '1' },
-							]"
-						/>
 						<FormControl v-model="filters.search" placeholder="Search" />
 					</div>
 					<div class="flex items-center justify-between text-xs text-ink-gray-6">
 						<span
 							>{{ picked.length }} of {{ chats.length
-							}}{{ more ? "+" : "" }} picked</span
+							}}{{ more ? "+" : "" }} picked<template v-if="leftToday !== null">
+								· {{ leftToday }} left today on this number</template
+							></span
 						>
 						<span class="flex gap-2">
 							<button class="hover:text-ink-gray-9" @click="pickAll">
@@ -69,10 +62,9 @@
 								class="rounded"
 							/>
 							<span class="min-w-0 flex-1 truncate">{{ c.title }}</span>
-							<LucideUsersRound v-if="c.is_group" class="size-3.5 text-ink-gray-5" />
-							<span v-if="!c.allowed" class="text-xs text-ink-amber-7"
-								>test mode</span
-							>
+							<span v-if="c.blocked" class="shrink-0 text-xs text-ink-amber-7">{{
+								c.blocked
+							}}</span>
 						</label>
 						<p
 							v-if="!loading && !chats.length"
@@ -90,7 +82,31 @@
 						label="Name (for this list only)"
 						placeholder="e.g. Diwali greetings"
 					/>
-					<div class="flex flex-col gap-1">
+					<!-- a Meta number: only an approved template can go to many chats -->
+					<template v-if="isMeta">
+						<FormControl
+							v-model="template"
+							type="select"
+							label="Approved template"
+							:options="[
+								{ label: 'Choose a template', value: '' },
+								...templates.map((t) => ({ label: t.label, value: t.name })),
+							]"
+						/>
+						<p
+							v-if="chosen"
+							class="whitespace-pre-wrap rounded-lg bg-surface-gray-1 p-2 text-sm text-ink-gray-7"
+						>
+							{{ chosen.body }}
+						</p>
+						<FormControl
+							v-for="(_v, i) in params"
+							:key="i"
+							v-model="params[i]"
+							:label="`Value for {{${i + 1}}}`"
+						/>
+					</template>
+					<div v-else class="flex flex-col gap-1">
 						<FormControl
 							v-model="form.message"
 							type="textarea"
@@ -104,10 +120,19 @@
 							Insert the chat's name: {{ "{" + "{name}" + "}" }}
 						</button>
 					</div>
-					<div class="flex items-center gap-2 text-sm text-ink-gray-8">
+					<div
+						v-if="!isMeta || chosen?.header"
+						class="flex items-center gap-2 text-sm text-ink-gray-8"
+					>
 						<Button size="sm" :loading="uploading" @click="$refs.picker.click()">
 							<template #prefix><LucidePaperclip class="size-3.5" /></template>
-							{{ file ? "Change file" : "Attach a file" }}
+							{{
+								file
+									? "Change file"
+									: isMeta
+									? `Header ${chosen.header.toLowerCase()}`
+									: "Attach a file"
+							}}
 						</Button>
 						<span v-if="file" class="truncate text-ink-gray-6">{{
 							file.file_name
@@ -125,13 +150,14 @@
 						/>
 					</div>
 					<FormControl
+						v-if="!isMeta"
 						v-model="form.delay"
 						type="select"
 						label="Gap between messages"
 						:options="[
-							{ label: '1 second', value: '1' },
-							{ label: '3 seconds (suggested)', value: '3' },
-							{ label: '10 seconds', value: '10' },
+							{ label: '5 seconds', value: '5' },
+							{ label: '8 seconds (suggested)', value: '8' },
+							{ label: '15 seconds', value: '15' },
 							{ label: '30 seconds', value: '30' },
 							{ label: '60 seconds', value: '60' },
 						]"
@@ -139,8 +165,13 @@
 				</div>
 			</div>
 			<p class="mt-4 rounded-lg bg-surface-amber-1 px-3 py-2 text-xs text-ink-amber-8">
-				Each chat uses one Periskope broadcast credit. Send only what customers expect, or
-				WhatsApp may block the number for spam.
+				<template v-if="isMeta">
+					Meta charges each template message. Send only what customers expect.
+				</template>
+				<template v-else>
+					Each chat uses one Periskope broadcast credit. Send only what customers expect,
+					or WhatsApp may block the number for spam.
+				</template>
 				<template v-if="boot.test_mode">
 					Test mode is on: only the test numbers can be picked.</template
 				>
@@ -159,7 +190,9 @@
 				:loading="sending"
 				:disabled="
 					!picked.length ||
-					(!form.message.trim() && !file) ||
+					(isMeta
+						? !chosen || params.some((p) => !p.trim()) || (chosen.header && !file)
+						: !form.message.trim() && !file) ||
 					uploading ||
 					(later && !form.scheduled_at)
 				"
@@ -174,7 +207,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { Button, DateTimePicker, Dialog, ErrorMessage, FormControl, call, toast } from "frappe-ui";
-import LucideUsersRound from "~icons/lucide/users-round";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideMegaphone from "~icons/lucide/megaphone";
 import { boot } from "@/boot";
@@ -187,7 +219,25 @@ const open = defineModel({ type: Boolean, default: false });
 const emit = defineEmits(["sent"]);
 const API = "periskope_connector.api.broadcast.";
 
-const numbers = computed(() => boot.numbers.filter((n) => n.is_active && n.source !== "Meta"));
+const numbers = computed(() => boot.numbers.filter((n) => n.is_active));
+const isMeta = computed(
+	() => numbers.value.find((n) => n.name === form.value.number)?.source === "Meta"
+);
+// Meta numbers: the approved templates (with header files), and the chosen one's values
+const templates = ref([]);
+const template = ref("");
+const params = ref([]);
+const chosen = computed(() => templates.value.find((t) => t.name === template.value));
+watch(chosen, (t) => (params.value = Array.from({ length: t?.params || 0 }, () => "")));
+watch(isMeta, async (meta) => {
+	template.value = "";
+	if (!meta || templates.value.length) return;
+	try {
+		templates.value = await call(API + "meta_templates");
+	} catch (e) {
+		error.value = errorText(e, "Could not load the templates.");
+	}
+});
 const numberOptions = computed(() =>
 	numbers.value.map((n) => ({ label: n.label, value: n.name }))
 );
@@ -195,9 +245,10 @@ const labelOptions = computed(() => [
 	{ label: "Any label", value: "" },
 	...(boot.tags || []).map((t) => ({ label: t, value: t })),
 ]);
-const blank = () => ({ number: "", title: "", message: "", scheduled_at: "", delay: "3" });
+const blank = () => ({ number: "", title: "", message: "", scheduled_at: "", delay: "8" });
 const form = ref(blank());
-const filters = ref({ label: "", linked: "", groups: "0", search: "" });
+const filters = ref({ label: "", linked: "", groups: "0", search: "" }); // never groups
+const leftToday = ref(null);
 const chats = ref([]);
 const more = ref(false);
 const picked = ref([]);
@@ -220,6 +271,7 @@ async function load() {
 		});
 		chats.value = r.chats;
 		more.value = r.more;
+		leftToday.value = r.left_today;
 		const allowed = new Set(r.chats.filter((c) => c.allowed).map((c) => c.name));
 		picked.value = picked.value.filter((n) => allowed.has(n));
 	} catch (e) {
@@ -249,7 +301,11 @@ watch(open, (o) => {
 });
 
 function pickAll() {
-	picked.value = chats.value.filter((c) => c.allowed).map((c) => c.name);
+	const room = leftToday.value ?? Infinity;
+	picked.value = chats.value
+		.filter((c) => c.allowed)
+		.slice(0, room)
+		.map((c) => c.name);
 }
 
 async function onFile(e) {
@@ -271,24 +327,37 @@ async function send() {
 	const ok = await ask(
 		`${later.value ? "It starts at the chosen time and goes" : "It goes"} to ${n} ${
 			n === 1 ? "chat" : "chats"
-		}, one every ${form.value.delay} seconds, and uses ${n} broadcast ${
-			n === 1 ? "credit" : "credits"
-		}.`,
+		}${
+			isMeta.value
+				? ", as the approved template."
+				: `, one every ${form.value.delay} seconds, and uses ${n} broadcast ${
+						n === 1 ? "credit" : "credits"
+				  }.`
+		}`,
 		{ title: "Send this broadcast?", confirmLabel: "Send" }
 	);
 	if (!ok) return;
 	sending.value = true;
 	error.value = "";
 	try {
-		const b = await call(API + "send", {
+		const common = {
 			number: form.value.number,
 			chats: JSON.stringify(picked.value),
-			message: form.value.message,
 			file: file.value?.name || null,
 			title: form.value.title,
 			scheduled_at: later.value ? form.value.scheduled_at : null,
-			delay: form.value.delay,
-		});
+		};
+		const b = isMeta.value
+			? await call(API + "send_template", {
+					...common,
+					template: template.value,
+					params: JSON.stringify(params.value),
+			  })
+			: await call(API + "send", {
+					...common,
+					message: form.value.message,
+					delay: form.value.delay,
+			  });
 		toast.success(later.value ? "Broadcast scheduled" : "Broadcast started");
 		emit("sent", b);
 		open.value = false;

@@ -187,9 +187,13 @@ def create_lead_for_message(message: str) -> str | None:
 	try:
 		frappe.db.savepoint("periskope_new_lead")
 		try:
-			return create_lead(
+			lead = create_lead(
 				frappe.db.get_value("Periskope Message", message, MESSAGE_FIELDS, as_dict=True)
 			)
+			if lead:
+				# remembered, so a manager can take back a lead the AI should not have made
+				frappe.db.set_value("Periskope Message", message, "ai_lead", lead, update_modified=False)
+			return lead
 		except Exception:
 			frappe.db.rollback(save_point="periskope_new_lead")
 			raise

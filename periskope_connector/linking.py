@@ -3,15 +3,18 @@
 How a message finds its lead or deal:
 - 1-to-1 chat: the customer's mobile number, on a deal first and then on a lead.
 - Customer group (a group about one customer): the group name, then the sender's mobile number.
-- Internal group (a team group): the customer name the AI finds in the message text.
+- Internal group (a team group): the customer name the AI finds in the message text. A group taken
+  for a team group whose member is a known customer contact becomes that customer's group.
 - A lead or deal set by hand on the Periskope Group always wins.
 
 Only a link is saved here. Nothing in the CRM is changed.
 """
 
 import re
+from difflib import SequenceMatcher
 
 import frappe
+from frappe.utils.caching import redis_cache
 
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.system import insert_as_system
@@ -61,9 +64,16 @@ def with_country_code(value: str | None) -> str:
 	return home_code() + digits if len(digits) == NUMBER_LENGTH else digits
 
 
+def _singular(word: str) -> str:
+	"""'apparels' -> 'apparel', 'exports' -> 'export'; 'glass' and short words stay as they are."""
+	return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
 def name_key(value: str | None) -> str:
+	"""A company name for comparing: lower case, no punctuation or company words, plurals folded, so
+	'Mg Apparel - Pranera' and 'MG APPARELS PVT LTD' share 'mg apparel'."""
 	words = re.sub(r"[^a-z0-9 ]", " ", (value or "").lower()).split()
-	return " ".join(w for w in words if w not in COMPANY_WORDS)
+	return " ".join(_singular(w) for w in words if w not in COMPANY_WORDS)
 
 
 def names_match(a: str | None, b: str | None) -> bool:
@@ -75,7 +85,37 @@ def names_match(a: str | None, b: str | None) -> bool:
 	if ka == kb:
 		return True
 	short, long_ = sorted((ka, kb), key=len)
-	return len(short) >= MIN_NAME_LENGTH and f" {short} " in f" {long_} "
+	if len(short) < MIN_NAME_LENGTH or f" {short} " not in f" {long_} ":
+		return False
+	# One word alone counts only as the start of the longer name: 'Innovative - Pranera' is
+	# Innovative's, but 'Textiles - Garment Sales' is not the company called 'Garments'.
+	return " " in short or long_.startswith(short + " ")
+
+
+# Words any textile company may have in its name: sharing one says nothing about who it is.
+TRADE_WORDS = {
+	"apparel", "cloth", "clothing", "cotton", "enterprise", "export", "exim", "fabric", "fashion",
+	"garment", "group", "impex", "import", "india", "industry", "industrie", "international", "knit",
+	"mill", "solution", "spinning", "textile", "trading", "trader", "wear", "weaving",
+}  # fmt: skip
+
+
+def _words(name: str | None, own: set[str]) -> set[str]:
+	return {w for w in name_key(name).split() if w not in TRADE_WORDS and w not in own}
+
+
+def resembles(organization: str | None, group_name: str | None) -> bool:
+	"""Whether a group's name points at a company: they share a telling word ('MG', 'Tejwaney') or one
+	spelt a little differently ('Corpqlo' for 'Coroqlo'). Our own company's words do not count."""
+	own = {w for company in own_companies() for w in name_key(company).split()}
+	theirs, ours = _words(organization, own), _words(group_name, own)
+	if theirs & ours:
+		return True
+	return any(
+		len(a) >= MIN_NAME_LENGTH and len(b) >= MIN_NAME_LENGTH and SequenceMatcher(None, a, b).ratio() >= 0.8
+		for a in theirs
+		for b in ours
+	)
 
 
 # A candidate is (lead, deal). A converted lead is represented by its deal.
@@ -97,12 +137,9 @@ def _from_leads(rows) -> list[tuple]:
 	return [(r.name, deal_of.get(r.name)) for r in rows]
 
 
-def by_mobile(number: str | None) -> list[tuple]:
-	"""Leads and deals whose phone matches, found through the indexed normalised field
-	periskope_phone_e164 that the app maintains on every lead and deal. The full number matches as it
-	is; a number of the company's own country also matches where the CRM saved it without the country
-	code ("9876543210", "09876543210"). Nothing else is compared by its last digits, so a foreign buyer
-	never meets a local lead that shares them."""
+def number_forms(number: str | None) -> list[str]:
+	"""The ways the CRM may have saved a number: in full with the country code, and for a number of
+	the company's own country also without it ("9876543210", "09876543210")."""
 	full = with_country_code(number)
 	if not full:
 		return []
@@ -110,32 +147,96 @@ def by_mobile(number: str | None) -> list[tuple]:
 	local = full[len(home_code()) :] if full.startswith(home_code()) else ""
 	if len(local) == NUMBER_LENGTH:
 		forms += [local, "0" + local, "0" + full]
-	filters = {"periskope_phone_e164": ["in", forms]}
-	deals = frappe.get_all("CRM Deal", filters=filters, fields=["name", "lead"], limit=50)
-	leads = frappe.get_all("CRM Lead", filters=filters, fields=["name", "converted"], limit=50)
-	return _from_deals(deals) + _from_leads(leads)
+	return forms
+
+
+def by_mobile(number: str | None) -> list[tuple]:
+	"""Leads and deals whose phone matches, found through the indexed normalised field
+	periskope_phone_e164 that the app maintains on every lead and deal. The full number matches as it
+	is; a number of the company's own country also matches where the CRM saved it without the country
+	code ("9876543210", "09876543210"). Nothing else is compared by its last digits, so a foreign buyer
+	never meets a local lead that shares them."""
+	forms = number_forms(number)
+	if not forms:
+		return []
+	found = []
+	# the mobile number, then a second number in the Phone field (periskope_phone2_e164)
+	for field in ("periskope_phone_e164", "periskope_phone2_e164"):
+		filters = {field: ["in", forms]}
+		deals = frappe.get_all("CRM Deal", filters=filters, fields=["name", "lead"], limit=50)
+		leads = frappe.get_all("CRM Lead", filters=filters, fields=["name", "converted"], limit=50)
+		found += [c for c in _from_deals(deals) + _from_leads(leads) if c not in found]
+	return found
+
+
+def phone_values(mobile_no: str | None, phone: str | None) -> dict:
+	"""The normalised phone fields of a lead or deal: its main number, and the Phone field as a second
+	number when both are set and differ."""
+	main = phone_e164(mobile_no or phone)
+	second = phone_e164(phone) if mobile_no and phone else ""
+	return {
+		"periskope_phone_e164": main,
+		"periskope_phone_key": number_key(main) if main else "",
+		"periskope_phone2_e164": second if second and second != main else "",
+	}
 
 
 def update_phone_fields(doc, method: str | None = None):
 	"""Keep the normalised, indexed phone fields of a lead or deal in step with mobile_no / phone.
+	A number new on the record links its past WhatsApp messages (relink_number, in the background).
 
 	Runs as a doc_event on every save; a failure here must never stop a sales save. A save may add or
 	change an organization, so the cached list of organizations is dropped too.
 	"""
 	frappe.cache().delete_value(ORGANIZATIONS_KEY)
 	try:
-		value = phone_e164(doc.mobile_no or doc.phone)
-		frappe.db.set_value(
-			doc.doctype,
-			doc.name,
-			{
-				"periskope_phone_e164": value,
-				"periskope_phone_key": number_key(value) if value else "",
-			},
-			update_modified=False,
+		values = phone_values(doc.mobile_no, doc.phone)
+		before = (
+			frappe.db.get_value(
+				doc.doctype, doc.name, ["periskope_phone_e164", "periskope_phone2_e164"], as_dict=True
+			)
+			or {}
 		)
+		frappe.db.set_value(doc.doctype, doc.name, values, update_modified=False)
+		new = {values["periskope_phone_e164"], values["periskope_phone2_e164"]} - {
+			before.get("periskope_phone_e164"),
+			before.get("periskope_phone2_e164"),
+			"",
+			None,
+		}
+		for number in new:
+			frappe.enqueue(
+				"periskope_connector.linking.relink_number",
+				number=number,
+				queue="long",
+				enqueue_after_commit=True,
+				job_id=f"periskope_relink_number::{number}",
+				deduplicate=True,
+			)
 	except Exception:
 		frappe.log_error(title=f"Periskope: could not set the phone fields of {doc.doctype} {doc.name}")
+
+
+def relink_number(number: str) -> int:
+	"""Background job: a lead or deal got this number. Its 1-to-1 chats' messages are linked again,
+	and its row in the contact queue is marked linked. Returns how many messages were linked."""
+	full = with_country_code(number)
+	if not full:
+		return 0
+	linked = 0
+	for chat_id in frappe.get_all(
+		"Periskope Message", filters={"contact_number": full, "is_group": 0}, pluck="chat_id", distinct=True
+	):
+		if not frappe.db.exists("Periskope Chat", {"chat_id": chat_id, "linked_by_hand": 1}):
+			linked += relink_messages(chat_id)
+	lead, deal, status = resolve(by_mobile(full))
+	if status in ("Linked", "Ambiguous"):
+		frappe.db.set_value(
+			"Periskope Contact",
+			{"phone": full, "status": "New"},
+			{"status": "Linked", "linked_lead": lead, "linked_deal": deal},
+		)
+	return linked
 
 
 def backfill_phone_fields(doctype: str, page: int = 500) -> int:
@@ -162,12 +263,8 @@ def backfill_phone_fields(doctype: str, page: int = 500) -> int:
 			if row.name in seen:
 				continue
 			seen.add(row.name)
-			value = phone_e164(row.mobile_no or row.phone)
 			frappe.db.set_value(
-				doctype,
-				row.name,
-				{"periskope_phone_e164": value, "periskope_phone_key": number_key(value)},
-				update_modified=False,
+				doctype, row.name, phone_values(row.mobile_no, row.phone), update_modified=False
 			)
 			total += 1
 		frappe.db.commit()
@@ -344,6 +441,155 @@ def ensure_group(chat_id: str, phone: str | None = None):
 	return group
 
 
+def refresh_group_name(chat_id: str, name: str) -> bool:
+	"""A group renamed in WhatsApp: the stored group and its chat rows take the new name, and a group
+	matched by its name (not set up by hand) is linked again in the background. Returns True when the
+	name changed. Never raises."""
+	try:
+		name = (name or "").strip()
+		group = frappe.db.get_value(
+			"Periskope Group",
+			{"chat_id": chat_id},
+			["name", "group_name", "organization", "crm_lead", "crm_deal"],
+			as_dict=True,
+		)
+		if not group or not name or group.group_name == name:
+			return False
+		frappe.db.set_value("Periskope Group", group.name, "group_name", name)
+		for row in frappe.get_all("Periskope Chat", filters={"chat_id": chat_id}, pluck="name"):
+			frappe.db.set_value("Periskope Chat", row, "chat_name", name, update_modified=False)
+		if not (group.organization or group.crm_lead or group.crm_deal):
+			frappe.enqueue(
+				"periskope_connector.linking.relink_messages",
+				chat_id=chat_id,
+				queue="long",
+				enqueue_after_commit=True,
+			)
+		return True
+	except Exception:
+		frappe.log_error(title=f"Periskope: could not rename group {chat_id}")
+		return False
+
+
+# --- Group members -----------------------------------------------------------------------------------
+
+
+@redis_cache(ttl=3600)
+def staff_numbers() -> set[str]:
+	"""Our own people's numbers (users, active employees, our WhatsApp numbers), with the country
+	code. A colleague's number may also sit on a customer's contact, so it never tells whose group
+	it is."""
+	numbers = set(frappe.get_all("WhatsApp Number", pluck="name"))
+	for row in frappe.get_all(
+		"User", filters={"enabled": 1, "user_type": "System User"}, fields=["mobile_no", "phone"]
+	):
+		numbers.update([row.mobile_no, row.phone])
+	if frappe.db.exists("DocType", "Employee"):
+		numbers.update(frappe.get_all("Employee", filters={"status": "Active"}, pluck="cell_number"))
+	return {with_country_code(n) for n in numbers if n} - {""}
+
+
+def member_organizations(number: str | None) -> set[str]:
+	"""The CRM organizations a group member's number belongs to: through a lead or deal with that
+	number, or a deal that lists a contact with that number. Empty for our own people."""
+	forms = number_forms(number)
+	if not forms or forms[0] in staff_numbers():
+		return set()
+	set_ = ["is", "set"]
+	by_phone = {"periskope_phone_e164": ["in", forms], "organization": set_}
+	found = set(frappe.get_all("CRM Deal", filters=by_phone, pluck="organization", limit=20))
+	found |= set(frappe.get_all("CRM Lead", filters=by_phone, pluck="organization", limit=20))
+	contacts = frappe.get_all(
+		"Contact Phone",
+		filters={"parenttype": "Contact", "phone": ["in", [*forms, "+" + forms[0]]]},
+		pluck="parent",
+		limit=20,
+	)
+	if contacts:
+		deals = frappe.get_all(
+			"CRM Contacts", filters={"parenttype": "CRM Deal", "contact": ["in", contacts]}, pluck="parent"
+		)
+		if deals:
+			found |= set(
+				frappe.get_all(
+					"CRM Deal", filters={"name": ["in", deals], "organization": set_}, pluck="organization"
+				)
+			)
+	own = own_companies()
+	return {o for o in found if not any(names_match(o, company) for company in own)}
+
+
+def map_group_by_member(chat_id: str, number: str | None) -> str | None:
+	"""A group taken for a team group (no organization, lead or deal) that has a member from exactly
+	one customer organization, and whose name resembles that organization, is that customer's group:
+	it becomes a Customer group linked to it. A member alone is not enough: a forwarder or a supplier
+	in a team group is a contact on someone's deal too (the AI is shown such companies as candidates,
+	and a manager decides). Returns the organization, or None when nothing changed. Never raises: a
+	message must be saved even if this fails."""
+	try:
+		group = frappe.db.get_value(
+			"Periskope Group",
+			{"chat_id": chat_id},
+			["name", "group_name", "group_type", "organization", "crm_lead", "crm_deal"],
+			as_dict=True,
+		)
+		if (
+			not group
+			or group.group_type != "Internal"
+			or group.organization
+			or group.crm_lead
+			or group.crm_deal
+		):
+			return None
+		found = member_organizations(number)
+		if len(found) != 1:
+			return None  # unknown, our own person, or more than one company: leave it to people
+		organization = found.pop()
+		if not resembles(organization, group.group_name):
+			return None
+		from periskope_connector.api.crm_panel import set_group_organization
+
+		set_group_organization(chat_id, group.name, organization)
+		return organization
+	except Exception:
+		frappe.log_error(title=f"Periskope: could not map group {chat_id} by its member")
+		return None
+
+
+def map_groups(limit: int = 500) -> int:
+	"""Team groups (no organization, lead or deal) whose name now matches a customer, or whose member
+	is a customer contact, become that customer's group. Returns how many changed.
+	Run with: bench --site <site> execute periskope_connector.linking.map_groups"""
+	groups = frappe.get_all(
+		"Periskope Group",
+		filters={
+			"group_type": "Internal",
+			"organization": ["is", "not set"],
+			"crm_lead": ["is", "not set"],
+			"crm_deal": ["is", "not set"],
+		},
+		fields=["name", "chat_id", "group_name"],
+		limit=limit,
+	)
+	changed = 0
+	for group in groups:
+		if group.group_name and by_organization(group.group_name):
+			frappe.db.set_value("Periskope Group", group.name, "group_type", "Customer")
+			relink_messages(group.chat_id)
+			changed += 1
+			continue
+		senders = frappe.get_all(
+			"Periskope Message",
+			filters={"chat_id": group.chat_id, "direction": "Incoming", "sender_phone": ["is", "set"]},
+			pluck="sender_phone",
+			distinct=True,
+			limit=50,
+		)
+		if any(map_group_by_member(group.chat_id, number) for number in senders):
+			changed += 1
+	return changed
+
+
 # --- Linking -----------------------------------------------------------------------------------------
 
 
@@ -444,6 +690,7 @@ CHAT_FIELDS = [
 	"message_timestamp",
 	"crm_lead",
 	"crm_deal",
+	"link_status",
 ]
 
 
@@ -527,11 +774,14 @@ def relink_group(group: str, user: str | None = None):
 	)
 
 
-def link_unlinked(limit: int = 5000) -> int:
-	"""Link messages that have no link yet or could not be matched earlier.
-	Run with: bench --site <site> execute periskope_connector.linking.link_unlinked"""
+def link_unlinked(limit: int = 5000, days: int | None = None) -> int:
+	"""Link messages that have no link yet or could not be matched earlier (a lead made since, a
+	number added in the CRM). Scheduler, daily: the last LINK_AGAIN_DAYS days; by hand, everything:
+	bench --site <site> execute periskope_connector.linking.link_unlinked"""
+	filters = {"creation": [">=", frappe.utils.add_days(frappe.utils.now_datetime(), -days)]} if days else {}
 	names = frappe.get_all(
 		"Periskope Message",
+		filters=filters,
 		or_filters=[["link_status", "is", "not set"], ["link_status", "in", ["No Match", "Internal"]]],
 		pluck="name",
 		order_by="creation asc",
@@ -540,3 +790,11 @@ def link_unlinked(limit: int = 5000) -> int:
 	for name in names:
 		link_message(name)
 	return len(names)
+
+
+LINK_AGAIN_DAYS = 30
+
+
+def link_unlinked_daily() -> int:
+	"""Scheduler, daily: link_unlinked over the last LINK_AGAIN_DAYS days."""
+	return link_unlinked(limit=3000, days=LINK_AGAIN_DAYS)

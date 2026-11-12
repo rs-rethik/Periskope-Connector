@@ -207,7 +207,10 @@ function render_setup(frm) {
 						"The AI agent is running: it reads every message, image and document, creates tasks, escalates and keeps the CRM up to date."
 				  )
 				: __("Finish steps 1 to 3; the AI agent starts on its own when they are done.");
-			field.$wrapper.html(`<p>${e(headline)}</p>${rows}`);
+			const warnings = (status.warnings || [])
+				.map((w) => `<p class="text-danger" style="margin:8px 0 0">${e(w)}</p>`)
+				.join("");
+			field.$wrapper.html(`<p>${e(headline)}</p>${rows}${warnings}`);
 			frm.dashboard.clear_headline();
 			if (status.test_mode) {
 				frm.dashboard.set_headline_alert(

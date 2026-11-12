@@ -13,7 +13,7 @@ def get_context(context):
 	context.no_cache = 1
 	context.title = "Periskope suggestion"
 	context.token = token
-	context.decision = decision if decision in ("approve", "reject") else ""
+	context.decision = decision if decision in ("approve", "reject", "undo") else ""
 	context.suggestion = describe_token(token)
 	if context.suggestion:
 		try:
