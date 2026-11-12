@@ -63,7 +63,27 @@ def set_ai_off(chats, off: int | str = 1) -> dict:
 			frappe.db.set_value("Periskope Chat", row, "ai_off", off, update_modified=False)
 		if off:
 			autoreply.cancel(chat_id, _("AI is off for this chat"))
-		workflow.log(chat, _("AI off") if off else _("AI on"), user=frappe.session.user)
+		workflow.log(chat, "AI", _("AI off") if off else _("AI on"), user=frappe.session.user)
+	return _done(chats)
+
+
+@frappe.whitelist(methods=["POST"])
+def set_no_broadcasts(chats, off: int | str = 1) -> dict:
+	"""The customer asked for no broadcasts (or agreed to them again): every chat row of the customer,
+	on any of our numbers."""
+	access.require_inbox_user()
+	chats = _chats(chats)
+	off = 1 if frappe.utils.cint(off) else 0
+	from periskope_connector import chat as chat_rows
+
+	for chat in chats:
+		chat_rows.set_on_all(frappe.db.get_value("Periskope Chat", chat, "chat_id"), {"no_broadcasts": off})
+		workflow.log(
+			chat,
+			"Broadcasts",
+			_("No broadcasts") if off else _("Broadcasts allowed"),
+			user=frappe.session.user,
+		)
 	return _done(chats)
 
 

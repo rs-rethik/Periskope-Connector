@@ -136,7 +136,7 @@ class TestBroadcast(ActionsCase):
 		b = broadcast.send(A, frappe.as_json([self.chat]), message="Hi {{name}}, new rates attached")
 		body = self.calls[-1][3]
 		self.assertEqual(
-			(body["chat_ids"], body["org_phones"], body["delay"]), ([f"{CUSTOMER}@c.us"], [A], 3)
+			(body["chat_ids"], body["org_phones"], body["delay"]), ([f"{CUSTOMER}@c.us"], [A], 8)
 		)
 		self.assertEqual(body["variables"][0]["chat_id"], f"{CUSTOMER}@c.us")
 		self.assertEqual(b["status"], "Sending")

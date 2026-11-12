@@ -9,7 +9,8 @@
   "event_timestamp",
   "signature_valid",
   "payload",
-  "attempts"
+  "attempts",
+  "processed"
  ],
  "fields": [
   {
@@ -55,11 +56,20 @@
    "hidden": 1,
    "label": "Failed Processing Attempts",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The event was applied. An ack or reaction that came before its message stays unticked and is tried again by the sweep.",
+   "fieldname": "processed",
+   "fieldtype": "Check",
+   "label": "Processed",
+   "read_only": 1,
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-29 10:00:00.000000",
+ "modified": "2026-11-11 17:35:59.556730",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Webhook Log",

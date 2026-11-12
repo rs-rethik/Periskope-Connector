@@ -10,12 +10,16 @@ an unanswered recovered message exactly like a live one.
 from datetime import datetime, timedelta, timezone
 
 import frappe
+import pytz
 from dateutil import parser as date_parser
+from frappe.utils.data import get_system_timezone
 
 from periskope_connector.client import request
 from periskope_connector.messages import create_message
 
-LOOKBACK_DAYS = 1  # the scheduled run; a manual run can look further back
+LOOKBACK_DAYS = 1  # the scheduled run looks back at least this far
+MAX_LOOKBACK_DAYS = 7  # and, after an outage, back to the number's newest saved message, at most this
+OVERLAP_HOURS = 1  # read a little before the newest saved message (webhooks arrive out of order)
 CHAT_PAGE = 100
 MAX_CHATS = 300  # per phone per run
 MESSAGE_PAGE = 50
@@ -73,8 +77,23 @@ def _missing_messages(chat_id: str, phone: str, cutoff: datetime) -> list[dict]:
 	return sorted(missing, key=lambda m: m.get("timestamp") or "")
 
 
-def run(days: int | float = LOOKBACK_DAYS) -> dict:
-	"""Save the messages of the last `days` days that the webhooks missed.
+def _cutoff(phone: str, now: datetime) -> datetime:
+	"""Where the scheduled run starts for one number: a day back, or further when the newest message
+	saved for it is older (the site or the webhook was down), up to MAX_LOOKBACK_DAYS."""
+	newest = frappe.db.get_value(
+		"Periskope Message", {"org_phone": phone}, "max(message_timestamp)"
+	)  # site time, naive
+	day = now - timedelta(days=LOOKBACK_DAYS)
+	if not newest:
+		return day
+	local = pytz.timezone(get_system_timezone()).localize(frappe.utils.get_datetime(newest))
+	since = local.astimezone(timezone.utc) - timedelta(hours=OVERLAP_HOURS)
+	return max(min(since, day), now - timedelta(days=MAX_LOOKBACK_DAYS))
+
+
+def run(days: int | float | None = None) -> dict:
+	"""Save the messages the webhooks missed: by default since each number's newest saved message (at
+	least a day, at most MAX_LOOKBACK_DAYS), or of the last `days` days.
 
 	Scheduler (hourly), or by hand:
 	bench --site <site> execute periskope_connector.backfill.run --kwargs '{"days": 7}'
@@ -82,9 +101,10 @@ def run(days: int | float = LOOKBACK_DAYS) -> dict:
 	if not frappe.db.get_single_value("Periskope Settings", "enabled"):
 		return {"recovered": 0, "chats": 0}
 
-	cutoff = datetime.now(timezone.utc) - timedelta(days=float(days))
-	recovered = chats_checked = 0
+	now = datetime.now(timezone.utc)
+	recovered = chats_checked = failed = 0
 	for phone in _linked_phones():
+		cutoff = now - timedelta(days=float(days)) if days else _cutoff(phone, now)
 		try:
 			chat_ids = _active_chats(phone, cutoff)
 		except Exception:
@@ -93,12 +113,22 @@ def run(days: int | float = LOOKBACK_DAYS) -> dict:
 		for chat_id in chat_ids:
 			chats_checked += 1
 			try:
-				for data in _missing_messages(chat_id, phone, cutoff):
-					# Chronological, so a rep's reply marks the customer messages before it as replied.
+				missing = _missing_messages(chat_id, phone, cutoff)
+			except Exception:
+				frappe.log_error(title=f"Periskope: back-fill could not read chat {chat_id}")
+				continue
+			for data in missing:
+				# Chronological, so a rep's reply marks the customer messages before it as replied.
+				# One message that cannot be saved must not undo or block the rest of the chat.
+				frappe.db.savepoint("periskope_backfill_message")
+				try:
 					if create_message({"event": "message.created", "data": data}):
 						recovered += 1
-				frappe.db.commit()
-			except Exception:
-				frappe.db.rollback()
-				frappe.log_error(title=f"Periskope: back-fill failed for chat {chat_id}")
-	return {"recovered": recovered, "chats": chats_checked}
+				except Exception:
+					frappe.db.rollback(save_point="periskope_backfill_message")
+					failed += 1
+					frappe.log_error(
+						title=f"Periskope: back-fill could not save message {data.get('message_id')}"
+					)
+			frappe.db.commit()  # a job: each chat's recovered messages are kept
+	return {"recovered": recovered, "chats": chats_checked, **({"failed": failed} if failed else {})}

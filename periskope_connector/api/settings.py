@@ -42,10 +42,17 @@ def test_connection() -> dict:
 	result = {"phone_count": len(phones)}
 	try:
 		result["webhooks"] = setup_webhooks()
+		_set_webhook_status(_("Registered"))
 	except Exception as e:
-		# A webhook that could not be registered must not hide that the connection itself works.
+		# A webhook that could not be registered must not hide that the connection itself works, but
+		# it is kept, so setup step 1 is not green while nothing can arrive.
 		result["webhooks_error"] = str(e)[:300]
+		_set_webhook_status(f"Failed: {str(e)[:120]}")
 	return result
+
+
+def _set_webhook_status(status: str):
+	frappe.db.set_single_value("Periskope Settings", "webhook_status", status)
 
 
 @frappe.whitelist()
@@ -111,6 +118,64 @@ def set_correct_category(message: str, category: str) -> None:
 	if category not in names():
 		frappe.throw(_("Category must be one of: {0}").format(", ".join(names())))
 	frappe.db.set_value("Periskope Message", message, "correct_category", category)
+
+
+@frappe.whitelist(methods=["GET", "POST"])  # the inbox's call() reads with POST
+def failed_messages() -> list[dict]:
+	"""The customer messages the AI could not analyse (after every retry), newest first: their
+	escalation, lead or tasks never happened until someone retries them."""
+	require_manager()
+	rows = frappe.get_all(
+		"Periskope Message",
+		filters={"classification_status": "Failed", "direction": "Incoming"},
+		fields=[
+			"name",
+			"periskope_chat",
+			"chat_name",
+			"contact_number",
+			"body",
+			"message_type",
+			"classification_error",
+			"message_timestamp",
+		],
+		order_by="message_timestamp desc",
+		limit=50,
+	)
+	for r in rows:
+		r.body = (r.body or "")[:160]
+		r.classification_error = (r.classification_error or "")[:200]
+	return rows
+
+
+@frappe.whitelist(methods=["POST"])
+def retry_failed_message(message: str) -> None:
+	"""Analyse a failed message again; a voice note is transcribed again first."""
+	require_manager()
+	row = frappe.db.get_value(
+		"Periskope Message", message, ["classification_status", "message_type", "transcript"], as_dict=True
+	)
+	if not row or row.classification_status != "Failed":
+		frappe.throw(_("This message is not waiting for a retry."))
+	if row.message_type == "audio" and not row.transcript:
+		from periskope_connector.ai import transcribe
+
+		frappe.db.set_value(
+			"Periskope Message",
+			message,
+			{"transcript_attempts": 0, "classification_status": "Skipped", "classification_error": ""},
+			update_modified=False,
+		)
+		transcribe.queue(message)
+		return
+	from periskope_connector.ai import classifier
+
+	frappe.db.set_value(
+		"Periskope Message",
+		message,
+		{"classification_status": "Pending", "classification_attempts": 0, "classification_error": ""},
+		update_modified=False,
+	)
+	classifier.queue(message)
 
 
 @frappe.whitelist()

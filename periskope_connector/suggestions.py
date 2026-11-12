@@ -307,6 +307,26 @@ def reject(doc, via: str, user: str) -> str:
 	return "Rejected"
 
 
+def undo(doc, via: str, user: str) -> str:
+	"""Take back a knowledge change the agent applied by itself: a new answer is retired, a changed
+	answer gets its old text back, a retired one comes back."""
+	if doc.kind not in AUTOMATIC_KINDS or doc.status != "Applied":
+		frappe.throw(_("Only a change the assistant applied by itself can be undone."))
+	entry = frappe.get_doc("Periskope Knowledge Entry", doc.target)
+	if doc.operation == "Add":
+		entry.status = "Retired"
+	elif doc.operation == "Modify":
+		before = frappe.parse_json(doc.current_value or "{}") or {}
+		for field in ("question", "answer", "keywords"):
+			if before.get(field):
+				entry.set(field, before[field])
+	else:  # Remove
+		entry.status = "Approved"
+	save_as_system(entry)
+	_finish(doc, "Undone", via, user)
+	return "Undone"
+
+
 def decide_by_token(token: str, decision: str) -> dict:
 	"""The email link: one suggestion, one use. Returns what happened for the confirmation page."""
 	token = (token or "").strip()
@@ -314,6 +334,12 @@ def decide_by_token(token: str, decision: str) -> dict:
 	if not name:
 		return {"ok": False, "message": _("This link is not valid.")}
 	doc = frappe.get_doc("Periskope Suggestion", name)
+	if decision == "undo":
+		if doc.status != "Applied" or doc.kind not in AUTOMATIC_KINDS:
+			return {"ok": False, "message": _("This change was already {0}.").format(doc.status.lower())}
+		if doc.expires_on and get_datetime(doc.expires_on) < now_datetime():
+			return {"ok": False, "message": _("This link has expired.")}
+		return {"ok": True, "outcome": undo(doc, "Email Link", _("Email link")), "message": "Undone"}
 	if doc.status != "Pending":
 		return {"ok": False, "message": _("This suggestion was already {0}.").format(doc.status.lower())}
 	if doc.expires_on and get_datetime(doc.expires_on) < now_datetime():
@@ -425,6 +451,61 @@ def send_digest(force: bool = False) -> int:
 			f"<p>{_('The assistant learned from recent conversations and suggests these changes. Nothing changes until you approve it.')}</p>"
 			+ "".join(blocks)
 			+ f"<p style='color:#777'>{_('Each link works once and expires on its own.')}</p>"
+		),
+		reference_doctype="Periskope Suggestion",
+		reference_name=rows[0].name,
+		now=False,
+	)
+	return len(rows)
+
+
+def send_applied_digest() -> int:
+	"""Scheduler, daily: email the approvers the knowledge changes the assistant made by itself since
+	the last email, each with an Undo link (valid until the change's expiry). Returns how many."""
+	from periskope_connector.webhooks import site_url
+
+	rows = frappe.get_all(
+		"Periskope Suggestion",
+		filters={
+			"kind": ["in", list(AUTOMATIC_KINDS)],
+			"status": "Applied",
+			"decision_via": AUTOMATIC,
+			"emailed_on": ["is", "not set"],
+			"expires_on": [">", now_datetime()],
+		},
+		fields=["name", "operation", "summary", "payload", "current_value"],
+		order_by="creation asc",
+		limit=MAX_PER_EMAIL * 2,
+	)
+	recipients = _recipients()
+	if not rows or not recipients:
+		return 0
+	base = f"{site_url()}/periskope-suggestion"
+	blocks = []
+	for row in rows:
+		token = secrets.token_urlsafe(32)
+		frappe.db.set_value(
+			"Periskope Suggestion",
+			row.name,
+			{"token_hash": _hash(token), "emailed_on": now_datetime()},
+			update_modified=False,
+		)
+		answer = (frappe.parse_json(row.payload or "{}") or {}).get("answer") or ""
+		before = (frappe.parse_json(row.current_value or "{}") or {}).get("answer") or ""
+		blocks.append(
+			f"<div style='border:1px solid #ddd;border-radius:6px;padding:12px;margin:12px 0'>"
+			f"<p><b>{escape_html(row.summary)}</b></p>"
+			+ (f"<p style='color:#777'>{_('Before')}: {escape_html(before)}</p>" if before else "")
+			+ (f"<p>{_('Now')}: {escape_html(answer)}</p>" if answer else "")
+			+ f"<p><a href='{base}?token={token}&decision=undo' style='background:#c62828;color:#fff;"
+			f"padding:6px 12px;border-radius:4px;text-decoration:none'>{_('Undo')}</a></p></div>"
+		)
+	safety.sendmail(
+		recipients=recipients,
+		subject=_("Periskope assistant: {0} knowledge change(s) applied").format(len(rows)),
+		message=(
+			f"<p>{_('The assistant learned these answers from what your reps told customers, and uses them in its replies from now on. Undo any that is wrong.')}</p>"
+			+ "".join(blocks)
 		),
 		reference_doctype="Periskope Suggestion",
 		reference_name=rows[0].name,

@@ -12,6 +12,7 @@
   "team",
   "labels",
   "ai_off",
+  "no_broadcasts",
   "chat_name",
   "is_group",
   "contact_number",
@@ -41,6 +42,7 @@
   "resolved_on",
   "response_breached",
   "breach_alerted",
+  "resolution_alerted",
   "section_read",
   "read_at",
   "read_by",
@@ -216,6 +218,13 @@
    "description": "Nothing of this customer's chats (on any of our numbers) is sent to the AI: no tags, auto reply, welcome, CRM summary, voice-note transcript or learning."
   },
   {
+   "default": "0",
+   "description": "The customer asked not to get broadcasts (by hand, or by writing STOP): broadcasts skip this customer on every number.",
+   "fieldname": "no_broadcasts",
+   "fieldtype": "Check",
+   "label": "No Broadcasts"
+  },
+  {
    "fieldname": "section_sla",
    "fieldtype": "Section Break",
    "label": "SLA",
@@ -283,6 +292,15 @@
    "read_only": 1
   },
   {
+   "default": "0",
+   "fieldname": "resolution_alerted",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Resolution Breach Alerted",
+   "read_only": 1,
+   "description": "The managers were told that this chat was not resolved by its resolution deadline (sla.check_breaches)."
+  },
+  {
    "fieldname": "section_read",
    "fieldtype": "Section Break",
    "label": "Read",
@@ -312,7 +330,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-11 15:00:00.000000",
+ "modified": "2026-11-11 17:45:34.420939",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Chat",

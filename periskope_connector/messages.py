@@ -4,6 +4,8 @@ import re
 import frappe
 import pytz
 from dateutil import parser as date_parser
+from frappe.query_builder.functions import Coalesce
+from frappe.utils import add_days, add_to_date, now_datetime
 from frappe.utils.data import get_system_timezone
 
 from periskope_connector import attachments, numbers, shared_items
@@ -23,8 +25,11 @@ MESSAGE_DELETED = "message.deleted"
 MESSAGE_EVENTS = (MESSAGE_CREATED, MESSAGE_UPDATED, MESSAGE_DELETED)
 ACK_UPDATED = "message.ack.updated"
 REACTION_EVENTS = ("reaction.created", "reaction.updated")
-# Every event the webhook saves and processes.
-HANDLED_EVENTS = (*MESSAGE_EVENTS, ACK_UPDATED, *REACTION_EVENTS)
+# A number connected, disconnected or changed: its state is read again at once (numbers.health_check
+# also alerts the managers when one drops), instead of waiting for the 15-minute poll.
+PHONE_EVENTS = ("org.phone.connected", "org.phone.disconnected", "org.phone.updated")
+# Every event the webhook saves and processes. Only these can be chosen in Periskope Settings.
+HANDLED_EVENTS = (*MESSAGE_EVENTS, ACK_UPDATED, *REACTION_EVENTS, *PHONE_EVENTS)
 
 
 def _digits(chat_id: str | None) -> str:
@@ -195,6 +200,11 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 	if history:
 		return doc.name
 
+	# "STOP": the customer gets no more broadcasts, on any of our numbers.
+	if not from_me:
+		from periskope_connector.api.broadcast import stop_requested
+
+		stop_requested(doc)
 	# An unknown 1-to-1 number joins the contact queue (guarded: it may never break the saving).
 	if status == "No Match":
 		ensure_contact(doc)
@@ -215,7 +225,9 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 
 
 def process_webhook_log(log: str):
-	"""Background job: turn one valid webhook log row into a message."""
+	"""Background job: apply one valid webhook log row. An ack or a reaction can arrive before the
+	message it is about (each event is its own job): it is then left unprocessed, and the sweep tries
+	it again a little later."""
 	row = frappe.db.get_value(
 		"Periskope Webhook Log", log, ["event_type", "signature_valid", "payload"], as_dict=True
 	)
@@ -225,22 +237,30 @@ def process_webhook_log(log: str):
 		payload = json.loads(row.payload)
 		if row.event_type == MESSAGE_CREATED:
 			create_message(payload, webhook_log=log)
-		elif row.event_type == ACK_UPDATED:
-			update_ack(payload)
-		elif row.event_type in REACTION_EVENTS:
-			update_reaction(payload)
+		elif row.event_type in (ACK_UPDATED, *REACTION_EVENTS):
+			apply = update_ack if row.event_type == ACK_UPDATED else update_reaction
+			if not apply(payload):
+				_count_attempt(log)  # its message is not saved yet: the sweep tries again
+				return
+		elif row.event_type in PHONE_EVENTS:
+			numbers.health_check()
 		else:
 			update_message(payload, webhook_log=log)
+		frappe.db.set_value("Periskope Webhook Log", log, "processed", 1, update_modified=False)
 	except Exception:
 		# Count the attempt, so the dead-letter sweep below stops re-trying a poison payload.
 		try:
-			attempts = (frappe.db.get_value("Periskope Webhook Log", log, "attempts") or 0) + 1
-			frappe.db.set_value("Periskope Webhook Log", log, "attempts", attempts)
+			_count_attempt(log)
 			frappe.db.commit()
 		except Exception:
 			frappe.db.rollback()
 		frappe.log_error(title=f"Periskope: could not save message from webhook log {log}")
 		raise
+
+
+def _count_attempt(log: str):
+	attempts = (frappe.db.get_value("Periskope Webhook Log", log, "attempts") or 0) + 1
+	frappe.db.set_value("Periskope Webhook Log", log, "attempts", attempts, update_modified=False)
 
 
 def update_message(payload: dict, webhook_log: str | None = None) -> str | None:
@@ -365,28 +385,39 @@ def update_reaction(payload: dict) -> str | None:
 	return name
 
 
-def sweep_unprocessed():
-	"""Scheduler, every 30 minutes: re-queue message.created logs whose background job never ran
-	(a worker restart, a crash). Duplicate deliveries are still safe: create_message is
-	idempotent on message_id."""
-	logs = frappe.db.sql(
-		"""select l.name from `tabPeriskope Webhook Log` l
-		left join `tabPeriskope Message` m on m.webhook_log = l.name
-		where l.event_type = 'message.created' and l.signature_valid = 1
-			and m.name is null
-			and ifnull(l.attempts, 0) < %s
-			and l.creation < now() - interval 10 minute
-			and not exists (
-				select 1 from `tabPeriskope Message` pm
-				where pm.message_id = json_unquote(json_extract(l.payload, '$.data.message_id'))
-			)
-		order by l.creation asc
-		limit 100""",
-		(MAX_SWEEP_ATTEMPTS,),
-		as_list=True,
+SWEEP_WINDOW_DAYS = 2  # older events are no longer worth applying
+
+
+def not_applied(log):
+	"""Condition on Periskope Webhook Log `log`: a valid, handled event of the last days that was not
+	applied yet (processed is unticked)."""
+	return (
+		(log.processed == 0)
+		& (log.signature_valid == 1)
+		& log.event_type.isin(list(HANDLED_EVENTS))
+		& (log.creation >= add_days(now_datetime(), -SWEEP_WINDOW_DAYS))
 	)
-	for (log,) in logs:
-		frappe.enqueue("periskope_connector.messages.process_webhook_log", log=log, queue="short")
+
+
+def sweep_unprocessed():
+	"""Scheduler, every 30 minutes: re-queue the webhook logs not applied yet: a job that never ran
+	(a worker restart, a crash), or an ack or reaction that came before its message. Each is tried up
+	to MAX_SWEEP_ATTEMPTS times; applying an event twice is safe (create_message is idempotent on
+	message_id, ticks only go up, a reaction is set, not added)."""
+	log = frappe.qb.DocType("Periskope Webhook Log")
+	logs = (
+		frappe.qb.from_(log)
+		.select(log.name)
+		.where(
+			not_applied(log)
+			& (Coalesce(log.attempts, 0) < MAX_SWEEP_ATTEMPTS)
+			& (log.creation < add_to_date(now_datetime(), minutes=-2))
+		)
+		.orderby(log.creation)
+		.limit(200)
+	).run(pluck=True)
+	for name in logs:
+		frappe.enqueue("periskope_connector.messages.process_webhook_log", log=name, queue="short")
 	return len(logs)
 
 
@@ -395,7 +426,7 @@ def process_unprocessed_logs():
 	Run with: bench --site <site> execute periskope_connector.messages.process_unprocessed_logs"""
 	logs = frappe.get_all(
 		"Periskope Webhook Log",
-		filters={"event_type": MESSAGE_CREATED, "signature_valid": 1},
+		filters={"event_type": MESSAGE_CREATED, "signature_valid": 1, "processed": 0},
 		pluck="name",
 		order_by="creation asc",
 	)

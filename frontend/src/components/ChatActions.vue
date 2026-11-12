@@ -84,6 +84,26 @@
 			</Button>
 		</Dropdown>
 
+		<!-- a customer who asked for no broadcasts -->
+		<Dropdown v-if="!compact && !chat.is_group" :options="[broadcastOption]">
+			<Button
+				size="sm"
+				variant="ghost"
+				:class="chat.no_broadcasts ? '!text-ink-amber-7' : ''"
+				:tooltip="
+					chat.no_broadcasts
+						? 'This customer gets no broadcasts'
+						: 'More: broadcasts to this customer'
+				"
+				aria-label="More actions"
+			>
+				<template #icon>
+					<LucideMegaphoneOff v-if="chat.no_broadcasts" class="size-4" />
+					<LucideEllipsisVertical v-else class="size-4" />
+				</template>
+			</Button>
+		</Dropdown>
+
 		<!-- a phone: everything but the status, in one menu -->
 		<Dropdown v-if="compact" :options="moreOptions" @update:open="(o) => o && loadPeople()">
 			<Button class="tap" variant="ghost" aria-label="More actions">
@@ -108,6 +128,8 @@ import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideEllipsisVertical from "~icons/lucide/ellipsis-vertical";
 import LucideBot from "~icons/lucide/bot";
 import LucideBotOff from "~icons/lucide/bot-off";
+import LucideMegaphone from "~icons/lucide/megaphone";
+import LucideMegaphoneOff from "~icons/lucide/megaphone-off";
 import SlaBadge from "@/components/SlaBadge.vue";
 import { boot } from "@/boot";
 import { inbox, loadTeams } from "@/stores/inbox";
@@ -276,8 +298,30 @@ const moreOptions = computed(() => [
 		icon: props.chat.ai_off ? LucideBotOff : LucideBot,
 		onClick: toggleAi,
 	},
+	...(props.chat.is_group ? [] : [broadcastOption.value]),
 	...props.more,
 ]);
+
+// The customer asked for no broadcasts (also set when they write STOP), or agreed to them again.
+const broadcastOption = computed(() => ({
+	label: props.chat.no_broadcasts ? "Allow broadcasts again" : "No broadcasts to this customer",
+	icon: props.chat.no_broadcasts ? LucideMegaphone : LucideMegaphoneOff,
+	onClick: toggleBroadcasts,
+}));
+
+async function toggleBroadcasts() {
+	const off = !props.chat.no_broadcasts;
+	try {
+		await call("periskope_connector.api.chat_actions.set_no_broadcasts", {
+			chats: [props.chat.name],
+			off: off ? 1 : 0,
+		});
+		toast.success(off ? "No more broadcasts to this customer" : "Broadcasts allowed again");
+		emit("changed");
+	} catch (e) {
+		showError(e);
+	}
+}
 
 async function unassign(user) {
 	if (busy.value) return;

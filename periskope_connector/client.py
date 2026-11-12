@@ -1,8 +1,15 @@
+import time
+
 import frappe
 import requests
 from frappe import _
 
 TIMEOUT = 20
+# A busy or briefly unavailable Periskope is asked again, a little later each time. A POST is asked
+# again only for 429 (refused before doing anything): after a 5xx a message may already be on its way.
+RETRY_WAITS = (1, 3)  # seconds before the 2nd and 3rd try
+RETRY_STATUSES = (429, 502, 503, 504)
+MAX_RETRY_AFTER = 10
 
 
 def request(
@@ -32,17 +39,30 @@ def request(
 	if phone:
 		headers["x-phone"] = phone
 
-	try:
-		response = requests.request(
-			method,
-			f"{settings.base_url}/{path.lstrip('/')}",
-			headers=headers,
-			json=json,
-			params=params,
-			timeout=TIMEOUT,
-		)
-	except requests.RequestException as e:
-		frappe.throw(_("Could not reach Periskope: {0}").format(type(e).__name__))
+	safe_to_repeat = method.upper() in ("GET", "HEAD")
+	for attempt in range(len(RETRY_WAITS) + 1):
+		last_try = attempt == len(RETRY_WAITS)
+		try:
+			response = requests.request(
+				method,
+				f"{settings.base_url}/{path.lstrip('/')}",
+				headers=headers,
+				json=json,
+				params=params,
+				timeout=TIMEOUT,
+			)
+		except requests.RequestException as e:
+			if safe_to_repeat and not last_try:
+				time.sleep(RETRY_WAITS[attempt])
+				continue
+			frappe.throw(_("Could not reach Periskope: {0}").format(type(e).__name__))
+		again = response.status_code == 429 or (safe_to_repeat and response.status_code in RETRY_STATUSES)
+		if not again or last_try:
+			break
+		wait = RETRY_WAITS[attempt]
+		if response.status_code == 429:
+			wait = min(MAX_RETRY_AFTER, frappe.utils.cint(response.headers.get("Retry-After")) or wait)
+		time.sleep(wait)
 
 	if response.status_code in (401, 403):
 		frappe.throw(_("Periskope rejected the API key (HTTP {0})").format(response.status_code))

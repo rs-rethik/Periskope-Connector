@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-11-11 17:44:24.787488",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "wait_minutes",
+  "min_severity",
+  "action",
+  "recipients"
+ ],
+ "fields": [
+  {
+   "description": "How long the customer has waited, in working minutes, before this step.",
+   "fieldname": "wait_minutes",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "After (working minutes)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Low",
+   "description": "The step is taken for messages of this severity and above (High: the AI marked it urgent).",
+   "fieldname": "min_severity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "From Severity",
+   "options": "Low\nMedium\nHigh",
+   "reqd": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action",
+   "options": "Notify Rep\nToDo for Rep\nEmail Managers\nEmail Escalation List\nEmail Recipients",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.action=='Email Recipients'",
+   "description": "Email addresses, one per line (only for Email Recipients).",
+   "fieldname": "recipients",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Recipients",
+   "mandatory_depends_on": "eval:doc.action=='Email Recipients'"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-11 17:44:24.787488",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Reminder Level",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

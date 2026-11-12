@@ -82,6 +82,7 @@ def new_chat(chat: str, opened_on=None):
 			"opened_on": opened_on,
 			"sla_policy": policy.name if policy else None,
 			"resolution_due": sla.due(policy, "resolution_minutes", opened_on),
+			"resolution_alerted": 0,
 		},
 		update_modified=False,
 	)
@@ -130,6 +131,7 @@ def _customer_wrote(row, stamp):
 			resolved_on=None,
 			sla_policy=policy.name if policy else None,
 			resolution_due=sla.due(policy, "resolution_minutes", stamp),
+			resolution_alerted=0,
 		)
 		log(row.name, "Reopened", _("The customer wrote again (was {0})").format(row.status))
 	if not row.waiting_since:
@@ -170,7 +172,10 @@ def set_status(chat: str, status: str, user: str | None = None):
 	elif row.status in DONE:
 		policy = _policy(row)
 		values.update(
-			opened_on=now, resolved_on=None, resolution_due=sla.due(policy, "resolution_minutes", now)
+			opened_on=now,
+			resolved_on=None,
+			resolution_due=sla.due(policy, "resolution_minutes", now),
+			resolution_alerted=0,
 		)
 	frappe.db.set_value("Periskope Chat", chat, values)
 	log(chat, "Status", _("{0} → {1}").format(row.status, status), user=user)

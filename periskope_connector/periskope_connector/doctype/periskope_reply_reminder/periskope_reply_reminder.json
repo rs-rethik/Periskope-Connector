@@ -14,6 +14,7 @@
   "reminded_on",
   "escalated_on",
   "closed_on",
+  "handled_until",
   "column_sla",
   "level",
   "first_response_secs",
@@ -90,6 +91,13 @@
    "read_only": 1
   },
   {
+   "description": "Set when the rep marked the reply task done without writing back: the customer messages up to this time count as handled and do not start the reminders again.",
+   "fieldname": "handled_until",
+   "fieldtype": "Datetime",
+   "label": "Handled Until",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_sla",
    "fieldtype": "Column Break"
   },
@@ -161,7 +169,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-29 16:00:00.000000",
+ "modified": "2026-11-11 17:26:36.066285",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Reply Reminder",

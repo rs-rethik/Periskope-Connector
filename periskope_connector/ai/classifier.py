@@ -18,7 +18,12 @@ from periskope_connector.api.permission import require_admin
 from periskope_connector.linking import link_message
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
-from periskope_connector.text_rules import analysis_skip_reason, readable_text, skip_fields
+from periskope_connector.text_rules import (
+	UNTRUSTED_TEXT_RULE,
+	analysis_skip_reason,
+	readable_text,
+	skip_fields,
+)
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 ZAI_ANTHROPIC_URL = "https://api.z.ai/api/anthropic"
@@ -326,7 +331,8 @@ def build_user_message(doc, history: list[dict], quoted: str | None = None) -> s
 	if quoted:
 		lines.append(f"The message below replies to this earlier message: {quoted.strip()[:500]}")
 	lines.append("Message to classify:")
-	lines.append(f"[{_speaker(doc)} {when}] {readable_text(doc)[:2000]}")
+	# Delimited, so the message's own words cannot pose as instructions (UNTRUSTED_TEXT_RULE).
+	lines.append(f"[{_speaker(doc)} {when}] <message>{readable_text(doc)[:2000]}</message>")
 	if attachments.has_file(doc):
 		name = getattr(doc, "media_filename", None) or ""
 		lines.append(f"Attached to this message: {doc.message_type} {name}".strip())
@@ -558,7 +564,7 @@ def call_claude(settings, doc) -> dict:
 	# A short group message means little without what was said before it.
 	history = get_history(doc, GROUP_MIN_CONTEXT if doc.is_group else CONTEXT)
 	model = settings.ai_model or DEFAULT_MODEL
-	prompt = build_system_prompt(settings)
+	prompt = build_system_prompt(settings) + UNTRUSTED_TEXT_RULE
 
 	if uses_jarvis(settings):
 		reply = jarvis_complete(
