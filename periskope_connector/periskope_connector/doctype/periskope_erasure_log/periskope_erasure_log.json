@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2026-11-11 18:40:20.324558",
+ "description": "A record that one WhatsApp contact's data was erased (a privacy request): who did it, when, why and how much. The number itself is not kept.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "number_masked",
+  "number_hash",
+  "erased_by",
+  "reason",
+  "counts"
+ ],
+ "fields": [
+  {
+   "description": "Only the last four digits.",
+   "fieldname": "number_masked",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Number",
+   "read_only": 1
+  },
+  {
+   "description": "A one-way fingerprint, to answer \"was this number erased?\" without keeping it.",
+   "fieldname": "number_hash",
+   "fieldtype": "Data",
+   "label": "Number Fingerprint",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "erased_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Erased By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counts",
+   "fieldtype": "Code",
+   "label": "What Was Erased",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "in_create": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-11-11 23:02:35.482172",
+ "modified_by": "Administrator",
+ "module": "Periskope Connector",
+ "name": "Periskope Erasure Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager",
+   "report": 1,
+   "export": 1
+  },
+  {
+   "read": 1,
+   "role": "WhatsApp Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

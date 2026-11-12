@@ -15,6 +15,7 @@ from dateutil import parser as date_parser
 from frappe.utils.data import get_system_timezone
 
 from periskope_connector.client import request
+from periskope_connector.linking import refresh_group_name
 from periskope_connector.messages import create_message
 
 LOOKBACK_DAYS = 1  # the scheduled run looks back at least this far
@@ -46,6 +47,9 @@ def _active_chats(phone: str, cutoff: datetime) -> list[str]:
 		data = request("GET", f"chats?limit={CHAT_PAGE}&offset={offset}", phone=phone)
 		chats = data.get("chats", []) if isinstance(data, dict) else []
 		for chat in chats:
+			if (chat.get("chat_id") or "").endswith("@g.us") and chat.get("chat_name"):
+				# a group renamed in WhatsApp: its new name (and what that name links to) is kept
+				refresh_group_name(chat["chat_id"], chat["chat_name"])
 			last = _as_utc((chat.get("latest_message") or {}).get("timestamp") or chat.get("updated_at"))
 			if chat.get("chat_id") and last and last >= cutoff:
 				chat_ids.append(chat["chat_id"])

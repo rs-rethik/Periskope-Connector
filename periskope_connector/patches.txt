@@ -16,3 +16,4 @@ periskope_connector.patches.webhook_logs_processed
 periskope_connector.patches.webhook_events_handled_only
 periskope_connector.patches.reminder_levels_editable
 periskope_connector.patches.resolution_breach_alerts
+periskope_connector.patches.link_review_and_second_numbers

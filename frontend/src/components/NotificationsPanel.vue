@@ -46,13 +46,52 @@
 				Nothing yet. You'll see assignments, mentions and overdue replies here.
 			</div>
 		</div>
+		<!-- notifications on this phone or computer, also when the app is closed -->
+		<div
+			v-if="push.available"
+			class="flex shrink-0 flex-col gap-2 border-t border-outline-gray-1 px-3 py-2.5"
+		>
+			<div class="flex items-center gap-2">
+				<LucideBellRing class="size-4 shrink-0 text-ink-gray-5" />
+				<span class="min-w-0 flex-1 text-sm text-ink-gray-8">
+					{{ push.on ? "On this device" : "Get them on this device" }}
+				</span>
+				<Button
+					size="sm"
+					:variant="push.on ? 'subtle' : 'solid'"
+					:label="push.on ? 'Turn off' : 'Turn on'"
+					:loading="push.busy"
+					@click="togglePush"
+				/>
+			</div>
+			<div v-if="push.on" class="flex items-center gap-1.5 text-xs text-ink-gray-6">
+				Quiet from
+				<input
+					v-model="push.quiet_from"
+					type="time"
+					class="rounded border-outline-gray-2 bg-surface-gray-1 px-1 py-0.5 text-xs"
+					@change="savePrefs"
+				/>
+				to
+				<input
+					v-model="push.quiet_to"
+					type="time"
+					class="rounded border-outline-gray-2 bg-surface-gray-1 px-1 py-0.5 text-xs"
+					@change="savePrefs"
+				/>
+			</div>
+			<p v-if="push.error" class="text-xs text-ink-red-7">{{ push.error }}</p>
+		</div>
 	</div>
 </template>
 
 <script setup>
+import { onMounted, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { Button, call } from "frappe-ui";
 import LucideX from "~icons/lucide/x";
+import LucideBellRing from "~icons/lucide/bell-ring";
+import { pushOn, pushSupported, turnPushOff, turnPushOn } from "@/utils/push";
 import { inbox, loadBell } from "@/stores/inbox";
 import { fromNow } from "@/utils/format";
 import { loadFailed } from "@/utils/load";
@@ -81,5 +120,54 @@ async function readAll() {
 	} catch (e) {
 		loadFailed(e, "Could not mark the notifications read.");
 	}
+}
+
+// Device notifications (web push): offered when the site and this browser support them.
+const push = reactive({
+	available: false,
+	on: false,
+	busy: false,
+	error: "",
+	key: "",
+	quiet_from: "",
+	quiet_to: "",
+});
+onMounted(async () => {
+	if (!pushSupported()) return;
+	try {
+		const cfg = await call("periskope_connector.api.notifications.push_config");
+		if (!cfg?.available) return;
+		Object.assign(push, {
+			available: true,
+			key: cfg.public_key,
+			quiet_from: cfg.quiet_from,
+			quiet_to: cfg.quiet_to,
+			on: await pushOn(),
+		});
+	} catch (e) {
+		push.available = false;
+	}
+});
+
+async function togglePush() {
+	push.busy = true;
+	push.error = "";
+	try {
+		if (push.on) await turnPushOff();
+		else await turnPushOn(push.key);
+		push.on = !push.on;
+	} catch (e) {
+		push.error = e?.message || "Could not change the notifications on this device.";
+	} finally {
+		push.busy = false;
+	}
+}
+
+function savePrefs() {
+	call("periskope_connector.api.notifications.save_preferences", {
+		push_off: 0,
+		quiet_from: push.quiet_from,
+		quiet_to: push.quiet_to,
+	}).catch((e) => loadFailed(e, "Could not save the quiet hours."));
 }
 </script>

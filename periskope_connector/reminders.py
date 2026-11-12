@@ -140,6 +140,18 @@ def is_working_time(moment: datetime, cfg) -> bool:
 	)
 
 
+def next_working_moment(moment: datetime, cfg) -> datetime:
+	"""The moment itself when it is working time, else the start of the next working day."""
+	if is_working_time(moment, cfg):
+		return moment
+	day = moment.date() if moment.time() < cfg.start else moment.date() + timedelta(days=1)
+	for _i in range(MAX_SPAN_DAYS):
+		if day.weekday() in cfg.days and day not in cfg.holidays:
+			return datetime.combine(day, cfg.start)
+		day += timedelta(days=1)
+	return moment  # no working day set up: as soon as possible
+
+
 def working_seconds(start: datetime, end: datetime, cfg) -> float:
 	"""Seconds between two site-time datetimes that fall inside working hours."""
 	if end <= start:
@@ -250,10 +262,19 @@ def _bell(rep: str | None, last, hours: float, chat_id: str | None = None):
 			"subject": _("Customer waiting for a WhatsApp reply: {0}").format(
 				last.contact_number or _("a WhatsApp group")
 			)[:140],
-			"document_type": "Periskope Message",
-			"document_name": last.name,
+			# On the chat, so it shows in the inbox's bell and opens the conversation (a bell on the
+			# message itself never appeared there).
+			**_bell_target(last.name),
 		}
 	).insert(ignore_permissions=True)
+
+
+def _bell_target(message: str) -> dict:
+	"""Where a bell about a message points: its chat, else (no chat row yet) the message."""
+	chat = frappe.db.get_value("Periskope Message", message, "periskope_chat")
+	if chat:
+		return {"document_type": "Periskope Chat", "document_name": chat}
+	return {"document_type": "Periskope Message", "document_name": message}
 
 
 def _todo_text(last, first_waiting, hours) -> str:

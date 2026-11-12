@@ -45,6 +45,7 @@ import LucideSearch from "~icons/lucide/search";
 const props = defineProps({
 	doctype: { type: String, required: true },
 	placeholder: { type: String, default: "Search" },
+	customer: { type: String, default: "" }, // items: priced in this customer's price list
 });
 const emit = defineEmits(["pick"]);
 
@@ -62,6 +63,7 @@ async function load() {
 		const found = await call("periskope_connector.api.sales_order.search", {
 			doctype: props.doctype,
 			query: query.value,
+			customer: props.customer || null,
 		});
 		if (mine === ticket) rows.value = found;
 	} catch {

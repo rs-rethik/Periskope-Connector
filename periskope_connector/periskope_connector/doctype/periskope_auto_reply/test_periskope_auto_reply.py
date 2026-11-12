@@ -36,7 +36,8 @@ class TestAutoReply(FrappeTestCase):
 		ready = patch.object(autoreply.assistant, "readiness", return_value=(True, ""))
 		ready.start()
 		self.addCleanup(ready.stop)
-		settings(enabled=1, enable_auto_reply=1, reply_delay_minutes=3)
+		# any hour: these tests are about the delay, and may run at night (working hours: test_review_medium)
+		settings(enabled=1, enable_auto_reply=1, reply_delay_minutes=3, auto_reply_hours="Any time")
 		# Only this test's replies may fall due: the site's own waiting ones are put aside (rolled back).
 		frappe.db.delete("Periskope Auto Reply", {"status": "Waiting"})
 		frappe.db.delete("Periskope Auto Reply", {"chat_id": CHAT})
@@ -554,7 +555,13 @@ class TestNoBudgetNoAI(FrappeTestCase):
 		self.addCleanup(patcher.stop)
 		self.send = patch.object(autoreply, "send_message").start()
 		self.addCleanup(patch.stopall)
-		settings(enabled=1, enable_auto_reply=1, reply_delay_minutes=0, approver_emails="boss@example.com")
+		settings(
+			enabled=1,
+			enable_auto_reply=1,
+			reply_delay_minutes=0,
+			approver_emails="boss@example.com",
+			auto_reply_hours="Any time",
+		)
 		frappe.cache().delete_value("periskope_alert:not_ready:budget")
 		self.addCleanup(frappe.cache().delete_value, "periskope_alert:not_ready:budget")
 

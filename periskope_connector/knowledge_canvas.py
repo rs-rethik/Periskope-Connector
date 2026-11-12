@@ -209,8 +209,18 @@ def gaps(days: int = 14) -> list[dict]:
 
 
 def document_text(file_url: str) -> str:
-	"""The text of an uploaded PDF, spreadsheet, Word file, CSV or text file (cut at MAX_DOC_CHARS)."""
-	file = frappe.get_doc("File", {"file_url": file_url})
+	"""The text of an uploaded PDF, spreadsheet, Word file, CSV or text file (cut at MAX_DOC_CHARS).
+	Only a file the user uploaded themselves (or, for a System Manager, one they may read): the AI's
+	preview shows what is in it, so it must never open someone else's private file."""
+	name = frappe.db.get_value("File", {"file_url": file_url})
+	if not name:
+		frappe.throw(_("The document was not found. Upload it again."))
+	file = frappe.get_doc("File", name)
+	own = file.owner == frappe.session.user
+	if not (own or "System Manager" in frappe.get_roles()) or not frappe.has_permission(
+		"File", "read", doc=file
+	):
+		frappe.throw(_("Import a document you uploaded yourself."), frappe.PermissionError)
 	content = file.get_content()
 	name = (file.file_name or "").lower()
 	if isinstance(content, str):

@@ -34,7 +34,7 @@
    "fieldname": "mode",
    "fieldtype": "Select",
    "label": "Mode",
-   "options": "Live\nDry Run\nBlocked",
+   "options": "Live\nDry Run\nBlocked\nSkipped",
    "default": "Live",
    "in_list_view": 1,
    "in_standard_filter": 1
@@ -117,7 +117,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-11 10:00:00.000000",
+ "modified": "2026-11-11 18:24:59.955843",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Agent Action",

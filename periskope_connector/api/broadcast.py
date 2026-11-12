@@ -53,9 +53,11 @@ def _manager():
 		frappe.throw(_("Broadcasts are for managers."), frappe.PermissionError)
 
 
-def _number(number: str) -> str:
+def _number(number: str, allow_meta: bool = False) -> str:
 	number = "".join(ch for ch in (number or "") if ch.isdigit())
-	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or meta.is_meta(number):
+	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or (
+		meta.is_meta(number) and not allow_meta
+	):
 		frappe.throw(_("Choose an active Periskope number."))
 	return number
 
@@ -66,7 +68,7 @@ def recipients(number: str, filters: str | dict | None = None) -> dict:
 	says how many test mode lets through."""
 	access.require_inbox_user()
 	_manager()
-	number = _number(number)
+	number = _number(number, allow_meta=True)
 	filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
 	filters = {
 		k: v
@@ -171,10 +173,7 @@ def send(
 	access.require_inbox_user()
 	_manager()
 	number = _number(number)
-	names = frappe.parse_json(chats) if isinstance(chats, str) else chats
-	names = list(dict.fromkeys(names or []))
-	if not names or len(names) > MAX_CHATS:
-		frappe.throw(_("Pick 1 to {0} chats.").format(MAX_CHATS))
+	rows = _checked_rows(number, chats)
 	message = (message or "").strip()
 	if not message and not file:
 		frappe.throw(_("Type a message or attach a file."))
@@ -186,29 +185,6 @@ def send(
 			_("Only {{{{name}}}} can be filled in for each chat ({0} cannot).").format(
 				", ".join(sorted(unknown))
 			)
-		)
-	rows = frappe.get_all(
-		"Periskope Chat",
-		filters={"name": ["in", names]},
-		fields=["name", "chat_id", "chat_name", "whatsapp_number", "is_group"],
-	)
-	if len(rows) != len(names):
-		frappe.throw(_("Some chats were not found."))
-	opted_out = _opted_out([r.chat_id for r in rows])
-	recent = _recently_sent()
-	for row in rows:
-		label = row.chat_name or row.chat_id
-		if row.whatsapp_number != number or not access.can_see_chat(row.name):
-			frappe.throw(_("{0} is not a chat of this number.").format(label))
-		if safety.send_mode(row.chat_id) != safety.LIVE:
-			frappe.throw(_("Test mode is on: {0} is not a test number.").format(label))
-		blocked = _blocked(row, opted_out, recent)
-		if blocked:
-			frappe.throw(_("{0} cannot get this broadcast: {1}.").format(label, blocked))
-	left = left_today(number)
-	if len(rows) > left:
-		frappe.throw(
-			_("This number may broadcast to {0} more chats today ({1} chosen).").format(left, len(rows))
 		)
 	delay = max(MIN_DELAY, min(60, frappe.utils.cint(delay) or DEFAULT_DELAY))
 	body = {"chat_ids": [r.chat_id for r in rows], "org_phones": [number], "delay": delay}
@@ -251,6 +227,150 @@ def send(
 		}
 	).insert(ignore_permissions=True)
 	return _out(doc)
+
+
+@frappe.whitelist(methods=["GET", "POST"])
+def meta_templates() -> list[dict]:
+	"""The approved templates a Meta number can broadcast, with those that need a header file."""
+	access.require_inbox_user()
+	_manager()
+	return meta.templates(with_media=True)
+
+
+@frappe.whitelist(methods=["POST"])
+def send_template(
+	number: str,
+	chats: str | list,
+	template: str,
+	params: str | list | None = None,
+	file: str | None = None,
+	title: str = "",
+	scheduled_at: str | None = None,
+) -> dict:
+	"""Broadcast an approved template from a Meta number (the only bulk message Meta allows), through
+	frappe_whatsapp's Bulk WhatsApp Message: now or at a set time, with a header file when the
+	template has one. The same guards as any broadcast apply. Returns the broadcast."""
+	access.require_inbox_user()
+	_manager()
+	number = _number(number, allow_meta=True)
+	if not meta.is_meta(number):
+		frappe.throw(_("Templates are broadcast from a Meta WhatsApp number."))
+	found = next((t for t in meta.templates(with_media=True) if t["name"] == template), None)
+	if not found:
+		frappe.throw(_("Choose one of the approved templates."))
+	values = [
+		str(p or "").strip() for p in (frappe.parse_json(params) if isinstance(params, str) else params or [])
+	]
+	values = values[: found["params"]]
+	if len(values) < found["params"] or not all(values):
+		frappe.throw(_("Fill in every value of the template."))
+	if found["header"] and not file:
+		frappe.throw(_("This template needs a file for its header ({0}).").format(found["header"].lower()))
+	rows = _checked_rows(number, chats)
+	start = None
+	if scheduled_at:
+		start = get_datetime(scheduled_at)
+		if start <= add_to_date(now_datetime(), minutes=1):
+			frappe.throw(_("Choose a start time at least a minute from now, or send it now."))
+	from periskope_connector.api.compose import _own_file
+
+	bulk = frappe.get_doc(
+		{
+			"doctype": "Bulk WhatsApp Message",
+			"title": (title or found["label"])[:140],
+			"whatsapp_account": meta.account(),
+			"recipient_type": "Individual",
+			"recipients": [
+				{"mobile_number": r.chat_id.split("@")[0], "recipient_name": r.chat_name or ""} for r in rows
+			],
+			"use_template": 1,
+			"template": template,
+			"variable_type": "Common",
+			"template_variables": frappe.as_json({str(i): v for i, v in enumerate(values, start=1)}),
+			"attach": meta.public_link(_own_file(file).name) if file else None,
+			"scheduled_time": start,
+		}
+	)
+	# frappe_whatsapp's own record of the bulk send; the manager's rights were checked above.
+	bulk.insert(ignore_permissions=True)
+	bulk.submit()
+	doc = frappe.get_doc(
+		{
+			"doctype": DOCTYPE,
+			"broadcast_id": bulk.name,
+			"title": (title or found["label"])[:140],
+			"whatsapp_number": number,
+			"message": found["body"],
+			"status": "Scheduled" if start else "Sending",
+			"scheduled_at": start,
+			"recipient_count": len(rows),
+			"queued": len(rows),
+			"recipients": frappe.as_json(
+				[
+					{"chat": r.name, "chat_id": r.chat_id, "title": r.chat_name, "status": "queued"}
+					for r in rows
+				]
+			),
+		}
+	).insert(ignore_permissions=True)
+	return _out(doc)
+
+
+def _checked_rows(number: str, chats) -> list:
+	"""The chosen chats, each checked: on this number, visible, test mode, the broadcast guards and
+	the day's limit (as send())."""
+	names = list(dict.fromkeys(frappe.parse_json(chats) if isinstance(chats, str) else chats or []))
+	if not names or len(names) > MAX_CHATS:
+		frappe.throw(_("Pick 1 to {0} chats.").format(MAX_CHATS))
+	rows = frappe.get_all(
+		"Periskope Chat",
+		filters={"name": ["in", names]},
+		fields=["name", "chat_id", "chat_name", "whatsapp_number", "is_group"],
+	)
+	if len(rows) != len(names):
+		frappe.throw(_("Some chats were not found."))
+	opted_out = _opted_out([r.chat_id for r in rows])
+	recent = _recently_sent()
+	for row in rows:
+		label = row.chat_name or row.chat_id
+		if row.whatsapp_number != number or not access.can_see_chat(row.name):
+			frappe.throw(_("{0} is not a chat of this number.").format(label))
+		if safety.send_mode(row.chat_id) != safety.LIVE:
+			frappe.throw(_("Test mode is on: {0} is not a test number.").format(label))
+		blocked = _blocked(row, opted_out, recent)
+		if blocked:
+			frappe.throw(_("{0} cannot get this broadcast: {1}.").format(label, blocked))
+	left = left_today(number)
+	if len(rows) > left:
+		frappe.throw(
+			_("This number may broadcast to {0} more chats today ({1} chosen).").format(left, len(rows))
+		)
+	return rows
+
+
+def _refresh_meta(doc):
+	"""A Meta template broadcast's progress, from the WhatsApp Messages frappe_whatsapp made for it."""
+	statuses = dict(
+		frappe.get_all(
+			"WhatsApp Message",
+			filters={"bulk_message_reference": doc.broadcast_id},
+			fields=["to", "status"],
+			as_list=True,
+		)
+	)
+	counts = {"queued": 0, "sent": 0, "delivered": 0, "read": 0, "failed": 0}
+	recipients = frappe.parse_json(doc.recipients or "[]")
+	for r in recipients:
+		status = (statuses.get(r["chat_id"].split("@")[0]) or "queued").lower()
+		state = _state(status) or ("failed" if status in ("failed", "error") else "queued")
+		r["status"] = state
+		counts[state] += 1
+	values = {**counts, "checked_on": now_datetime(), "recipients": frappe.as_json(recipients)}
+	if doc.status in ("Scheduled", "Sending") and not counts["queued"]:
+		values["status"] = "Done"
+	elif doc.status == "Scheduled" and counts["queued"] < len(recipients):
+		values["status"] = "Sending"
+	doc.db_set(values, update_modified=False)
 
 
 def _media(file: str) -> dict:
@@ -330,6 +450,8 @@ def _state(status: str) -> str:
 
 def _refresh(doc):
 	"""Read the broadcast's queue from Periskope and keep each recipient's state and the counts."""
+	if meta.is_meta(doc.whatsapp_number):
+		return _refresh_meta(doc)
 	jobs = request("POST", "message/queues", phone=doc.whatsapp_number, json={"broadcast_id": doc.name}) or []
 	jobs = jobs if isinstance(jobs, list) else jobs.get("jobs") or []
 	counts = {"queued": 0, "sent": 0, "delivered": 0, "read": 0, "failed": 0}
@@ -408,12 +530,15 @@ def resend_failed(broadcast: str) -> dict:
 	)
 
 
+def is_stop(body: str | None) -> bool:
+	"""A message that only asks to stop ("STOP", "unsubscribe", "remove me")."""
+	words = " ".join("".join(ch if ch.isalnum() else " " for ch in (body or "").lower()).split())
+	return words in STOP_WORDS
+
+
 def stop_requested(doc) -> bool:
 	"""A customer's message that only asks to stop: their chats get no more broadcasts."""
-	if doc.direction != "Incoming" or doc.is_group:
-		return False
-	words = " ".join("".join(ch if ch.isalnum() else " " for ch in (doc.body or "").lower()).split())
-	if words not in STOP_WORDS:
+	if doc.direction != "Incoming" or doc.is_group or not is_stop(doc.body):
 		return False
 	from periskope_connector import chat, workflow
 
@@ -439,6 +564,15 @@ def stop(broadcast: str) -> dict:
 
 
 def _stop(doc):
+	if meta.is_meta(doc.whatsapp_number):
+		# frappe_whatsapp's bulk send: a scheduled one is cancelled; one already queued cannot be
+		bulk = frappe.get_doc("Bulk WhatsApp Message", doc.broadcast_id)
+		if bulk.status != "Scheduled" or bulk.docstatus != 1:
+			frappe.throw(_("Meta is already sending this broadcast: it cannot be stopped now."))
+		bulk.flags.ignore_permissions = True
+		bulk.cancel()
+		doc.db_set("status", "Cancelled", update_modified=False)
+		return
 	result = request("DELETE", f"message/broadcast/{doc.name}", phone=doc.whatsapp_number) or {}
 	doc.db_set(
 		"status", "Cancelled" if result.get("status") == "deleted" else "Stopped", update_modified=False

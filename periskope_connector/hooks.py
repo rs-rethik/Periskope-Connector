@@ -53,6 +53,8 @@ doc_events = {
 	"Email Queue": {"before_insert": "periskope_connector.safety.filter_email_queue"},
 	# A rep marking the WhatsApp reply task done closes the reply reminder.
 	"CRM Task": {"on_update": "periskope_connector.writeback.on_task_update"},
+	# A bell on a chat also reaches the user's phone or computer (web push, push.py).
+	"Notification Log": {"after_insert": "periskope_connector.push.on_notification"},
 	"CRM Lead": {
 		"after_insert": "periskope_connector.linking.update_phone_fields",
 		"on_update": "periskope_connector.linking.update_phone_fields",
@@ -92,6 +94,8 @@ scheduler_events = {
 			"periskope_connector.ai.classifier.run_batch",
 			# The delivery ticks of inbox replies where no webhook arrives.
 			"periskope_connector.api.compose.refresh_ticks",
+			# Replies stuck on "Sending" (the worker stopped mid-send) become Failed, so Retry shows.
+			"periskope_connector.api.compose.fail_stale_sending",
 			# Alert the assignee and the managers once when a customer waits past the SLA reply time.
 			"periskope_connector.sla.check_breaches",
 			# WhatsApp calls (calls.py): into their chats, missed-call bells, the CRM's Calls tab.
@@ -132,6 +136,8 @@ scheduler_events = {
 			"periskope_connector.health.spend_check",
 			# Escalation emails the hourly cap held back (alerts.send_held).
 			"periskope_connector.alerts.send_held",
+			# Meta WhatsApp messages whose copy into the inbox was lost (meta.catch_up).
+			"periskope_connector.meta.catch_up",
 		],
 		# Once a day the AI searches the web for today's festival (the Today page's festive look).
 		"5 * * * *": ["periskope_connector.ai.festival.refresh"],
@@ -143,6 +149,8 @@ scheduler_events = {
 		"periskope_connector.contacts.send_digest",
 		# The knowledge answers the assistant applied by itself, each with an Undo link.
 		"periskope_connector.suggestions.send_applied_digest",
+		# Messages still without a CRM link (a lead made since, a number added) are linked again.
+		"periskope_connector.linking.link_unlinked_daily",
 		# Per-phone message counts: alert when a linked number goes silent.
 		"periskope_connector.health.sync_check",
 	],
