@@ -17,7 +17,7 @@ from frappe.utils import add_days, get_datetime, now_datetime
 
 from periskope_connector import knowledge, learner, query, suggestions
 from periskope_connector.ai import assistant
-from periskope_connector.health import month_tokens
+from periskope_connector.health import daily_share_used, month_tokens
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
 
@@ -87,6 +87,8 @@ def run() -> dict:
 		return {"skipped": "the integration is off"}
 	if not assistant.is_ready(settings):
 		return {"skipped": "no AI key set, or the monthly token budget is used up"}
+	if daily_share_used():
+		return {"skipped": "today's share of the monthly token budget is used up"}
 	failed = frappe.db.get_value(
 		"Periskope Agent Run",
 		{"status": "Failed", "started_on": [">=", now_datetime() - timedelta(minutes=FAILURE_PAUSE_MINUTES)]},

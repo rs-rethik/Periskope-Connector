@@ -12,7 +12,7 @@ from periskope_connector import attachments, numbers, shared_items
 from periskope_connector.autoreply import on_message as autoreply_on_message
 from periskope_connector.client import fetch_chat_name
 from periskope_connector.contacts import ensure_contact
-from periskope_connector.linking import ensure_group, link_message, number_key
+from periskope_connector.linking import ensure_group, link_message, map_group_by_member, number_key
 from periskope_connector.outbound import match_sent
 from periskope_connector.setup_status import agent_on
 from periskope_connector.system import insert_as_system
@@ -204,6 +204,9 @@ def create_message(payload: dict, webhook_log: str | None = None) -> str | None:
 			(chat_id, doc.message_timestamp),
 		)
 
+	# A group taken for a team group becomes a customer's group when a customer contact writes in it.
+	if is_group and not from_me:
+		map_group_by_member(chat_id, doc.sender_phone)
 	# Linked now by number or group name. A team group's messages are linked again once the AI has
 	# found the customer name in the text.
 	status = link_message(doc.name)

@@ -45,13 +45,8 @@ MESSAGE_FIELDS = [
 # --- Customer ----------------------------------------------------------------------------------------
 
 
-def _key(name: str | None) -> str:
-	"""linking.name_key, with plurals folded: "Arrow Export" and "ARROW EXPORTS" are one name."""
-	return " ".join(w[:-1] if len(w) > 3 and w.endswith("s") else w for w in linking.name_key(name).split())
-
-
 def _score(wanted: str, candidate: str) -> float:
-	a, b = _key(wanted), _key(candidate)
+	a, b = linking.name_key(wanted), linking.name_key(candidate)
 	if not a or not b:
 		return 0.0
 	if a == b:
@@ -70,6 +65,12 @@ def organizations_like(name: str | None) -> list[str]:
 		return []
 	best = max(s for s, _org in scored)
 	return [org for s, org in scored if s == best]
+
+
+def closest_organizations(name: str | None, limit: int = 5) -> list[str]:
+	"""The CRM organizations most like a name, best first (none when nothing is close)."""
+	scored = [(s, org) for org in linking.organizations() if (s := _score(name, org))]
+	return [org for _s, org in sorted(scored, key=lambda x: -x[0])[:limit]]
 
 
 def find_record(customer: str | None, assignee: str | None = None) -> tuple[tuple | None, str]:

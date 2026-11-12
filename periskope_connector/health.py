@@ -9,11 +9,13 @@ Two watchers:
 Plus get_health(), the numbers shown on the settings page's Health tab.
 """
 
+import calendar
 import re
 from datetime import timedelta
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Coalesce, Sum
 from frappe.utils import now_datetime, nowdate
 
 from periskope_connector import query, safety
@@ -200,15 +202,43 @@ def capture_check() -> bool:
 # --- AI spend ------------------------------------------------------------------------------------------------
 
 
+def _tokens_since(since) -> int:
+	"""Total tokens (input + output + cache) billed since a moment."""
+	usage = frappe.qb.DocType("Periskope AI Usage")
+	total = (
+		frappe.qb.from_(usage)
+		.select(
+			Coalesce(
+				Sum(
+					usage.input_tokens
+					+ usage.output_tokens
+					+ usage.cache_read_tokens
+					+ usage.cache_creation_tokens
+				),
+				0,
+			)
+		)
+		.where((usage.status == "OK") & (usage.creation >= since))
+	).run()
+	return int(total[0][0]) if total else 0
+
+
 def month_tokens() -> int:
-	"""Total tokens (input + output + cache) billed this calendar month."""
-	row = frappe.db.sql(
-		"""select coalesce(sum(input_tokens + output_tokens + cache_read_tokens
-		+ cache_creation_tokens), 0) from `tabPeriskope AI Usage`
-		where status = 'OK' and creation >= %(since)s""",
-		{"since": now_datetime().replace(day=1, hour=0, minute=0, second=0, microsecond=0)},
-	)
-	return int(row[0][0]) if row else 0
+	"""Total tokens billed this calendar month."""
+	return _tokens_since(now_datetime().replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+
+
+def daily_share_used() -> bool:
+	"""Background AI work (catching up on missed messages, learning) stops for the day once today's
+	tokens reach the monthly budget divided by the days of the month. A backlog, for example the
+	messages that waited while last month's budget was used up, cannot spend a new month in one
+	night; a new customer message is still tagged and answered until the whole budget is used."""
+	budget = frappe.db.get_single_value("Periskope Settings", "ai_monthly_budget_tokens") or 0
+	if not budget:
+		return False
+	now = now_datetime()
+	days = calendar.monthrange(now.year, now.month)[1]
+	return _tokens_since(now.replace(hour=0, minute=0, second=0, microsecond=0)) >= budget / days
 
 
 def budget_exceeded() -> bool:
