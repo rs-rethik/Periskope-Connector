@@ -118,6 +118,8 @@ def skip_reason(doc, settings) -> str | None:
 
 	if ai_off(doc.chat_id):
 		return "AI is off for this chat"
+	if (getattr(doc, "periskope_type", None) or "").lower() == "sticker":
+		return "Sticker"  # shown as a picture, but never worth the tokens
 	if can_read_attachment(doc, settings):
 		return None
 	if (doc.message_type or TEXT_MESSAGE_TYPE) != TEXT_MESSAGE_TYPE and not readable_text(doc):
