@@ -364,3 +364,47 @@ class TestMeta(PanelCase):
 		ingest.assert_called_once_with("WM-1")
 		with patch.object(meta, "account", return_value=None):
 			self.assertEqual(meta.catch_up(), 0)
+
+
+class TestStickerClassify(PanelCase):
+	def test_a_sticker_never_goes_to_the_ai_even_when_saved_with_the_agent_off(self):
+		# CI: with the integration off a message is saved unclassified, and classify() decides alone.
+		from periskope_connector import messages
+		from periskope_connector.ai import classifier
+		from periskope_connector.tests.utils import event
+
+		settings(enabled=0)
+		name = messages.create_message(
+			event(
+				message_id="sticker_off_1", chat_id=f"{CUSTOMER}@c.us", message_type="sticker", body="x y z"
+			)
+		)
+		with patch.object(classifier, "call_claude") as ai:
+			classifier.classify(name)
+		ai.assert_not_called()
+		self.assertEqual(
+			frappe.db.get_value("Periskope Message", name, ["message_type", "classification_error"]),
+			("image", "Sticker"),
+		)
+
+
+class TestStickerClassify(PanelCase):
+	def test_a_sticker_never_goes_to_the_ai_even_when_saved_with_the_agent_off(self):
+		# CI: with the integration off a message is saved unclassified, and classify() decides alone.
+		from periskope_connector import messages
+		from periskope_connector.ai import classifier
+		from periskope_connector.tests.utils import event
+
+		settings(enabled=0)
+		name = messages.create_message(
+			event(
+				message_id="sticker_off_1", chat_id=f"{CUSTOMER}@c.us", message_type="sticker", body="x y z"
+			)
+		)
+		with patch.object(classifier, "call_claude") as ai:
+			classifier.classify(name)
+		ai.assert_not_called()
+		self.assertEqual(
+			frappe.db.get_value("Periskope Message", name, ["message_type", "classification_error"]),
+			("image", "Sticker"),
+		)
