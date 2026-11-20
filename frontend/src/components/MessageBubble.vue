@@ -168,7 +168,17 @@
 					v-if="message.body && !(message.message_type in SHARED_KINDS)"
 					class="whitespace-pre-wrap break-words text-base text-ink-gray-9"
 				>
-					{{ message.body }}
+					<template v-for="(part, i) in bodyParts" :key="i"
+						><a
+							v-if="part.href"
+							:href="part.href"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="break-all text-ink-blue-6 underline"
+							@click.stop
+							>{{ part.text }}</a
+						><template v-else>{{ part.text }}</template></template
+					>
 				</div>
 				<div v-if="message.transcript" class="mt-1 text-sm italic text-ink-gray-6">
 					“{{ message.transcript }}”
@@ -312,7 +322,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideReply from "~icons/lucide/reply";
 import MessageMenu from "@/components/MessageMenu.vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { messageTime } from "@/utils/format";
+import { linkParts, messageTime } from "@/utils/format";
 import { showError } from "@/utils/errors";
 import { mediaUrl as messageMediaUrl, thumbUrl } from "@/utils/media";
 import { isMobile } from "@/utils/screen";
@@ -334,6 +344,7 @@ const mediaUrl = computed(() => messageMediaUrl(props.message));
 // A shared location, contact card or poll: its parts come from the server as `shared`. Their body is
 // the card's own text (or a map picture), so it is not shown again below.
 const SHARED_KINDS = { location: 1, contact: 1, poll: 1 };
+const bodyParts = computed(() => linkParts(props.message.body));
 const shared = computed(() => props.message.shared || {});
 const mapsUrl = computed(() => {
 	const s = shared.value;

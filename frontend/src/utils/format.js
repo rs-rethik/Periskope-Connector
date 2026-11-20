@@ -51,3 +51,22 @@ export function nameFromEmail(user) {
 		.replace(/[._]/g, " ")
 		.replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+// http(s) or www. links in a message; trailing punctuation stays text ("see example.com." → the dot)
+const LINK = /\b(?:https?:\/\/|www\.)[^\s<>"]+/gi;
+const TRAILING = /[.,;:!?)\]}'"]+$/;
+
+// The text split into plain parts and links, for rendering links without v-html.
+export function linkParts(text) {
+	const parts = [];
+	let last = 0;
+	for (const match of (text || "").matchAll(LINK)) {
+		const link = match[0].replace(TRAILING, "");
+		if (match.index > last) parts.push({ text: text.slice(last, match.index) });
+		const href = /^www\./i.test(link) ? `https://${link}` : link;
+		parts.push({ text: link, href });
+		last = match.index + link.length;
+	}
+	if (last < (text || "").length) parts.push({ text: text.slice(last) });
+	return parts;
+}
