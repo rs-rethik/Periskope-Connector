@@ -74,6 +74,12 @@ def _content(doc) -> str:
 	return _header(doc) + _body_line(doc) + _attachment_line(doc) + _summary_line(doc)
 
 
+def _app_user() -> str:
+	from periskope_connector.ai_user import AI_USER
+
+	return AI_USER if frappe.db.exists("User", AI_USER) else "Administrator"
+
+
 def add_comment(message: str) -> str | None:
 	"""Add the timeline comment of a linked, tagged message. Returns its name, or None. A message
 	that has its comment already keeps it; when its lead or deal changed (linked again by hand, a
@@ -91,7 +97,8 @@ def add_comment(message: str) -> str | None:
 		return None
 
 	def write():
-		author = doc.rep if doc.rep and frappe.db.get_value("User", doc.rep, "enabled") else "Administrator"
+		# the chat's rep, else the app's own user (ai_user.py) rather than Administrator
+		author = doc.rep if doc.rep and frappe.db.get_value("User", doc.rep, "enabled") else _app_user()
 		comment = insert_as_system(
 			{
 				"doctype": "Comment",

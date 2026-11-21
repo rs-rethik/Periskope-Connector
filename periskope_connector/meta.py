@@ -204,8 +204,10 @@ def _ours(doc) -> bool:
 def ingest(message: str, history: bool = False) -> str | None:
 	"""Copy one WhatsApp Message into the WhatsApp app (create_message). Returns the Periskope Message
 	name; a message copied before is not copied again."""
+	from periskope_connector.ai_user import act_as_ai
 	from periskope_connector.messages import create_message
 
+	act_as_ai()  # queued from frappe_whatsapp's guest webhook: record it as Pranera Connect AI
 	wm = frappe.db.get_value("WhatsApp Message", message, FIELDS, as_dict=True)
 	acc = account()
 	if not wm or not acc or wm.whatsapp_account != acc or wm.content_type == "reaction":

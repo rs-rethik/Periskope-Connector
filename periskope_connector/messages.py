@@ -241,6 +241,9 @@ def process_webhook_log(log: str):
 	"""Background job: apply one valid webhook log row. An ack or a reaction can arrive before the
 	message it is about (each event is its own job): it is then left unprocessed, and the sweep tries
 	it again a little later."""
+	from periskope_connector.ai_user import act_as_ai
+
+	act_as_ai()  # queued by the guest webhook: record the work as Pranera Connect AI, not Guest
 	row = frappe.db.get_value(
 		"Periskope Webhook Log", log, ["event_type", "signature_valid", "payload"], as_dict=True
 	)

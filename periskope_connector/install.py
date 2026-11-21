@@ -153,6 +153,7 @@ def setup():
 	and the rest still run, so test mode and the defaults are never skipped because of it."""
 	for step in (
 		_ensure_role,
+		_ensure_ai_user,
 		_ensure_custom_fields,
 		_ensure_lead_source,
 		_ensure_tags,
@@ -239,6 +240,12 @@ def _role_used_elsewhere() -> bool:
 	used = set(frappe.get_all("DocPerm", filters={"role": ROLE}, pluck="parent"))
 	used |= set(frappe.get_all("Custom DocPerm", filters={"role": ROLE}, pluck="parent"))
 	return bool(used - ours)
+
+
+def _ensure_ai_user():
+	from periskope_connector.ai_user import ensure
+
+	ensure()
 
 
 def _ensure_role():
