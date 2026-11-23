@@ -74,7 +74,7 @@
 						title="Teams"
 						singular="Team"
 						name-field="team_name"
-						description="Who answers which numbers, and how new chats are handed out (round robin, by load, or by hand)."
+						description="A group of sales users and the numbers they answer. Members see every chat on the team's numbers, and new chats are handed out round robin, by load, or by hand."
 						empty="No team yet. A team takes the chats of its numbers and gives them to its members."
 						@saved="refreshInbox"
 					/>
@@ -113,7 +113,7 @@
 						title="Agents"
 						singular="Agent"
 						name-field="user"
-						description="The sales users who work WhatsApp chats, and the numbers each may use. Team members get their team's numbers too."
+						description="Give a user one or more numbers: they see every chat on those numbers and no other number, whatever their role. Team members get their team's numbers too. A Sales Manager with no numbers sees every number."
 						empty="No agent yet."
 						@saved="refreshInbox"
 					>

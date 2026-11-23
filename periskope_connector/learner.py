@@ -113,6 +113,7 @@ def snapshot() -> dict:
 					"crm_deal": ["is", "not set"],
 					"crm_lead": ["is", "not set"],
 					"organization": ["is", "not set"],
+					"marked_internal": 0,  # a manager said it is a team group
 				},
 				fields=["chat_id", "group_name", "group_type"],
 				order_by="modified desc",

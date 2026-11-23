@@ -9,11 +9,14 @@
   "group_name",
   "column_type",
   "group_type",
+  "marked_internal",
   "section_crm",
   "crm_lead",
   "column_crm",
   "crm_deal",
-  "organization"
+  "organization",
+  "section_members",
+  "members"
  ],
  "fields": [
   {
@@ -46,6 +49,14 @@
    "options": "Customer\nInternal"
   },
   {
+   "default": "0",
+   "description": "A manager marked this a team group. It is never matched to a customer by itself, and its messages stay out of the CRM.",
+   "fieldname": "marked_internal",
+   "fieldtype": "Check",
+   "label": "Marked Internal",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "description": "Optional. Set a lead or deal here to link every message of this group to it, overriding the automatic match.",
    "fieldname": "section_crm",
@@ -74,11 +85,24 @@
    "options": "CRM Organization",
    "label": "Organization",
    "description": "The company this group is about. Set by the agent (after approval) or by hand; the group's messages then link to that company's deal or lead."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_members",
+   "fieldtype": "Section Break",
+   "label": "Members"
+  },
+  {
+   "description": "The group's members from Periskope as [number, WhatsApp name], read again every day. A number in many groups is one of our own people.",
+   "fieldname": "members",
+   "fieldtype": "Long Text",
+   "label": "Members",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-30 14:00:00.000000",
+ "modified": "2026-11-23 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Group",

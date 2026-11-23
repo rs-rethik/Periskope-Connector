@@ -34,6 +34,9 @@ FRESH_MINUTES = 30  # a message older than this (recovered by the backfill) is n
 DEFAULT_DELAY_MINUTES = 15
 MIN_CONFIDENCE = 80  # below this the customer gets the holding message and the rep a task
 MATCH_MINUTES = 30
+# A team group question is answered at once by a job. The row waits this long first, so the minute
+# scheduler only picks it up when that job never ran.
+TEAM_FALLBACK_MINUTES = 2
 MESSAGE_FIELDS = [
 	"name",
 	"chat_id",
@@ -111,8 +114,10 @@ def on_message(doc) -> str:
 
 def schedule(doc) -> str:
 	settings = _settings()
-	if not auto_reply_on(settings) or doc.is_group:
-		return ""  # never in a group: the team talks there
+	if not auto_reply_on(settings):
+		return ""
+	if doc.is_group:
+		return schedule_team_question(doc)
 	if not readable_text(doc) or not reminders.needs_reply(doc):
 		return ""  # nothing to answer yet (a voice note is scheduled once it is transcribed)
 	from periskope_connector.api.broadcast import is_stop
@@ -142,6 +147,42 @@ def schedule(doc) -> str:
 		}
 	)
 	return "scheduled"
+
+
+def schedule_team_question(doc) -> str:
+	"""In a team (Internal) group, a question about one of our products is answered at once: no
+	delay, no holding or welcome message, and nothing when the AI is not sure. Customer groups
+	never get an AI reply: the customer is there with the team."""
+	from periskope_connector.groups import is_internal
+
+	text = readable_text(doc)
+	if not text or not is_internal(doc.chat_id) or not answer.mentions_item(text):
+		return ""
+	if doc.message_timestamp and get_datetime(doc.message_timestamp) < now_datetime() - timedelta(
+		minutes=FRESH_MINUTES
+	):
+		return ""
+	row = insert_as_system(
+		{
+			"doctype": "Periskope Auto Reply",
+			"chat_id": doc.chat_id,
+			"contact_number": doc.contact_number,
+			"status": "Waiting",
+			"due_on": now_datetime() + timedelta(minutes=TEAM_FALLBACK_MINUTES),
+			"last_customer_message": doc.name,
+			"rep": doc.rep,
+			"org_phone": doc.org_phone,
+		}
+	)
+	frappe.enqueue(
+		"periskope_connector.autoreply.process",
+		name=row.name,
+		queue="short",
+		job_id=f"periskope_team_answer::{row.name}",
+		deduplicate=True,
+		enqueue_after_commit=True,
+	)
+	return "answering"
 
 
 def cancel(chat_id: str, reason: str) -> int:
@@ -309,7 +350,8 @@ def _already_sent(row, last_pending) -> bool:
 def process(name: str) -> str:
 	"""Handle one due row. Returns the final status."""
 	settings = _settings()
-	row = frappe.get_doc("Periskope Auto Reply", name)
+	# locked: the job of a team question and the minute scheduler may reach the same row
+	row = frappe.get_doc("Periskope Auto Reply", name, for_update=True)
 	if row.status != "Waiting":
 		return row.status
 
@@ -334,17 +376,24 @@ def process(name: str) -> str:
 		limit=40,
 	)
 	messages.reverse()
-	pending = reminders.unanswered(messages, cfg.ack_words)
-	held = _held_until(row, messages)
-	held_before = bool(held and pending and held >= pending[0].message_timestamp)
-	if held_before:
-		pending = [m for m in pending if m.message_timestamp > held]
+	team = safety.is_group(row.chat_id)
+	if team:
+		# a team group: only the question that started this row, not the talk around it
+		pending = [m for m in messages if m.name == row.last_customer_message]
+		held_before = False
+	else:
+		pending = reminders.unanswered(messages, cfg.ack_words)
+		held = _held_until(row, messages)
+		held_before = bool(held and pending and held >= pending[0].message_timestamp)
+		if held_before:
+			pending = [m for m in pending if m.message_timestamp > held]
 	if not pending:
 		return end("Cancelled", _("Already answered, or nothing to answer"))
 	# Two messages saved at the same moment can each have started a clock (schedule): this row
 	# answers for all of them, and never repeats what another row has already sent.
-	_cancel_siblings(row)
-	if _already_sent(row, pending[-1]):
+	if not team:
+		_cancel_siblings(row)
+	if not team and _already_sent(row, pending[-1]):
 		return end("Cancelled", _("The assistant already replied to this message"))
 
 	customer_text = "\n".join(readable_text(m) for m in pending if readable_text(m))
@@ -371,6 +420,8 @@ def process(name: str) -> str:
 		frappe.db.set_value("Periskope Auto Reply", name, "follow_up", _follow_up(row, pending, rep))
 		return end("Skipped", _("{0} AI replies in this chat today: left to the rep").format(limit))
 	ready, reason = assistant.readiness()
+	if not ready and team:
+		return end("Skipped", _("The AI is not ready: nothing is sent in a team group"))
 	if not ready:
 		# No AI call at all: the customer gets the holding message, the rep a task, the admin one email.
 		health.notify_admin_once(reason)
@@ -383,6 +434,8 @@ def process(name: str) -> str:
 			health.log_once("Periskope: could not prepare an auto reply")
 
 	confident = result["can_answer"] and result["confidence"] >= MIN_CONFIDENCE
+	if not confident and team:
+		return end("Skipped", _("Not sure of the answer: the AI stays silent in a team group"))
 	if not confident and held_before:
 		# The customer was already told a rep will come back; do not repeat it.
 		return end("Skipped", _("The holding message was already sent"))
@@ -437,6 +490,8 @@ def process(name: str) -> str:
 	# The message is out (and its send log committed for the echo); the rep's follow-up and the CRM
 	# updates come after, and none of them can turn the row into Failed.
 	frappe.db.commit()
+	if team:
+		return status  # a team group: no follow-up and nothing in the CRM
 	if not confident:
 		frappe.db.set_value("Periskope Auto Reply", name, "follow_up", _follow_up(row, pending, rep))
 	_guarded(

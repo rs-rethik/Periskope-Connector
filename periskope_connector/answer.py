@@ -84,7 +84,13 @@ def _tokens(text: str) -> list[str]:
 	return seen[:8]
 
 
-def _items(text: str) -> list[dict]:
+def mentions_item(text: str) -> bool:
+	"""Whether a message names one of our sales items: a cheap check before any AI call."""
+	return bool(_matching_items(text))
+
+
+def _matching_items(text: str) -> list:
+	"""The sales items a message names, best match first."""
 	if not frappe.db.exists("DocType", "Item"):
 		return []
 	tokens = _tokens(text)
@@ -110,10 +116,12 @@ def _items(text: str) -> list[dict]:
 		hay = f"{item.name} {item.item_name} {item.item_group}".lower()
 		return sum(1 for t in tokens if t in hay)
 
+	return [item for item in sorted(candidates, key=hits, reverse=True)[:MAX_ITEMS] if hits(item)]
+
+
+def _items(text: str) -> list[dict]:
 	out = []
-	for item in sorted(candidates, key=hits, reverse=True)[:MAX_ITEMS]:
-		if not hits(item):
-			continue
+	for item in _matching_items(text):
 		price = frappe.get_all(
 			"Item Price",
 			filters={"item_code": item.name, "selling": 1},

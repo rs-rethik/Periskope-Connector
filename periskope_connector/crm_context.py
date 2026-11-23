@@ -26,6 +26,10 @@ def _plain(html: str | None, limit: int = 300) -> str:
 
 
 def record_of(chat_id: str) -> tuple[str, str] | None:
+	from periskope_connector.groups import is_internal
+
+	if is_internal(chat_id):
+		return None  # a team group's talk never goes into a lead or deal
 	row = frappe.db.get_value(
 		"Periskope Chat",
 		{"chat_id": chat_id},
