@@ -215,6 +215,30 @@ class TestCustomerMembers(GroupCase):
 		self.message(CUSTOMER)
 		self.assertEqual(self.group(), {"group_type": "Internal", "organization": None})
 
+	def test_a_number_typed_with_spaces_or_dashes_still_matches(self):
+		_deal("Mgx Clothing Co")
+		customer = _customer("MGX CLOTHING CO")
+		_address(customer, f"{CUSTOMER[:5]} {CUSTOMER[5:]} ")
+		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), {"Mgx Clothing Co"})
+		frappe.db.delete("Address", {"phone": ["like", f"{CUSTOMER[:5]}%"]})
+		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), set())
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Buyer",
+				"phone_nos": [{"phone": f"+91-{CUSTOMER[:5]}-{CUSTOMER[5:]}"}],
+				"links": [{"link_doctype": "Customer", "link_name": customer}],
+			}
+		)
+		contact.insert(ignore_permissions=True)
+		self.message(CUSTOMER)
+		self.assertEqual(self.group(), {"group_type": "Customer", "organization": "Mgx Clothing Co"})
+
+	def test_a_longer_number_with_the_same_digits_does_not_match(self):
+		_deal("Mgx Clothing Co")
+		_address(_customer("MGX CLOTHING CO"), f"44{CUSTOMER}")  # a foreign number ending the same
+		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), set())
+
 	def test_our_own_numbers_on_a_customer_address_change_nothing(self):
 		_deal("Mgx Clothing Co")
 		_address(_customer("MGX CLOTHING CO"), COLLEAGUE)
