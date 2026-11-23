@@ -37,7 +37,10 @@ def _range(from_date, to_date):
 
 def _chat_filter(number=None, team=None, rep=None, table="c") -> tuple[str, dict]:
 	conditions, values = [], {}
-	if number:
+	if isinstance(number, tuple):  # a manager limited to their numbers (access.allowed_numbers)
+		conditions.append(f"{table}.whatsapp_number in %(numbers)s")
+		values["numbers"] = number
+	elif number:
 		conditions.append(f"{table}.whatsapp_number = %(number)s")
 		values["number"] = number
 	if team:
@@ -62,6 +65,12 @@ def get_dashboard(
 	require_manager()
 	if not access.is_manager():
 		frappe.throw(_("The dashboard is for managers."), frappe.PermissionError)
+	allowed = access.allowed_numbers()
+	if allowed is not None:
+		# a manager given numbers sees the figures of those numbers only
+		if not allowed or (number and number not in allowed):
+			frappe.throw(_("You can see the dashboard of your own numbers only."), frappe.PermissionError)
+		number = number or tuple(allowed)
 	args = (from_date, to_date, number, team, rep, cint(waiting_minutes) or 30)
 	# a test changes the data between calls: it always gets fresh figures
 	return _figures(*args) if frappe.flags.in_test else _cached(*args)

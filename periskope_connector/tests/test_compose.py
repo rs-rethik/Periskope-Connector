@@ -172,7 +172,10 @@ class TestSending(ComposeCase):
 		self.assertRaises(frappe.PermissionError, compose.send, mine, "see", file=f.name)
 
 	def test_a_rep_cannot_write_in_a_chat_they_cannot_see(self):
-		other = self._incoming(A, OTHER)
+		other = self._incoming(B, OTHER)  # on a number the rep was not given
+		from periskope_connector import numbers
+
+		numbers.ensure(A)
 		rep = _user("compose.rep@example.com", "Sales User")
 		frappe.get_doc(
 			{"doctype": "Periskope Agent", "user": rep, "numbers": [{"whatsapp_number": A}]}

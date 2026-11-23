@@ -163,23 +163,19 @@ def _alert_dropped(rows: list):
 	from frappe import _
 
 	from periskope_connector import reminders
-	from periskope_connector.access import is_manager
+	from periskope_connector.access import managers_by_number, managers_of
 	from periskope_connector.sla import _bell
 
 	names = ", ".join(f"{r.display_name or r.number} (+{r.number})" for r in rows)
 	subject = _("WhatsApp number disconnected: {0}").format(names)
-	managers = [
-		u
-		for u in frappe.get_all("User", filters={"enabled": 1, "user_type": "System User"}, pluck="name")
-		if u != "Administrator" and is_manager(u)
-	]
+	managers = managers_by_number()
 	for row in rows:
 		# The bell opens the number's newest chat, the closest page the inbox has for a number.
 		chat = frappe.db.get_value(
 			"Periskope Chat", {"whatsapp_number": row.name}, "name", order_by="last_message_at desc"
 		)
 		if chat:
-			_bell(managers, chat, subject)
+			_bell(managers_of(row.name, managers), chat, subject)
 	emails = reminders.get_config().emails
 	if emails:
 		safety.sendmail(

@@ -146,13 +146,9 @@ def check_breaches() -> int:
 	)
 	cfg = reminders.get_config()
 	from periskope_connector import workflow
-	from periskope_connector.access import is_manager
+	from periskope_connector.access import managers_by_number, managers_of
 
-	managers = [
-		u
-		for u in frappe.get_all("User", filters={"enabled": 1, "user_type": "System User"}, pluck="name")
-		if is_manager(u) and u != "Administrator"
-	]
+	managers = managers_by_number()
 	for row in rows:
 		who = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.name)
 		subject = _("WhatsApp reply overdue: {0}").format(who)
@@ -162,7 +158,7 @@ def check_breaches() -> int:
 		frappe.db.set_value(
 			"Periskope Chat", row.name, {"breach_alerted": 1, "response_breached": 1}, update_modified=False
 		)
-		_bell(sorted(set(assignees + managers)), row.name, subject)
+		_bell(sorted(set(assignees + managers_of(row.whatsapp_number, managers))), row.name, subject)
 		if cfg.emails:
 			_email(cfg.emails, row, who, subject)
 		workflow.log(
@@ -176,13 +172,13 @@ def check_breaches() -> int:
 	return len(rows) + late
 
 
-def _resolution_breaches(cfg, managers: list[str]) -> int:
+def _resolution_breaches(cfg, managers: dict) -> int:
 	"""Open chats past their resolution deadline: the assignee and the managers hear once (the same
 	way as a late reply); reopening the chat starts a new deadline and a new alert."""
 	c = frappe.qb.DocType("Periskope Chat")
 	rows = (
 		frappe.qb.from_(c)
-		.select(c.name, c.chat_name, c.contact_number, c._assign, c.resolution_due)
+		.select(c.name, c.chat_name, c.contact_number, c._assign, c.resolution_due, c.whatsapp_number)
 		.where(
 			c.status.isin(["Open", "Pending"])
 			& c.resolution_due.isnotnull()
@@ -193,13 +189,14 @@ def _resolution_breaches(cfg, managers: list[str]) -> int:
 		.limit(50)
 	).run(as_dict=True)
 	from periskope_connector import workflow
+	from periskope_connector.access import managers_of
 
 	for row in rows:
 		who = row.chat_name or (f"+{row.contact_number}" if row.contact_number else row.name)
 		subject = _("WhatsApp chat not resolved in time: {0}").format(who)
 		frappe.db.set_value("Periskope Chat", row.name, "resolution_alerted", 1, update_modified=False)
 		assignees = frappe.parse_json(row._assign or "[]") or []
-		_bell(sorted(set(assignees + managers)), row.name, subject)
+		_bell(sorted(set(assignees + managers_of(row.whatsapp_number, managers))), row.name, subject)
 		if cfg.emails:
 			_email(
 				cfg.emails,

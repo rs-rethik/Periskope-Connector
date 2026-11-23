@@ -627,21 +627,14 @@ def start_chat(
 
 		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
 		workflow.new_chat(name)
-	elif not access.can_see_chat(name):
-		# Someone else's customer: knowing the number must not hand the chat over. Only a chat that
-		# nobody owns yet goes to the user who writes first.
+	elif not access.sees_every_number():
+		# Everyone on the number sees its chats (access.py). A chat nobody owns yet goes to the user
+		# who writes first; one that has an owner keeps it.
 		owners = frappe.parse_json(frappe.db.get_value("Periskope Chat", name, "_assign") or "[]")
-		if owners:
-			names = ", ".join(frappe.utils.get_fullname(u) for u in owners)
-			frappe.throw(
-				_("This customer already has a chat with {0}. Ask your manager to assign it to you.").format(
-					names
-				),
-				frappe.PermissionError,
-			)
-		from periskope_connector import workflow
+		if not owners:
+			from periskope_connector import workflow
 
-		workflow.assign(name, [frappe.session.user], by=frappe.session.user)
+			workflow.assign(name, [frappe.session.user], by=frappe.session.user)
 	frappe.db.commit()
 	result = send_template(name, template, params) if is_meta else send(name, text, file=file)
 	return {"chat": name, "message": result}
