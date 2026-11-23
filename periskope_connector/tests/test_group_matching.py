@@ -154,6 +154,73 @@ class TestMembers(GroupCase):
 		self.assertEqual(self.group().group_type, "Customer")
 
 
+def _customer(name):
+	doc = frappe.get_doc({"doctype": "Customer", "customer_name": name})
+	doc.flags.ignore_mandatory = doc.flags.ignore_links = doc.flags.ignore_validate = True
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+def _address(customer, phone):
+	doc = frappe.get_doc(
+		{
+			"doctype": "Address",
+			"address_title": customer,
+			"address_type": "Billing",
+			"phone": phone,
+			"links": [{"link_doctype": "Customer", "link_name": customer}],
+		}
+	)
+	doc.flags.ignore_mandatory = doc.flags.ignore_links = doc.flags.ignore_validate = True
+	doc.insert(ignore_permissions=True)
+	return doc.name
+
+
+class TestCustomerMembers(GroupCase):
+	"""A customer group whose buyer's number is only on the ERPNext customer's address, and whose
+	company the CRM spells a little differently."""
+
+	def setUp(self):
+		super().setUp()
+		if not frappe.db.exists("DocType", "Customer"):
+			self.skipTest("ERPNext is not installed")
+
+	def test_a_number_on_the_customers_address_makes_it_the_customers_group(self):
+		_deal("Mgx Clothng Co")  # misspelt in the CRM
+		_address(_customer("MGX CLOTHING CO"), CUSTOMER)
+		self.message(COLLEAGUE)
+		self.assertEqual(self.group().group_type, "Internal")
+		self.message(CUSTOMER)
+		self.assertEqual(self.group(), {"group_type": "Customer", "organization": "Mgx Clothng Co"})
+
+	def test_a_contact_of_the_customer_counts_too(self):
+		_deal("Mgx Clothing Co")
+		customer = _customer("MGX CLOTHING CO")
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Buyer",
+				"phone_nos": [{"phone": CUSTOMER}],
+				"links": [{"link_doctype": "Customer", "link_name": customer}],
+			}
+		).insert(ignore_permissions=True)
+		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), {"Mgx Clothing Co"})
+		self.assertTrue(contact.name)
+
+	def test_a_customer_with_no_single_organization_changes_nothing(self):
+		_deal("Mgx Clothing Coa")
+		_deal("Mgx Clothing Cob")  # two spellings close to the customer's name
+		_address(_customer("MGX CLOTHING CO"), CUSTOMER)
+		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), set())
+		self.message(CUSTOMER)
+		self.assertEqual(self.group(), {"group_type": "Internal", "organization": None})
+
+	def test_our_own_numbers_on_a_customer_address_change_nothing(self):
+		_deal("Mgx Clothing Co")
+		_address(_customer("MGX CLOTHING CO"), COLLEAGUE)
+		self.assertEqual(linking.member_organizations(f"91{COLLEAGUE}"), set())
+
+
 class TestLearnerCandidates(GroupCase):
 	def test_the_ai_is_offered_the_members_and_the_closest_companies(self):
 		_deal("Mgx Clothing Co", _contact("Shivaani", CUSTOMER))
