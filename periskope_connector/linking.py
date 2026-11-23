@@ -491,7 +491,8 @@ def staff_numbers() -> set[str]:
 
 def member_organizations(number: str | None) -> set[str]:
 	"""The CRM organizations a group member's number belongs to: through a lead or deal with that
-	number, or a deal that lists a contact with that number. Empty for our own people."""
+	number, a deal that lists a contact with that number, or an ERPNext customer with that number on
+	one of its addresses or contacts. Empty for our own people."""
 	forms = number_forms(number)
 	if not forms or forms[0] in staff_numbers():
 		return set()
@@ -515,8 +516,48 @@ def member_organizations(number: str | None) -> set[str]:
 					"CRM Deal", filters={"name": ["in", deals], "organization": set_}, pluck="organization"
 				)
 			)
+	found |= customer_organizations(forms, contacts)
 	own = own_companies()
 	return {o for o in found if not any(names_match(o, company) for company in own)}
+
+
+CLOSE_SPELLING = 0.9  # 'VXN COTHING' in the CRM is the ERPNext customer 'VXN CLOTHING'
+
+
+def customer_organizations(forms: list[str], contacts: list[str]) -> set[str]:
+	"""The CRM organizations of the ERPNext customers whose address has one of these numbers, or that
+	one of these contacts belongs to. ERPNext often keeps a customer's number on its address only."""
+	if not frappe.db.exists("DocType", "Customer"):
+		return set()
+	addresses = frappe.get_all(
+		"Address", filters={"phone": ["in", [*forms, "+" + forms[0]]]}, pluck="name", limit=20
+	)
+	customers = set()
+	for parenttype, parents in (("Address", addresses), ("Contact", contacts)):
+		if parents:
+			customers.update(
+				frappe.get_all(
+					"Dynamic Link",
+					filters={"parenttype": parenttype, "parent": ["in", parents], "link_doctype": "Customer"},
+					pluck="link_name",
+				)
+			)
+	if not customers:
+		return set()
+	names = frappe.get_all("Customer", filters={"name": ["in", list(customers)]}, pluck="customer_name")
+	return {org for name in names if (org := organization_of_customer(name))}
+
+
+def organization_of_customer(customer_name: str | None) -> str | None:
+	"""The CRM organization of an ERPNext customer: the one with the same name, else the one spelt a
+	little differently. None when no single organization matches."""
+	orgs = organizations()
+	same = [o for o in orgs if names_match(o, customer_name)]
+	if same:
+		return same[0] if len(same) == 1 else None
+	key = name_key(customer_name)
+	close = [o for o in orgs if SequenceMatcher(None, key, name_key(o)).ratio() >= CLOSE_SPELLING]
+	return close[0] if len(close) == 1 else None
 
 
 def map_group_by_member(chat_id: str, number: str | None) -> str | None:
