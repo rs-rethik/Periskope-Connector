@@ -78,6 +78,7 @@ def get_context(chat_name: str) -> dict:
 		"tags": _tags(chat_name),
 		"other_chats": _other_chats(row),
 		"organization": _organization(row) if row.is_group else None,
+		"group": _group_state(row) if row.is_group else None,
 	}
 	record = _record(row)
 	out["related"] = _related(row, record)
@@ -410,6 +411,7 @@ def link_record(chat_name: str, doctype: str, name: str) -> dict:
 	see. A deal also keeps its lead."""
 	access.require_inbox_user()
 	row = _chat(chat_name)
+	_refuse_internal(row)
 	if doctype not in DOCTYPES or not frappe.has_permission(doctype, "read", name):
 		frappe.throw(_("You cannot link this chat to that record."), frappe.PermissionError)
 	lead, deal = (
@@ -524,7 +526,7 @@ def set_group_organization(chat_id: str, group: str, organization: str | None, u
 		"Periskope Group",
 		group,
 		{"organization": organization, "crm_lead": None, "crm_deal": None}
-		| ({"group_type": "Customer"} if organization else {}),
+		| ({"group_type": "Customer", "marked_internal": 0} if organization else {}),
 	)
 	relink_group(group, user)
 	from periskope_connector import territory, workflow
@@ -567,6 +569,42 @@ def unlink_organization(chat_name: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def mark_internal(chat_name: str) -> dict:
+	"""Managers: this group is a team group. Its organization link goes, it is never matched to a
+	customer by itself again, and its comments and notes are taken out of the CRM."""
+	access.require_inbox_user()
+	if not access.is_manager():
+		frappe.throw(_("Only managers can mark a group as internal."), frappe.PermissionError)
+	row = _chat(chat_name)
+	_group_of(row)
+	from periskope_connector import groups
+
+	groups.mark_internal(row.chat_id, frappe.session.user)
+	return get_context(chat_name)
+
+
+def _group_state(row) -> dict:
+	group = frappe.db.get_value(
+		"Periskope Group", {"chat_id": row.chat_id}, ["group_type", "marked_internal"], as_dict=True
+	)
+	return {
+		"type": (group and group.group_type) or "Internal",
+		"marked_internal": bool(group and group.marked_internal),
+		"can_mark_internal": access.is_manager(),
+	}
+
+
+def _refuse_internal(row):
+	"""A team group's talk stays out of the CRM: no lead, deal or link is made from it."""
+	from periskope_connector import groups
+
+	if row.is_group and groups.is_internal(row.chat_id):
+		frappe.throw(
+			_("This is an internal group, so it is kept out of the CRM. Link it to an organization first.")
+		)
+
+
+@frappe.whitelist(methods=["POST"])
 def unlink_record(chat_name: str) -> dict:
 	"""Undo a link made by hand: the chat goes back to the automatic match by number."""
 	access.require_inbox_user()
@@ -582,6 +620,7 @@ def create_lead(
 	"""A new lead for this chat's customer, owned by the user, with WhatsApp as its source."""
 	access.require_inbox_user()
 	row = _chat(chat_name)
+	_refuse_internal(row)
 	if not (first_name or "").strip():
 		frappe.throw(_("Enter the customer's name."))
 	from periskope_connector.leads import ensure_lead_source
@@ -823,6 +862,7 @@ def create_deal_from_message(
 
 	access.require_inbox_user()
 	row = _chat(chat_name)
+	_refuse_internal(row)
 	msg = _customer_message(row, message)
 	phone, sender = _sender(row, msg)
 	frappe.has_permission("CRM Deal", "create", throw=True)

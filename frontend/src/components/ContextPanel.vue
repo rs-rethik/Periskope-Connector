@@ -108,7 +108,7 @@
 						<span class="font-medium">Its other groups:</span>
 						{{ ctx.organization.groups.join(", ") }}
 					</div>
-					<div class="flex gap-2">
+					<div class="flex flex-wrap gap-2">
 						<Button size="sm" label="Change" @click="openOrg" />
 						<Button
 							size="sm"
@@ -117,16 +117,46 @@
 							:loading="busy"
 							@click="run('unlink_organization')"
 						/>
+						<Button
+							v-if="ctx.group?.can_mark_internal"
+							size="sm"
+							variant="ghost"
+							label="Mark as internal"
+							@click="internalDialog = true"
+						/>
 					</div>
 				</div>
 				<div v-else class="flex flex-col items-start gap-2">
-					<span class="text-sm text-ink-gray-5"
+					<template v-if="ctx.group?.type === 'Internal'">
+						<span
+							class="inline-flex items-center gap-1 rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7"
+						>
+							<LucideUsers class="size-3" />Internal group{{
+								ctx.group.marked_internal ? " · marked by a manager" : ""
+							}}
+						</span>
+						<span class="text-sm text-ink-gray-5"
+							>Your team's group: its messages stay out of the CRM, and the AI
+							answers product questions here at once. If it is a customer's group,
+							link the organization.</span
+						>
+					</template>
+					<span v-else class="text-sm text-ink-gray-5"
 						>Link this group to its customer's organization, so its messages go to that
 						company's deals and leads.</span
 					>
-					<Button size="sm" label="Link organization" @click="openOrg">
-						<template #prefix><LucideBuilding2 class="size-3.5" /></template>
-					</Button>
+					<div class="flex flex-wrap gap-2">
+						<Button size="sm" label="Link organization" @click="openOrg">
+							<template #prefix><LucideBuilding2 class="size-3.5" /></template>
+						</Button>
+						<Button
+							v-if="ctx.group?.can_mark_internal && !ctx.group.marked_internal"
+							size="sm"
+							variant="ghost"
+							label="Mark as internal"
+							@click="internalDialog = true"
+						/>
+					</div>
 				</div>
 			</PanelSection>
 
@@ -361,8 +391,12 @@
 					</button>
 				</div>
 				<div v-else class="flex flex-col gap-2">
-					<div class="text-sm text-ink-gray-5">Not linked to a lead or deal.</div>
-					<div class="flex gap-2">
+					<div v-if="isInternalGroup" class="text-sm text-ink-gray-5">
+						An internal group is kept out of the CRM: no lead, deal or note is made
+						from it.
+					</div>
+					<div v-else class="text-sm text-ink-gray-5">Not linked to a lead or deal.</div>
+					<div v-if="!isInternalGroup" class="flex gap-2">
 						<Button size="sm" label="Link existing" @click="openLink" />
 						<Button
 							size="sm"
@@ -782,6 +816,38 @@
 			</template>
 		</Dialog>
 
+		<Dialog v-model="internalDialog" :options="{ title: 'Mark as internal group' }">
+			<template #body-content>
+				<div class="flex flex-col gap-3 text-sm text-ink-gray-7">
+					<p>This group becomes your team's group:</p>
+					<ul class="list-disc space-y-1 pl-5">
+						<li>It is never matched to a customer by itself again.</li>
+						<li v-if="ctx?.organization">
+							Its link to {{ ctx.organization.title }} is removed.
+						</li>
+						<li>
+							The comments and AI notes its messages added to leads and deals are
+							deleted.
+						</li>
+						<li>No lead or deal can be made from it.</li>
+					</ul>
+					<p class="text-ink-gray-5">
+						Linking an organization later makes it a customer's group again.
+					</p>
+					<ErrorMessage :message="error" />
+				</div>
+			</template>
+			<template #actions>
+				<Button
+					variant="solid"
+					theme="red"
+					label="Mark as internal"
+					:loading="busy"
+					@click="markInternal"
+				/>
+			</template>
+		</Dialog>
+
 		<Dialog v-model="noteDialog" :options="{ title: 'Add a CRM note' }">
 			<template #body-content>
 				<div class="flex flex-col gap-3">
@@ -903,6 +969,10 @@ const createDialog = ref(false);
 const noteDialog = ref(false);
 const taskDialog = ref(false);
 const lostDialog = ref(false);
+const internalDialog = ref(false);
+const isInternalGroup = computed(
+	() => ctx.value?.is_group && ctx.value?.group?.type === "Internal"
+);
 const reasons = ref([]);
 const lost = ref({ status: "", reason: "", notes: "" });
 const query = ref("");
@@ -1048,6 +1118,10 @@ async function searchOrgs() {
 	}
 }
 watch(orgQuery, () => orgDialog.value && searchOrgs());
+
+async function markInternal() {
+	if (await run("mark_internal")) internalDialog.value = false;
+}
 
 async function linkOrg(o) {
 	if (await run("link_organization", { organization: o.name })) orgDialog.value = false;

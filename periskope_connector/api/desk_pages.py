@@ -229,8 +229,16 @@ def map_group(
 
 		set_group_organization(doc.chat_id, doc.name, organization, frappe.session.user)
 		return frappe.get_doc("Periskope Group", group).as_dict()
+	if group_type == "Internal" and not (crm_lead or crm_deal):
+		# a team group: marked so it stays one, and taken out of the CRM (like the chat's button)
+		from periskope_connector import groups
+
+		groups.mark_internal(doc.chat_id, frappe.session.user)
+		return frappe.get_doc("Periskope Group", group).as_dict()
 	if group_type:
 		doc.group_type = group_type
+	if doc.group_type == "Customer":
+		doc.marked_internal = 0
 	if crm_lead or crm_deal or organization or doc.group_type == "Internal":
 		doc.crm_lead = crm_lead or None
 		doc.crm_deal = crm_deal or None

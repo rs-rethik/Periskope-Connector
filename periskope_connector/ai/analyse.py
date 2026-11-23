@@ -123,6 +123,10 @@ def run(chat_id: str, force: bool = False) -> dict:
 
 	if ai_off(chat_id):
 		return {"skipped": "AI is off for this chat"}
+	from periskope_connector.groups import is_internal
+
+	if is_internal(chat_id):
+		return {"skipped": "an internal group: kept out of the CRM"}
 	context = crm_context.build(chat_id)
 	if not context and not safety.is_group(chat_id):
 		return {"skipped": "no CRM record"}
