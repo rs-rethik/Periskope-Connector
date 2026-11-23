@@ -14,9 +14,10 @@ import re
 from difflib import SequenceMatcher
 
 import frappe
+from frappe.query_builder.functions import Max
 from frappe.utils.caching import redis_cache
 
-from periskope_connector.client import fetch_chat_name
+from periskope_connector.client import fetch_chat_name, fetch_member_numbers
 from periskope_connector.system import insert_as_system
 from periskope_connector.timeline_comments import add_comment
 
@@ -101,7 +102,8 @@ TRADE_WORDS = {
 
 
 def _words(name: str | None, own: set[str]) -> set[str]:
-	return {w for w in name_key(name).split() if w not in TRADE_WORDS and w not in own}
+	# One letter says nothing: 'T&A Request' must not resemble 'Mr. T. Kumar'.
+	return {w for w in name_key(name).split() if len(w) > 1 and w not in TRADE_WORDS and w not in own}
 
 
 def resembles(organization: str | None, group_name: str | None) -> bool:
@@ -566,49 +568,68 @@ def organization_of_customer(customer_name: str | None) -> str | None:
 		return same[0] if len(same) == 1 else None
 	key = name_key(customer_name)
 	close = [o for o in orgs if SequenceMatcher(None, key, name_key(o)).ratio() >= CLOSE_SPELLING]
-	return close[0] if len(close) == 1 else None
+	if close:
+		return close[0] if len(close) == 1 else None
+	# A CRM organization with no lead or deal yet is still the customer's.
+	return frappe.db.get_value("CRM Organization", {"name": (customer_name or "").strip()}) or None
 
 
-def map_group_by_member(chat_id: str, number: str | None) -> str | None:
-	"""A group taken for a team group (no organization, lead or deal) that has a member from exactly
-	one customer organization, and whose name resembles that organization, is that customer's group:
-	it becomes a Customer group linked to it. A member alone is not enough: a forwarder or a supplier
-	in a team group is a contact on someone's deal too (the AI is shown such companies as candidates,
-	and a manager decides). Returns the organization, or None when nothing changed. Never raises: a
-	message must be saved even if this fails."""
+def map_group_by_members(chat_id: str, numbers: list[str]) -> str | None:
+	"""A group taken for a team group (no organization, lead or deal) whose members include a
+	customer's contact, and whose name resembles that customer, is that customer's group: it becomes
+	a Customer group linked to it. A member alone is not enough: a forwarder or a supplier in a team
+	group is a contact on someone's deal too (the AI is shown such companies as candidates, and a
+	manager decides). When the CRM has the company under more than one spelling, the one with the
+	newest deal (else lead) is used. Returns the organization, or None when nothing changed. Never
+	raises: a message must be saved even if this fails."""
+	group = frappe.db.get_value(
+		"Periskope Group",
+		{"chat_id": chat_id},
+		["name", "group_name", "group_type", "organization", "crm_lead", "crm_deal"],
+		as_dict=True,
+	)
+	if not group or group.group_type != "Internal" or group.organization or group.crm_lead or group.crm_deal:
+		return None
+	frappe.db.savepoint("periskope_map_group")
 	try:
-		group = frappe.db.get_value(
-			"Periskope Group",
-			{"chat_id": chat_id},
-			["name", "group_name", "group_type", "organization", "crm_lead", "crm_deal"],
-			as_dict=True,
-		)
-		if (
-			not group
-			or group.group_type != "Internal"
-			or group.organization
-			or group.crm_lead
-			or group.crm_deal
-		):
+		found = set()
+		for number in dict.fromkeys(numbers):
+			found |= {o for o in member_organizations(number) if resembles(o, group.group_name)}
+		if not found:
 			return None
-		found = member_organizations(number)
-		if len(found) != 1:
-			return None  # unknown, our own person, or more than one company: leave it to people
-		organization = found.pop()
-		if not resembles(organization, group.group_name):
-			return None
+		organization = newest_organization(found)
 		from periskope_connector.api.crm_panel import set_group_organization
 
 		set_group_organization(chat_id, group.name, organization)
 		return organization
 	except Exception:
-		frappe.log_error(title=f"Periskope: could not map group {chat_id} by its member")
+		frappe.db.rollback(save_point="periskope_map_group")
+		frappe.log_error(title=f"Periskope: could not map group {chat_id} by its members")
 		return None
 
 
-def map_groups(limit: int = 500) -> int:
+def newest_organization(organizations: set[str]) -> str:
+	"""Of the spellings of one company, the one with the newest deal, else the newest lead."""
+	names = sorted(organizations)
+	newest = {}
+	for doctype in ("CRM Deal", "CRM Lead"):
+		table = frappe.qb.DocType(doctype)
+		newest[doctype] = dict(
+			frappe.qb.from_(table)
+			.select(table.organization, Max(table.modified))
+			.where(table.organization.isin(names))
+			.groupby(table.organization)
+			.run()
+		)
+	never = frappe.utils.get_datetime("1900-01-01")
+	return max(names, key=lambda o: (newest["CRM Deal"].get(o) or never, newest["CRM Lead"].get(o) or never))
+
+
+def map_groups(limit: int = 500, ask_periskope: bool = False) -> int:
 	"""Team groups (no organization, lead or deal) whose name now matches a customer, or whose member
-	is a customer contact, become that customer's group. Returns how many changed.
+	is a customer contact, become that customer's group. Members who wrote count; with
+	`ask_periskope`, every member Periskope lists counts too (a call per group, so only in jobs).
+	Returns how many changed.
 	Run with: bench --site <site> execute periskope_connector.linking.map_groups"""
 	groups = frappe.get_all(
 		"Periskope Group",
@@ -628,16 +649,39 @@ def map_groups(limit: int = 500) -> int:
 			relink_messages(group.chat_id)
 			changed += 1
 			continue
-		senders = frappe.get_all(
-			"Periskope Message",
-			filters={"chat_id": group.chat_id, "direction": "Incoming", "sender_phone": ["is", "set"]},
-			pluck="sender_phone",
-			distinct=True,
-			limit=50,
-		)
-		if any(map_group_by_member(group.chat_id, number) for number in senders):
+		if map_group_by_members(group.chat_id, group_member_numbers(group.chat_id, ask_periskope)):
 			changed += 1
 	return changed
+
+
+def group_member_numbers(chat_id: str, ask_periskope: bool = False) -> list[str]:
+	"""The members who wrote in a group, and with `ask_periskope` everyone Periskope lists."""
+	senders = frappe.get_all(
+		"Periskope Message",
+		filters={"chat_id": chat_id, "direction": "Incoming", "sender_phone": ["is", "set"]},
+		pluck="sender_phone",
+		distinct=True,
+		limit=50,
+	)
+	if not ask_periskope:
+		return senders
+	from periskope_connector import meta
+
+	phones = frappe.get_all(
+		"Periskope Chat", filters={"chat_id": chat_id}, pluck="whatsapp_number", order_by="modified desc"
+	)
+	phone = next((p for p in phones if p and not meta.is_meta(p)), None)
+	return [*fetch_member_numbers(chat_id, phone), *senders] if phone else senders
+
+
+def map_groups_daily() -> int:
+	"""Scheduler entry: team groups looked at again, for members added since."""
+	try:
+		return map_groups(limit=5000, ask_periskope=True)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error(title="Periskope: daily group mapping failed")
+		return 0
 
 
 # --- Linking -----------------------------------------------------------------------------------------
