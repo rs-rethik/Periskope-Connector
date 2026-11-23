@@ -177,8 +177,8 @@ def _address(customer, phone):
 
 
 class TestCustomerMembers(GroupCase):
-	"""The test site's 'VXN - PRANERA' group: the buyer's number is only on the ERPNext customer's
-	address, and the CRM spells the company 'VXN COTHING'."""
+	"""A customer group whose buyer's number is only on the ERPNext customer's address, and whose
+	company the CRM spells a little differently."""
 
 	def setUp(self):
 		super().setUp()

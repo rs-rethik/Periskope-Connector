@@ -521,7 +521,7 @@ def member_organizations(number: str | None) -> set[str]:
 	return {o for o in found if not any(names_match(o, company) for company in own)}
 
 
-CLOSE_SPELLING = 0.9  # 'VXN COTHING' in the CRM is the ERPNext customer 'VXN CLOTHING'
+CLOSE_SPELLING = 0.9  # 'ACME CLOTHNG' in the CRM is the ERPNext customer 'ACME CLOTHING'
 
 
 def customer_organizations(forms: list[str], contacts: list[str]) -> set[str]:
