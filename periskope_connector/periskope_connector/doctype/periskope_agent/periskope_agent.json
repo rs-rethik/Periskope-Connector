@@ -39,12 +39,12 @@
    "fieldtype": "Table MultiSelect",
    "options": "Periskope Agent Number",
    "label": "WhatsApp Numbers",
-   "description": "The numbers whose chats this agent may see and reply from."
+   "description": "The agent sees every chat on these numbers and replies from them. With numbers given, they see no other number, whatever their role."
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-23 12:00:00.000000",
+ "modified": "2026-11-23 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Agent",

@@ -24,8 +24,8 @@ KINDS = {
 	"teams": {
 		"doctype": "Periskope Team",
 		"role": MANAGER,
-		"fields": ["team_name", "assignment", "team_can_see_team_chats", "members", "numbers"],
-		"list": ["team_name", "assignment", "team_can_see_team_chats"],
+		"fields": ["team_name", "assignment", "members", "numbers"],
+		"list": ["team_name", "assignment"],
 		"order_by": "team_name asc",
 	},
 	"numbers": {

@@ -147,8 +147,12 @@ class TestAccess(InboxCase):
 		for name in (self._chat(A, CUSTOMER), self._chat(A, OTHER), self._chat(B, CUSTOMER)):
 			self.assertIn(name, visible)
 
-	def test_a_rep_sees_the_chats_assigned_to_them_on_any_number_and_no_others(self):
-		self.assertEqual(self._visible(self.rep), {self._chat(A, CUSTOMER), self._chat(B, CUSTOMER)})
+	def test_a_rep_sees_every_chat_on_their_number_and_their_own_chats_elsewhere(self):
+		self._msg(B, OTHER)  # on a number they do not have, not theirs
+		self.assertEqual(
+			self._visible(self.rep),
+			{self._chat(A, CUSTOMER), self._chat(A, OTHER), self._chat(B, CUSTOMER)},
+		)
 
 	def test_a_rep_sees_the_chats_of_the_leads_they_own(self):
 		lead = frappe.get_doc(
@@ -170,11 +174,12 @@ class TestAccess(InboxCase):
 			chats = set(frappe.get_list("Periskope Message", pluck="periskope_chat", limit=0))
 		finally:
 			frappe.set_user("Administrator")
-		self.assertEqual(chats, {self._chat(A, CUSTOMER), self._chat(B, CUSTOMER)})
+		self.assertEqual(chats, {self._chat(A, CUSTOMER), self._chat(A, OTHER), self._chat(B, CUSTOMER)})
 
 	def test_one_record_reads_obey_the_rule_and_reps_cannot_write(self):
 		mine = frappe.get_doc("Periskope Chat", self._chat(A, CUSTOMER))
-		other = frappe.get_doc("Periskope Chat", self._chat(A, OTHER))
+		self._msg(B, OTHER)
+		other = frappe.get_doc("Periskope Chat", self._chat(B, OTHER))  # not on their number
 		self.assertTrue(frappe.has_permission("Periskope Chat", "read", mine, user=self.rep))
 		self.assertFalse(frappe.has_permission("Periskope Chat", "read", other, user=self.rep))
 		self.assertFalse(frappe.has_permission("Periskope Chat", "write", mine, user=self.rep))
@@ -233,9 +238,10 @@ class TestInboxApi(InboxCase):
 
 	def test_a_rep_reads_their_chat_and_nothing_else(self):
 		frappe.set_user(self.rep)
-		self.assertEqual([c.name for c in inbox.get_chats()["chats"]], [self.mine])
+		on_a = {self._chat(A, f"9196000555{i:02d}") for i in range(3)}
+		self.assertEqual({c.name for c in inbox.get_chats()["chats"]}, on_a)  # every chat on A
 		self.assertEqual(len(inbox.get_messages(self.mine)["messages"]), 1)
-		other = self._chat(A, "919600055501")
+		other = self._chat(B, CUSTOMER)  # not on their number
 		self.assertRaises(frappe.PermissionError, inbox.get_messages, other)
 		message = frappe.db.get_value("Periskope Message", {"periskope_chat": other})
 		self.assertRaises(frappe.PermissionError, inbox.media, message)

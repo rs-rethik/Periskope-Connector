@@ -2,18 +2,17 @@
 conditions and has_permission hooks of Periskope Chat and Periskope Message (hooks.py) apply to every
 list and read, and the inbox API only reads through them.
 
-- Managers (System Manager, WhatsApp Manager, Sales Manager) see every chat on every number.
-- A sales user sees a chat only when it is on one of their numbers (as a Periskope Agent, or
-  through a Periskope Team they are in) AND
-  - it is assigned to them, or
-  - it belongs to one of their teams whose members see the team's chats, or
-  - its lead or deal is theirs (lead owner / deal owner).
+- A user given numbers (as a Periskope Agent, or through a Periskope Team they are in) sees every
+  chat on those numbers, and no other number, whatever their role: a Sales Manager given one number
+  works that number only. System Manager and WhatsApp Manager always see every number.
+- A manager (Sales Manager) given no numbers sees every chat on every number.
+- Anyone also sees the chats assigned to them (or to a sales person under them), on any number.
 - Anyone else sees nothing.
 """
 
 import frappe
 
-from periskope_connector.api.permission import MANAGER_ROLES
+from periskope_connector.api.permission import ADMIN_ROLES, MANAGER_ROLES
 from periskope_connector.periskope_connector.doctype.periskope_team.periskope_team import teams_of
 
 INBOX_ROLES = (*MANAGER_ROLES, "Sales User")
@@ -44,10 +43,35 @@ def require_inbox_user():
 
 
 def allowed_numbers(user: str | None = None) -> list[str] | None:
-	"""The numbers whose chats the user may work. None means every number (a manager)."""
+	"""The numbers whose chats the user may work. None means every number: an admin, or a manager
+	who was given no numbers. Numbers given to a user limit them whatever their role."""
 	user = user or frappe.session.user
-	if is_manager(user):
+	if user == "Administrator" or set(ADMIN_ROLES) & set(frappe.get_roles(user)):
 		return None
+	found = _given_numbers(user)
+	if not found and is_manager(user):
+		return None
+	return found
+
+
+def sees_every_number(user: str | None = None) -> bool:
+	return allowed_numbers(user) is None
+
+
+def managers_by_number() -> dict[str, list[str] | None]:
+	"""Every enabled manager (except Administrator) and their numbers (None: every number), for
+	alerts: a manager hears only about the numbers they see."""
+	users = frappe.get_all("User", filters={"enabled": 1, "user_type": "System User"}, pluck="name")
+	return {u: allowed_numbers(u) for u in users if u != "Administrator" and is_manager(u)}
+
+
+def managers_of(number: str | None, managers: dict[str, list[str] | None]) -> list[str]:
+	"""The managers (from managers_by_number) who see this number."""
+	return [u for u, numbers in managers.items() if numbers is None or number in numbers]
+
+
+def _given_numbers(user: str) -> list[str]:
+	"""The numbers of the user's active Periskope Agent and of the teams they are in."""
 	agent = frappe.db.get_value("Periskope Agent", {"user": user, "is_active": 1})
 	parents = [("Periskope Agent", agent)] if agent else []
 	parents += [("Periskope Team", t.name) for t in teams_of(user)]
@@ -61,14 +85,10 @@ def allowed_numbers(user: str | None = None) -> list[str] | None:
 	return sorted(set(found))
 
 
-def _owned(user: str, doctype: str, field: str) -> str:
-	return f"select name from `tab{doctype}` where `{field}` = {frappe.db.escape(user)}"
-
-
 def chat_condition(user: str | None = None, table: str = "`tabPeriskope Chat`") -> str:
-	"""SQL that limits Periskope Chat rows to those the user may see ("" for all): the chats assigned
-	to them (or to their sales team, territory.py) on any number; and on their own numbers, their
-	team's chats (when the team shares) and the chats of leads and deals they own."""
+	"""SQL that limits Periskope Chat rows to those the user may see ("" for all): every chat on
+	their numbers, and the chats assigned to them (or to their sales team, territory.py) on any
+	number."""
 	user = user or frappe.session.user
 	numbers = allowed_numbers(user)
 	if numbers is None:
@@ -82,15 +102,7 @@ def chat_condition(user: str | None = None, table: str = "`tabPeriskope Chat`") 
 	if not numbers:
 		return f"({assigned})"
 	listed = ", ".join(frappe.db.escape(n) for n in numbers)
-	open_teams = [t.name for t in teams_of(user) if t.team_can_see_team_chats]
-	team = f" or {table}.team in ({', '.join(frappe.db.escape(t) for t in open_teams)})" if open_teams else ""
-	return (
-		f"({assigned} or ({table}.whatsapp_number in ({listed}) and (1=0"
-		f"{team}"
-		f" or {table}.crm_lead in ({_owned(user, 'CRM Lead', 'lead_owner')})"
-		f" or {table}.crm_deal in ({_owned(user, 'CRM Deal', 'deal_owner')})"
-		")))"
-	)
+	return f"({assigned} or {table}.whatsapp_number in ({listed}))"
 
 
 def message_condition(user: str | None = None) -> str:
@@ -129,7 +141,7 @@ def message_query(user: str | None = None) -> str:
 
 def chat_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
 	user = user or frappe.session.user
-	if is_manager(user):
+	if is_manager(user) and sees_every_number(user):
 		return True
 	if ptype not in (None, "read", "print"):
 		return False  # sales users change chats only through the inbox API
@@ -138,7 +150,7 @@ def chat_permission(doc, ptype: str | None = None, user: str | None = None) -> b
 
 def message_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
 	user = user or frappe.session.user
-	if is_manager(user):
+	if is_manager(user) and sees_every_number(user):
 		return True
 	if ptype not in (None, "read", "print"):
 		return False

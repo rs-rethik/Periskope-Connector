@@ -170,13 +170,12 @@ class TestStartChat(PanelCase):
 			).insert(ignore_permissions=True)
 		return rep
 
-	def test_a_rep_cannot_take_another_reps_chat_by_its_number(self):
+	def test_writing_in_another_reps_chat_on_the_number_keeps_its_owner(self):
 		owner, other = self._rep("h7.owner@example.com"), self._rep("h7.other@example.com")
 		chat = self._msg()
 		frappe.db.set_value("Periskope Chat", chat, {"_assign": frappe.as_json([owner]), "team": None})
-		frappe.set_user(other)
-		with self.assertRaises(frappe.PermissionError):
-			compose.start_chat(A, CUSTOMER, "Hello")
+		frappe.set_user(other)  # on the same number: they see every chat there (access.py)
+		self.assertEqual(compose.start_chat(A, CUSTOMER, "Hello")["chat"], chat)
 		frappe.set_user("Administrator")
 		self.assertEqual(frappe.parse_json(frappe.db.get_value("Periskope Chat", chat, "_assign")), [owner])
 
@@ -598,8 +597,8 @@ class TestLadder(PanelCase):
 		)
 		cfg = SimpleNamespace(emails=["boss@example.com"])
 		with patch.object(sla, "_bell") as bell, patch.object(sla, "_email") as mail:
-			self.assertGreaterEqual(sla._resolution_breaches(cfg, []), 1)
-			self.assertEqual(sla._resolution_breaches(cfg, []), 0)
+			self.assertGreaterEqual(sla._resolution_breaches(cfg, {}), 1)
+			self.assertEqual(sla._resolution_breaches(cfg, {}), 0)
 		self.assertTrue(bell.called and mail.called)
 		self.assertEqual(frappe.db.get_value("Periskope Chat", chat, "resolution_alerted"), 1)
 

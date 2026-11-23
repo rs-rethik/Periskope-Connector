@@ -102,14 +102,13 @@ class TestTeams(FlowCase):
 		self.assertEqual(self._assigned(self._msg("919600070003")), [])
 		self.assertEqual(self._assigned(self._msg("919600070004", number=B)), [])
 
-	def test_members_see_the_teams_chats_only_when_the_team_allows_it(self):
-		team = self._team(assignment="Manual")
+	def test_members_see_every_chat_on_the_teams_numbers_and_no_other(self):
+		self._team(assignment="Manual")
 		name = self._msg("919600070005")
-		self.assertTrue(access.can_see_chat(name, self.rep1))
-		team.team_can_see_team_chats = 0
-		team.save(ignore_permissions=True)
-		self.assertFalse(access.can_see_chat(name, self.rep1))
-		self.assertEqual(access.allowed_numbers(self.rep1), [A])  # still works the number
+		other = self._msg("919600070006", number=B)
+		self.assertTrue(access.can_see_chat(name, self.rep1))  # not assigned to them: on their number
+		self.assertFalse(access.can_see_chat(other, self.rep1))
+		self.assertEqual(access.allowed_numbers(self.rep1), [A])
 
 
 class TestLifecycle(FlowCase):
@@ -217,6 +216,7 @@ class TestBulkActions(FlowCase):
 			{"doctype": "Periskope Agent", "user": self.rep1, "numbers": [{"whatsapp_number": A}]}
 		).insert(ignore_permissions=True)
 		self.chats = [self._msg(f"91960007002{i}") for i in range(3)]
+		self.elsewhere = self._msg("919600070029", number=B)  # on a number rep1 was not given
 
 	def test_status_labels_and_read_marks_for_several_chats(self):
 		chat_actions.set_status(self.chats, "Pending")
@@ -240,16 +240,16 @@ class TestBulkActions(FlowCase):
 		self.assertRaises(frappe.PermissionError, chat_actions.unassign, self.chats[0], "Administrator")
 		self.assertRaises(frappe.PermissionError, chat_actions.set_team, [self.chats[0]], None)
 		self.assertRaises(
-			frappe.PermissionError, chat_actions.set_status, [self.chats[1]], "Resolved"
-		)  # not theirs
+			frappe.PermissionError, chat_actions.set_status, [self.elsewhere], "Resolved"
+		)  # not on their number
 		chat_actions.unassign(self.chats[0], self.rep1)
 		self.assertEqual(self._assigned(self.chats[0]), [])
 
 	def test_assign_to_me_and_the_assignment_bell(self):
 		frappe.set_user(self.rep1)
 		self.assertRaises(
-			frappe.PermissionError, chat_actions.assign_to_me, [self.chats[1]]
-		)  # cannot see it yet
+			frappe.PermissionError, chat_actions.assign_to_me, [self.elsewhere]
+		)  # cannot see it: not on their number
 		frappe.set_user("Administrator")
 		chat_actions.assign([self.chats[1]], [self.rep1])
 		frappe.set_user(self.rep1)
