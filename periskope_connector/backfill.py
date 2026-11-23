@@ -40,10 +40,10 @@ def _linked_phones() -> list[str]:
 	return numbers.ready()
 
 
-def _active_chats(phone: str, cutoff: datetime) -> list[str]:
+def _active_chats(phone: str, cutoff: datetime, max_chats: int = MAX_CHATS) -> list[str]:
 	"""Ids of the chats that had a message since `cutoff`."""
 	chat_ids = []
-	for offset in range(0, MAX_CHATS, CHAT_PAGE):
+	for offset in range(0, max_chats, CHAT_PAGE):
 		data = request("GET", f"chats?limit={CHAT_PAGE}&offset={offset}", phone=phone)
 		chats = data.get("chats", []) if isinstance(data, dict) else []
 		for chat in chats:
@@ -58,10 +58,12 @@ def _active_chats(phone: str, cutoff: datetime) -> list[str]:
 	return chat_ids
 
 
-def _missing_messages(chat_id: str, phone: str, cutoff: datetime) -> list[dict]:
+def _missing_messages(
+	chat_id: str, phone: str, cutoff: datetime, max_pages: int = MAX_MESSAGE_PAGES
+) -> list[dict]:
 	"""The chat's messages since `cutoff` that are not saved yet, oldest first."""
 	missing = []
-	for page in range(MAX_MESSAGE_PAGES):
+	for page in range(max_pages):
 		data = request(
 			"GET",
 			f"chats/{chat_id}/messages?limit={MESSAGE_PAGE}&offset={page * MESSAGE_PAGE}",
