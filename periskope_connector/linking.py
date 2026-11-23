@@ -500,12 +500,7 @@ def member_organizations(number: str | None) -> set[str]:
 	by_phone = {"periskope_phone_e164": ["in", forms], "organization": set_}
 	found = set(frappe.get_all("CRM Deal", filters=by_phone, pluck="organization", limit=20))
 	found |= set(frappe.get_all("CRM Lead", filters=by_phone, pluck="organization", limit=20))
-	contacts = frappe.get_all(
-		"Contact Phone",
-		filters={"parenttype": "Contact", "phone": ["in", [*forms, "+" + forms[0]]]},
-		pluck="parent",
-		limit=20,
-	)
+	contacts = with_number("Contact Phone", "phone", "parent", forms[0], parenttype="Contact")
 	if contacts:
 		deals = frappe.get_all(
 			"CRM Contacts", filters={"parenttype": "CRM Deal", "contact": ["in", contacts]}, pluck="parent"
@@ -521,6 +516,22 @@ def member_organizations(number: str | None) -> set[str]:
 	return {o for o in found if not any(names_match(o, company) for company in own)}
 
 
+MATCH_LIMIT = 50
+
+
+def with_number(doctype: str, field: str, pick: str, full: str, **filters) -> list[str]:
+	"""The `pick` values of the rows whose `field` holds this number (digits with the country code),
+	however it was typed: '98765 43210', '+91-98765-43210' and '919876543210' are one number. The
+	LIKE finds the digits with anything between them, and the exact check runs here."""
+	table = frappe.qb.DocType(doctype)
+	pattern = "%" + "%".join(full[-NUMBER_LENGTH:]) + "%"
+	query = frappe.qb.from_(table).select(table[pick], table[field]).where(table[field].like(pattern))
+	for column, value in filters.items():
+		query = query.where(table[column] == value)
+	rows = query.limit(MATCH_LIMIT).run()
+	return list(dict.fromkeys(name for name, value in rows if with_country_code(value).lstrip("0") == full))
+
+
 CLOSE_SPELLING = 0.9  # 'ACME CLOTHNG' in the CRM is the ERPNext customer 'ACME CLOTHING'
 
 
@@ -529,9 +540,7 @@ def customer_organizations(forms: list[str], contacts: list[str]) -> set[str]:
 	one of these contacts belongs to. ERPNext often keeps a customer's number on its address only."""
 	if not frappe.db.exists("DocType", "Customer"):
 		return set()
-	addresses = frappe.get_all(
-		"Address", filters={"phone": ["in", [*forms, "+" + forms[0]]]}, pluck="name", limit=20
-	)
+	addresses = with_number("Address", "phone", "name", forms[0])
 	customers = set()
 	for parenttype, parents in (("Address", addresses), ("Contact", contacts)):
 		if parents:
