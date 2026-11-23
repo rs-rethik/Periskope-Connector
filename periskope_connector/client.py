@@ -123,8 +123,8 @@ def fetch_chat_name(chat_id: str, phone: str | None = None) -> str:
 	return name
 
 
-def fetch_member_numbers(chat_id: str, phone: str | None = None) -> list[str]:
-	"""The numbers of a WhatsApp group's members (digits with country code) from Periskope, or [].
+def fetch_members(chat_id: str, phone: str | None = None) -> list[list[str]]:
+	"""A WhatsApp group's members from Periskope: [[number with country code, WhatsApp name]], or [].
 
 	Members who never wrote in the group are known only from here. Never raises: a group that cannot
 	be read is simply looked at again later.
@@ -139,7 +139,9 @@ def fetch_member_numbers(chat_id: str, phone: str | None = None) -> list[str]:
 	chat = data.get("chat", data) if isinstance(data, dict) else {}
 	members = chat.get("members") or {}
 	items = members.values() if isinstance(members, dict) else members
-	numbers = (
-		"".join(ch for ch in str(m.get("contact_id") or "").split("@")[0] if ch.isdigit()) for m in items
-	)
-	return [n for n in numbers if n]
+	out = []
+	for member in items:
+		number = "".join(ch for ch in str(member.get("contact_id") or "").split("@")[0] if ch.isdigit())
+		if number:
+			out.append([number, member.get("contact_name") or ""])
+	return out

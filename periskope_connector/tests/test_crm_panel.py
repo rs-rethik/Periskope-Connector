@@ -371,6 +371,7 @@ class TestManyRecords(PanelCase):
 			)
 		)
 		group_chat = chat.name_of(A, "120363000000000001@g.us")
+		_customer_group(group_chat)  # no deal is made from an internal group
 		message = frappe.get_all(
 			"Periskope Message", filters={"periskope_chat": group_chat}, pluck="name", limit=1
 		)[0]
@@ -480,8 +481,14 @@ class TestGroupTabsAndRecords(TestGroupOrganization):
 		frappe.db.set_value("CRM Lead", ours, "organization", org)
 		other = _lead("Someone else")
 		group_chat = self._group_msg()
+		_customer_group(group_chat)  # an internal group cannot be linked by hand
 		crm_panel.link_record(group_chat, "CRM Lead", other)  # linked by hand to another company
 		ctx = crm_panel.link_organization(group_chat, org)
 		names = {r["name"] for r in ctx["related"]}
 		self.assertIn(ours, names)
 		self.assertNotIn(other, names)
+
+
+def _customer_group(chat_name: str):
+	chat_id = frappe.db.get_value("Periskope Chat", chat_name, "chat_id")
+	frappe.db.set_value("Periskope Group", {"chat_id": chat_id}, "group_type", "Customer")
