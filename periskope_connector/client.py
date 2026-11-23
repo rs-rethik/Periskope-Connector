@@ -121,3 +121,25 @@ def fetch_chat_name(chat_id: str, phone: str | None = None) -> str:
 		return ""
 	cache.set_value(key, name, expires_in_sec=86400)
 	return name
+
+
+def fetch_member_numbers(chat_id: str, phone: str | None = None) -> list[str]:
+	"""The numbers of a WhatsApp group's members (digits with country code) from Periskope, or [].
+
+	Members who never wrote in the group are known only from here. Never raises: a group that cannot
+	be read is simply looked at again later.
+	"""
+	try:
+		data = request("GET", f"chats/{chat_id}", phone=phone) or {}
+	except frappe.ValidationError:
+		return []  # not set up, or Periskope refused this chat for this number
+	except Exception:
+		frappe.log_error(title="Periskope: could not fetch the group members")
+		return []
+	chat = data.get("chat", data) if isinstance(data, dict) else {}
+	members = chat.get("members") or {}
+	items = members.values() if isinstance(members, dict) else members
+	numbers = (
+		"".join(ch for ch in str(m.get("contact_id") or "").split("@")[0] if ch.isdigit()) for m in items
+	)
+	return [n for n in numbers if n]

@@ -154,6 +154,10 @@ scheduler_events = {
 		# Per-phone message counts: alert when a linked number goes silent.
 		"periskope_connector.health.sync_check",
 	],
+	"daily_long": [
+		# Team groups looked at again with every member Periskope lists (members added since).
+		"periskope_connector.linking.map_groups_daily",
+	],
 	"weekly": [
 		# The numbers and groups that could not be matched to a lead or deal, for sales to add.
 		"periskope_connector.unmatched.send_weekly_report",

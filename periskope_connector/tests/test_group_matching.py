@@ -54,6 +54,7 @@ class GroupCase(FrappeTestCase):
 			patch("periskope_connector.linking.fetch_chat_name", lambda *a, **k: "Mgx Apparel - Pranera"),
 			patch.object(messages, "fetch_chat_name", lambda *a, **k: "Mgx Apparel - Pranera"),
 			patch("periskope_connector.ai.classifier.queue", lambda *a, **k: None),
+			patch.object(linking, "fetch_member_numbers", lambda *a, **k: []),
 		):
 			p.start()
 			self.addCleanup(p.stop)
@@ -97,6 +98,7 @@ class TestNames(FrappeTestCase):
 		self.assertTrue(linking.resembles("COROQLO CLOTHING PVT LTD", "Corpqlo ~ Pranera"))  # misspelt
 		self.assertFalse(linking.resembles("AERELE TECHNOLOGIES", "CRM Support"))
 		self.assertFalse(linking.resembles("Sri Garments", "Garments Team"))  # trade words only
+		self.assertFalse(linking.resembles("MR.T.KUMAR", "Sales Team T&A Request"))  # one letter
 
 
 class TestMembers(GroupCase):
@@ -120,10 +122,30 @@ class TestMembers(GroupCase):
 		self.assertEqual(self.group().organization, None)
 
 		contact = _contact("Two hats", CUSTOMER)
-		_deal("Mgx One Spinners", contact)
-		_deal("Mgx Two Weavers", contact)
-		self.message(CUSTOMER)  # works for two companies: left to people
+		_deal("Srinivasa Forwarders", contact)
+		_deal("Kumar Logistics", contact)
+		self.message(CUSTOMER)  # neither company is the one the group name suggests
 		self.assertEqual(self.group(), {"group_type": "Internal", "organization": None})
+
+	def test_a_company_with_two_spellings_takes_the_one_with_the_newest_deal(self):
+		contact = _contact("Buyer", CUSTOMER)
+		old = _deal("Mgx Clothing Co", contact)
+		_deal("MGX CLOTHING COMPANY", contact)
+		frappe.db.set_value("CRM Deal", old, "modified", add_days(now_datetime(), -30), update_modified=False)
+		self.message(CUSTOMER)
+		self.assertEqual(self.group(), {"group_type": "Customer", "organization": "MGX CLOTHING COMPANY"})
+
+	def test_a_member_who_never_wrote_counts_through_the_periskope_member_list(self):
+		_deal("Mgx Clothing Co", _contact("Shivaani", CUSTOMER))
+		self.message(COLLEAGUE)
+		frappe.db.set_value("Periskope Chat", {"chat_id": GROUP}, "whatsapp_number", "919000000001")
+		self.assertEqual(linking.map_groups(), 0)  # only the colleague wrote
+		self.assertEqual(self.group().group_type, "Internal")
+		with patch.object(
+			linking, "fetch_member_numbers", lambda *a, **k: [f"91{COLLEAGUE}", f"91{CUSTOMER}"]
+		):
+			self.assertEqual(linking.map_groups_daily(), 1)
+		self.assertEqual(self.group(), {"group_type": "Customer", "organization": "Mgx Clothing Co"})
 
 	def test_a_member_from_a_company_the_group_name_does_not_suggest_changes_nothing(self):
 		# a forwarder in a team group is a contact on some customer's deal too
@@ -239,6 +261,12 @@ class TestCustomerMembers(GroupCase):
 		_address(_customer("MGX CLOTHING CO"), f"44{CUSTOMER}")  # a foreign number ending the same
 		self.assertEqual(linking.member_organizations(f"91{CUSTOMER}"), set())
 
+	def test_a_customer_whose_organization_has_no_lead_or_deal_yet(self):
+		_org("MGX CLOTHING CO")
+		_address(_customer("MGX CLOTHING CO"), CUSTOMER)
+		self.message(CUSTOMER)
+		self.assertEqual(self.group(), {"group_type": "Customer", "organization": "MGX CLOTHING CO"})
+
 	def test_our_own_numbers_on_a_customer_address_change_nothing(self):
 		_deal("Mgx Clothing Co")
 		_address(_customer("MGX CLOTHING CO"), COLLEAGUE)
@@ -250,7 +278,7 @@ class TestLearnerCandidates(GroupCase):
 		_deal("Mgx Clothing Co", _contact("Shivaani", CUSTOMER))
 		_deal("Mgx Apparels")
 		self.message(COLLEAGUE)
-		with patch.object(linking, "map_group_by_member"):
+		with patch.object(linking, "map_group_by_members"):
 			self.message(CUSTOMER)
 		group = frappe._dict(chat_id=GROUP, group_name="Mgx Apparel - Pranera")
 		found = learner.candidate_organizations(group)
