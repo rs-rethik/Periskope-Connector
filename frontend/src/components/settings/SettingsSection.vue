@@ -128,6 +128,12 @@ const ACTIONS = {
 			confirm:
 				"This registers this site's webhook in your live Periskope account. Continue?",
 		},
+		{
+			action: "periskope_import",
+			label: "Import last 6 months",
+			confirm:
+				"This copies the last 6 months of messages of every Periskope number into the WhatsApp app, in the background. Messages already here are skipped. No AI, auto reply or alert runs on them. Continue?",
+		},
 	],
 	ai: [{ action: "test_ai", label: "Test AI" }],
 	meta: [

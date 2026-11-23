@@ -105,6 +105,7 @@ SECTIONS = [
 			"base_url",
 			"connection_status",
 			"last_checked",
+			"periskope_import_status",
 			"webhook_url",
 			"webhook_signing_secret",
 			"webhook_events",
@@ -438,13 +439,14 @@ def run_action(action: str) -> dict:
 	test the AI. Each keeps its own admin check (api/settings.py)."""
 	access.require_inbox_user()
 	_require(ADMIN)
-	from periskope_connector import meta
+	from periskope_connector import history, meta
 	from periskope_connector.api import settings as settings_api
 
 	actions = {
 		"test_connection": settings_api.test_connection,
 		"sync_numbers": settings_api.sync_phones,
 		"setup_webhooks": settings_api.setup_webhooks,
+		"periskope_import": history.queue_import,
 		"test_ai": settings_api.test_ai_connection,
 		"meta_connect": meta.connect,
 		"meta_import": meta.queue_import,
