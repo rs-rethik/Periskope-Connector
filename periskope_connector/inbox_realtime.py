@@ -8,34 +8,24 @@ chat reads nothing.
 
 import frappe
 
-from periskope_connector.api.permission import MANAGER_ROLES
+from periskope_connector.api.permission import ADMIN_ROLES, sales_managers
 
 EVENT = "periskope_inbox"
 
 
 def _recipients(number: str | None) -> list[str]:
-	managers = frappe.get_all(
+	"""Who sees the number: its agents and team members, the admins, and the Sales Managers who were
+	given no numbers (they see every number, access.allowed_numbers)."""
+	from periskope_connector.access import _given_numbers, users_on_numbers
+
+	admins = frappe.get_all(
 		"Has Role",
-		filters={"role": ["in", MANAGER_ROLES], "parenttype": "User"},
+		filters={"role": ["in", ADMIN_ROLES], "parenttype": "User"},
 		pluck="parent",
 		distinct=True,
 	)
-	agents = []
-	if number:
-		rows = frappe.get_all(
-			"Periskope Agent Number",
-			filters={"whatsapp_number": number, "parenttype": ["in", ["Periskope Agent", "Periskope Team"]]},
-			fields=["parent", "parenttype"],
-		)
-		agent_rows = [r.parent for r in rows if r.parenttype == "Periskope Agent"]
-		team_rows = [r.parent for r in rows if r.parenttype == "Periskope Team"]
-		agents = frappe.get_all(
-			"Periskope Agent", filters={"name": ["in", agent_rows or [""]], "is_active": 1}, pluck="user"
-		) + frappe.get_all(
-			"Periskope Team Member",
-			filters={"parent": ["in", team_rows or [""]], "parenttype": "Periskope Team"},
-			pluck="user",
-		)
+	managers = [*admins, *(u for u in sales_managers() if not _given_numbers(u))]
+	agents = users_on_numbers([number]) if number else set()
 	enabled = set(
 		frappe.get_all(
 			"User", filters={"name": ["in", list({*managers, *agents}) or [""]], "enabled": 1}, pluck="name"

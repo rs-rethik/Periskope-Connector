@@ -100,7 +100,7 @@ def _figures(from_date, to_date, number, team, rep, waiting_minutes) -> dict:
 		"tags": _tags(where, values),
 		"leads": _leads(start, end, number, team, rep),
 		"leaderboard": _leaderboard(where, values, waits),
-		"reps": _reps(),
+		"reps": _reps(access.allowed_numbers()),
 		"breaches": _breaches(where, values),
 		"numbers": [
 			{
@@ -113,6 +113,7 @@ def _figures(from_date, to_date, number, team, rep, waiting_minutes) -> dict:
 				"is_active": n.is_active,
 			}
 			for n in numbers.all_numbers()
+			if _shown(n.name, number)
 		],
 	}
 
@@ -370,6 +371,8 @@ def _by_number(where, values, waits) -> list[dict]:
 	for n in numbers.all_numbers():
 		if values.get("number") and n.name != values["number"]:
 			continue
+		if values.get("numbers") and n.name not in values["numbers"]:
+			continue  # a manager given numbers: only theirs
 		v = volume.get(n.name) or {}
 		s = stats.get(n.name) or {}
 		out.append(
@@ -389,12 +392,21 @@ def _by_number(where, values, waits) -> list[dict]:
 	return out
 
 
-def _reps() -> list[dict]:
-	"""Everyone who works the WhatsApp chats (active agents and team members), for the rep filter."""
-	users = set(frappe.get_all("Periskope Agent", filters={"is_active": 1}, pluck="user"))
-	users |= set(
-		frappe.get_all("Periskope Team Member", filters={"parenttype": "Periskope Team"}, pluck="user")
-	)
+def _shown(name: str, number) -> bool:
+	"""Whether a number's connection shows on the dashboard: all of them, or a limited manager's."""
+	return name in number if isinstance(number, tuple) else True
+
+
+def _reps(allowed: list[str] | None = None) -> list[dict]:
+	"""Everyone who works the WhatsApp chats (active agents and team members), for the rep filter.
+	`allowed`: a manager given numbers sees only the people on those numbers."""
+	if allowed is not None:
+		users = access.users_on_numbers(allowed)
+	else:
+		users = set(frappe.get_all("Periskope Agent", filters={"is_active": 1}, pluck="user"))
+		users |= set(
+			frappe.get_all("Periskope Team Member", filters={"parenttype": "Periskope Team"}, pluck="user")
+		)
 	users.discard(None)
 	if not users:
 		return []
@@ -416,10 +428,14 @@ def _leaderboard(where, values, waits) -> list[dict]:
 		for user in json.loads(assigned or "[]"):
 			load[user] += 1
 	resolved = defaultdict(int)
-	for owner, n in frappe.db.sql(
-		"""select owner, count(*) from `tabPeriskope Chat Activity`
-		where action = 'Status' and details like '%%→ Resolved' and creation between %(start)s and %(end)s
-		group by owner""",
+	# raw SQL like the rest of this file: `where` is the shared chat filter (_chat_filter), which holds
+	# only %(...)s placeholders, never a value
+	for owner, n in frappe.db.sql(  # nosemgrep
+		f"""select a.owner, count(*) from `tabPeriskope Chat Activity` a
+		join `tabPeriskope Chat` c on c.name = a.chat
+		where a.action = 'Status' and a.details like '%%→ Resolved'
+		and a.creation between %(start)s and %(end)s {where}
+		group by a.owner""",
 		values,
 	):
 		resolved[owner] += n

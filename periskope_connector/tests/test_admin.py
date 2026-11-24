@@ -8,7 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import numbers
 from periskope_connector.api import admin
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate, settings
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate, make_sales_manager, settings
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -33,7 +33,7 @@ class AdminCase(FrappeTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		numbers.ensure(A)
 		self.rep = _user("admin.rep@example.com", "Sales User")
-		self.manager = _user("admin.manager@example.com", "Sales Manager")
+		self.manager = make_sales_manager(_user("admin.manager@example.com", "Sales Manager"))
 
 
 class TestWhoMayOpenWhat(AdminCase):

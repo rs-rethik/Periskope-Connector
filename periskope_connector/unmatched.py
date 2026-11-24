@@ -34,8 +34,9 @@ def columns() -> list[dict]:
 	]
 
 
-def get_rows(from_date=None, to_date=None) -> list[dict]:
-	"""One row per unmatched customer number, and per unmatched customer group, newest first."""
+def get_rows(from_date=None, to_date=None, numbers: list[str] | None = None) -> list[dict]:
+	"""One row per unmatched customer number, and per unmatched customer group, newest first.
+	`numbers`: only the messages on these WhatsApp numbers (None: every number)."""
 	from_date = from_date or add_days(today(), -7)
 	to_date = to_date or today()
 	rows = frappe.db.sql(
@@ -54,11 +55,18 @@ def get_rows(from_date=None, to_date=None) -> list[dict]:
 		where m.link_status in %(status)s
 			and date(m.message_timestamp) between %(from)s and %(to)s
 			and (m.is_group = 0 or g.group_type = 'Customer')
+			and (%(every)s or m.whatsapp_number in %(numbers)s)
 		group by m.is_group, who
 		having who is not null and who != ''
 		order by last_message desc
 		""",
-		{"status": UNMATCHED, "from": from_date, "to": to_date},
+		{
+			"status": UNMATCHED,
+			"from": from_date,
+			"to": to_date,
+			"numbers": tuple(numbers or [""]),
+			"every": int(numbers is None),
+		},
 		as_dict=True,
 	)
 	# A number added to the CRM since its messages arrived is no longer unmatched.

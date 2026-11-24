@@ -6,7 +6,12 @@ from closed Reply Reminders (recorded when the rep's reply arrived)."""
 
 import frappe
 from frappe import _
+from frappe.query_builder import Case
+from frappe.query_builder.functions import Avg, Count, Max, Round, Sum
 from frappe.utils import add_days, today
+from pypika.functions import NullIf
+
+from periskope_connector import access
 
 
 def execute(filters=None):
@@ -27,17 +32,22 @@ def execute(filters=None):
 		{"label": _("Escalated to L2+"), "fieldname": "escalated", "fieldtype": "Int", "width": 130},
 	]
 
-	rows = frappe.db.sql(
-		"""select rep,
-		count(*) as chats,
-		round(avg(nullif(first_response_secs, 0)) / 60, 1) as avg_mins,
-		round(max(nullif(first_response_secs, 0)) / 60, 1) as max_mins,
-		sum(if(level >= 2, 1, 0)) as escalated
-		from `tabPeriskope Reply Reminder`
-		where status = 'Closed' and closed_on between %(from)s and %(to)s
-		group by rep
-		order by avg_mins asc""",
-		{"from": from_date, "to": f"{to_date} 23:59:59"},
-		as_dict=True,
+	r = frappe.qb.DocType("Periskope Reply Reminder")
+	secs = NullIf(r.first_response_secs, 0)
+	query = (
+		frappe.qb.from_(r)
+		.select(
+			r.rep,
+			Count("*").as_("chats"),
+			Round(Avg(secs) / 60, 1).as_("avg_mins"),
+			Round(Max(secs) / 60, 1).as_("max_mins"),
+			Sum(Case().when(r.level >= 2, 1).else_(0)).as_("escalated"),
+		)
+		.where((r.status == "Closed") & r.closed_on.between(from_date, f"{to_date} 23:59:59"))
+		.groupby(r.rep)
+		.orderby("avg_mins")
 	)
-	return columns, rows
+	allowed = access.allowed_numbers()
+	if allowed is not None:  # a manager given numbers: the chats on their numbers only
+		query = query.where(r.chat_id.isin(access.chat_ids_on(allowed) or [""]))
+	return columns, query.run(as_dict=True)

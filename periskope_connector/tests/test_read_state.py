@@ -10,7 +10,7 @@ import frappe
 from periskope_connector import numbers, read_state, safety
 from periskope_connector.api import chat_actions, inbox
 from periskope_connector.tests.test_inbox import A, InboxCase, _agent, _user
-from periskope_connector.tests.utils import settings
+from periskope_connector.tests.utils import make_sales_manager, settings
 
 
 class ReadCase(InboxCase):
@@ -18,7 +18,7 @@ class ReadCase(InboxCase):
 		super().setUp()
 		self.rep = _user("read.rep@example.com", "Sales User")
 		self.other = _user("read.other@example.com", "Sales User")
-		self.manager = _user("read.manager@example.com", "Sales Manager")
+		self.manager = make_sales_manager(_user("read.manager@example.com", "Sales Manager"))
 		numbers.ensure(A)
 		_agent(self.rep, A)
 		_agent(self.other, A)

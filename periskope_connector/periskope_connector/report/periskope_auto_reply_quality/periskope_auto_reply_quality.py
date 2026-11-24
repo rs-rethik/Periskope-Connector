@@ -8,6 +8,8 @@ from frappe.query_builder import Case
 from frappe.query_builder.functions import Avg, Count, Sum
 from frappe.utils import add_days, flt, today
 
+from periskope_connector import access
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -33,7 +35,7 @@ def execute(filters=None):
 	def count(status):
 		return Sum(Case().when(ar.status == status, 1).else_(0))
 
-	rows = (
+	query = (
 		frappe.qb.from_(ar)
 		.select(
 			ar.rep,
@@ -46,7 +48,11 @@ def execute(filters=None):
 		)
 		.where((ar.creation >= from_date) & (ar.creation <= f"{to_date} 23:59:59"))
 		.groupby(ar.rep)
-	).run(as_dict=True)
+	)
+	allowed = access.allowed_numbers()
+	if allowed is not None:  # a manager given numbers: the chats on their numbers only
+		query = query.where(ar.chat_id.isin(access.chat_ids_on(allowed) or [""]))
+	rows = query.run(as_dict=True)
 	for r in rows:
 		r.rep = r.rep or _("(no rep)")
 		sent = (r.answered or 0) + (r.holding or 0)

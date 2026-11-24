@@ -521,8 +521,11 @@ def send_applied_digest() -> int:
 
 @frappe.whitelist()
 def decide(name: str, decision: str) -> str:
-	"""Approve or reject from the desk (managers only)."""
+	"""Approve or reject from the desk (managers who see every number: it changes the whole app)."""
 	require_manager()
+	from periskope_connector.access import require_every_number
+
+	require_every_number()
 	doc = frappe.get_doc("Periskope Suggestion", name)
 	if doc.status != "Pending":
 		frappe.throw(_("This suggestion is already {0}").format(doc.status.lower()))

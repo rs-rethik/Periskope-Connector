@@ -7,6 +7,7 @@ number against its own 14-day average — a sudden zero means the phone unlinked
 import frappe
 from frappe import _
 
+from periskope_connector import access
 from periskope_connector.health import phone_counts
 
 
@@ -27,6 +28,7 @@ def execute(filters=None):
 	rows = []
 	for phone in frappe.get_all(
 		"WhatsApp Number",
+		filters=access.number_filter("name"),
 		fields=["number", "display_name as phone_name", "default_assignee as rep", "wa_state"],
 		order_by="number asc",
 	):

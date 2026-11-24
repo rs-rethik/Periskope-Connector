@@ -6,12 +6,14 @@ All of them are for managers: a rep has no access to the queue in the pilot.
 import frappe
 from frappe import _
 
+from periskope_connector import access
 from periskope_connector.api.permission import require_manager
 
 
 @frappe.whitelist()
 def create_lead(contact: str) -> str:
 	require_manager()
+	access.require_contact(contact)
 	from periskope_connector.contacts import create_lead_for_contact
 
 	name = create_lead_for_contact(contact)
@@ -22,6 +24,7 @@ def create_lead(contact: str) -> str:
 @frappe.whitelist()
 def link_to(contact: str, lead: str | None = None, deal: str | None = None) -> None:
 	require_manager()
+	access.require_contact(contact)
 	from periskope_connector.contacts import link_contact
 
 	link_contact(contact, lead=lead, deal=deal)
@@ -30,6 +33,7 @@ def link_to(contact: str, lead: str | None = None, deal: str | None = None) -> N
 @frappe.whitelist()
 def ignore(contact: str, reason: str) -> None:
 	require_manager()
+	access.require_contact(contact)
 	from periskope_connector.contacts import ignore_contact
 
 	ignore_contact(contact, reason)
@@ -39,6 +43,7 @@ def ignore(contact: str, reason: str) -> None:
 def find_matches(contact: str) -> list[dict]:
 	"""Search leads and deals by this number and name, for the 'link to existing' dialog."""
 	require_manager()
+	access.require_contact(contact)
 	doc = frappe.db.get_value("Periskope Contact", contact, ["phone", "display_name"], as_dict=True)
 	if not doc:
 		frappe.throw(_("Contact {0} does not exist").format(contact), frappe.DoesNotExistError)

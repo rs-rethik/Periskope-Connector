@@ -14,7 +14,7 @@ from frappe.utils import add_to_date, now_datetime
 
 from periskope_connector import chat, messages, numbers
 from periskope_connector.api import compose, inbox
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, settings
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, make_sales_manager, settings
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -341,7 +341,7 @@ class TestRetry(ComposeCase):
 class TestNotesAndQuickReplies(ComposeCase):
 	def test_a_note_is_never_sent_and_notifies_who_is_mentioned(self):
 		mine = self._incoming(A)
-		manager = _user("compose.manager@example.com", "Sales Manager")
+		manager = make_sales_manager(_user("compose.manager@example.com", "Sales Manager"))
 		stranger = _user("compose.stranger@example.com", "Sales User")
 		note = compose.add_comment(mine, "@Manager please call them", mentions=[manager, stranger])
 		self.request.assert_not_called()
