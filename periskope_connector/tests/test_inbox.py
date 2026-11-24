@@ -11,7 +11,7 @@ from frappe.utils import now_datetime
 
 from periskope_connector import access, chat, inbox_realtime, messages, numbers
 from periskope_connector.api import inbox
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, make_sales_manager
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -124,7 +124,7 @@ class TestChatPerNumber(InboxCase):
 class TestAccess(InboxCase):
 	def setUp(self):
 		super().setUp()
-		self.manager = _user("inbox.manager@example.com", "Sales Manager")
+		self.manager = make_sales_manager(_user("inbox.manager@example.com", "Sales Manager"))
 		self.rep = _user("inbox.rep@example.com", "Sales User")
 		self.stranger = _user("inbox.stranger@example.com", "Sales User")
 		self._msg(A, CUSTOMER)  # assigned to the rep

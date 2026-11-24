@@ -11,6 +11,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, today
 
+from periskope_connector import access
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -39,6 +41,7 @@ def execute(filters=None):
 		filters={
 			"classification_status": "Done",
 			"classified_at": ["between", [from_date, f"{to_date} 23:59:59"]],
+			**access.number_filter(),
 		},
 		fields=[
 			"name",

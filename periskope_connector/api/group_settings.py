@@ -342,6 +342,7 @@ def join(number: str, link: str) -> dict:
 	from periskope_connector import meta
 
 	number = _digits(number)
+	access.require_number(number)
 	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or meta.is_meta(number):
 		frappe.throw(_("Choose an active Periskope number to join with."))
 	joined = (

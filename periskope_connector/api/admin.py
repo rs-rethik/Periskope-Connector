@@ -128,8 +128,8 @@ SECTIONS = [
 	{"key": "voice", "title": "Voice notes", "fields": ["gemini_api_key", "gemini_model"]},
 	{
 		"key": "team",
-		"title": "Approvers and alerts",
-		"fields": ["approver_emails", "alert_emails", "escalation_emails", "default_rep"],
+		"title": "Sales managers and alerts",
+		"fields": ["sales_managers", "approver_emails", "alert_emails", "escalation_emails", "default_rep"],
 	},
 	{
 		"key": "auto_reply",
@@ -259,12 +259,37 @@ def _as_dict(doc, cfg) -> dict:
 	return row
 
 
+# The kinds that carry WhatsApp numbers: a manager given numbers sees and changes only those within
+# their numbers, and cannot give anyone a number they do not work.
+NUMBERED_KINDS = ("teams", "agents", "numbers")
+
+
+def _numbers_of(kind: str, doc) -> list[str]:
+	if kind == "numbers":
+		return [doc.name]
+	return [r.whatsapp_number for r in doc.get("numbers") or [] if r.whatsapp_number]
+
+
+def _within(kind: str, doc, allowed: list[str] | None) -> bool:
+	"""Whether a limited manager may see and change this team, agent or number."""
+	if allowed is None or kind not in NUMBERED_KINDS:
+		return True
+	return set(_numbers_of(kind, doc)) <= set(allowed)
+
+
+def _check_within(kind: str, doc):
+	if not _within(kind, doc, access.allowed_numbers()):
+		frappe.throw(_("This uses WhatsApp numbers you do not work."), frappe.PermissionError)
+
+
 @frappe.whitelist()
 def list_records(kind: str) -> list[dict]:
 	access.require_inbox_user()
 	cfg = _kind(kind)
+	allowed = access.allowed_numbers()
 	names = frappe.get_all(cfg["doctype"], pluck="name", order_by=cfg["order_by"], limit=500)
-	return [_as_dict(frappe.get_doc(cfg["doctype"], n), cfg) for n in names]
+	docs = (frappe.get_doc(cfg["doctype"], n) for n in names)
+	return [_as_dict(doc, cfg) for doc in docs if _within(kind, doc, allowed)]
 
 
 @frappe.whitelist(methods=["POST"])
@@ -276,6 +301,8 @@ def save_record(kind: str, values: str | dict, name: str | None = None) -> dict:
 	if not name and not cfg.get("create", True):
 		frappe.throw(_("These are added from Periskope, not by hand."))
 	doc = frappe.get_doc(cfg["doctype"], name) if name else frappe.new_doc(cfg["doctype"])
+	if name:
+		_check_within(kind, doc)  # the record as it is now
 	tables = _tables(cfg["doctype"], cfg["fields"])
 	autoname = frappe.get_meta(cfg["doctype"]).autoname or ""
 	name_field = autoname[len("field:") :] if autoname.startswith("field:") else None
@@ -289,6 +316,7 @@ def save_record(kind: str, values: str | dict, name: str | None = None) -> dict:
 			continue  # a record named by this field is not renamed here
 		else:
 			doc.set(field, values[field])
+	_check_within(kind, doc)  # and as it would be saved: no number the user does not work
 	doc.flags.ignore_permissions = True  # checked above: managers or admins only
 	doc.save() if name else doc.insert()
 	return _as_dict(doc, cfg)
@@ -300,6 +328,7 @@ def delete_record(kind: str, name: str) -> None:
 	cfg = _kind(kind)
 	if not cfg.get("delete", True):
 		frappe.throw(_("This cannot be deleted here."))
+	_check_within(kind, frappe.get_doc(cfg["doctype"], name))
 	frappe.delete_doc(cfg["doctype"], name, ignore_permissions=True)
 
 
@@ -328,9 +357,18 @@ def pick(doctype: str, query: str = "") -> list[dict]:
 		)
 	title = {"WhatsApp Number": "display_name"}.get(doctype)
 	fields = ["name as value", f"{title} as label"] if title else ["name as value", "name as label"]
+	filters = {"name": ["like", like]} if query else {}
+	allowed = access.allowed_numbers()
+	if allowed is not None and doctype == "WhatsApp Number":
+		filters["name"] = ["in", [n for n in allowed if not query or query in n] or [""]]
+	elif allowed is not None and doctype == "Periskope Team":
+		filters["name"] = [
+			"in",
+			[t for t in access.teams_on(allowed) if not query or query.lower() in t.lower()] or [""],
+		]
 	return frappe.get_all(
 		doctype,
-		filters={"name": ["like", like]} if query else {},
+		filters=filters,
 		fields=fields,
 		order_by="name asc",
 		limit=100,
@@ -363,6 +401,8 @@ def invite_agent(
 	user.flags.ignore_permissions = True  # a manager may add sales users (checked above)
 	user.add_roles("Sales User")
 	numbers = json.loads(numbers) if isinstance(numbers, str) else (numbers or [])
+	for number in numbers:
+		access.require_number(number)  # nobody is given a number the inviting manager does not work
 	agent = frappe.db.get_value("Periskope Agent", {"user": email})
 	values = {"user": email, "is_active": 1, "numbers": numbers}
 	return save_record("agents", values, name=agent)
@@ -394,7 +434,7 @@ def get_settings() -> dict:
 			if f["fieldtype"] in SECRET_TYPES:
 				f["is_set"] = bool(settings.get_password(f["fieldname"], raise_exception=False))
 				f["value"] = ""
-			elif f["fieldtype"] == "Table":
+			elif f["fieldtype"] in ("Table", "Table MultiSelect"):
 				f["value"] = [r.get(f["child"]["field"]) for r in settings.get(f["fieldname"]) or []]
 			else:
 				f["value"] = settings.get(f["fieldname"])
@@ -422,7 +462,7 @@ def save_settings(section: str, values: str | dict) -> dict:
 		if df.fieldtype in SECRET_TYPES:
 			if values[name]:
 				settings.set(name, values[name])
-		elif df.fieldtype == "Table":
+		elif df.fieldtype in ("Table", "Table MultiSelect"):
 			child = frappe.get_meta(df.options)
 			link = next(f for f in child.fields if f.fieldtype in ("Link", "Select"))
 			settings.set(name, [{link.fieldname: v} for v in dict.fromkeys(values[name] or []) if v])

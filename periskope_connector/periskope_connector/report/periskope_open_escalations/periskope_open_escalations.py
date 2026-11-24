@@ -6,6 +6,8 @@
 import frappe
 from frappe import _
 
+from periskope_connector import access
+
 
 def execute(filters=None):
 	columns = [
@@ -39,7 +41,7 @@ def execute(filters=None):
 
 	rows = frappe.get_all(
 		"Periskope Reply Reminder",
-		filters={"status": ["in", ["Open", "Escalated"]]},
+		filters={"status": ["in", ["Open", "Escalated"]], **access.chat_id_filter()},
 		fields=[
 			"name",
 			"level",

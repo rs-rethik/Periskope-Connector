@@ -325,7 +325,7 @@ const menu = computed(() => [
 						{ key: "meta", label: "Meta WhatsApp", icon: LucideMessageCircle },
 						{ key: "ai", label: "AI", icon: LucideBot },
 						{ key: "voice", label: "Voice notes", icon: LucideMic },
-						{ key: "team", label: "Approvers and alerts", icon: LucideBellRing },
+						{ key: "team", label: "Sales managers and alerts", icon: LucideBellRing },
 						{ key: "auto_reply", label: "Auto reply and hours", icon: LucideClock },
 						{ key: "test_mode", label: "Test mode", icon: LucideFlaskConical },
 						{ key: "branding", label: "Branding", icon: LucidePalette },

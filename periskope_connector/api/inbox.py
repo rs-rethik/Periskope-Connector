@@ -639,6 +639,8 @@ def boot() -> dict:
 		"full_name": frappe.utils.get_fullname(user),
 		"user_image": frappe.db.get_value("User", user, "user_image"),
 		"is_manager": access.is_manager(user),
+		# a manager given numbers does not get the app-wide pages (health, flow, system logs)
+		"sees_every_number": allowed is None,
 		"is_admin": bool(set(frappe.get_roles(user)) & {"System Manager", "WhatsApp Manager"})
 		or user == "Administrator",
 		"numbers": [

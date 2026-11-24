@@ -155,9 +155,17 @@ def _count_ask():
 
 
 def allowed_reports() -> list[str]:
-	"""The Assistant's reports the user may open (the report's roles, like Desk)."""
+	"""The Assistant's reports the user may open: the Sales Managers and admins, and the report's
+	roles as in Desk. A manager given numbers does not get the app-wide AI Usage report."""
+	from periskope_connector import access
+
+	if not access.is_manager():
+		return []
+	every = access.sees_every_number()
 	out = []
 	for name in REPORTS:
+		if name == "Periskope AI Usage" and not every:
+			continue
 		if frappe.db.exists("Report", name) and frappe.get_doc("Report", name).is_permitted():
 			out.append(name)
 	return out

@@ -12,7 +12,7 @@ from periskope_connector import client
 from periskope_connector.api import phones
 from periskope_connector.api import settings as settings_api
 from periskope_connector.tests.test_compose import _user
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate, settings
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate, make_sales_manager, settings
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = OTHER_APP_DOCTYPES
 
@@ -145,7 +145,7 @@ class TestRefused(PhonesCase):
 		self.assertEqual(self.calls, [])
 
 	def test_admins_only(self):
-		frappe.set_user(_user("pkt.phones.manager@example.com", "Sales Manager"))
+		frappe.set_user(make_sales_manager(_user("pkt.phones.manager@example.com", "Sales Manager")))
 		for method in (phones.state, phones.qr, phones.relink, phones.restart):
 			with self.assertRaises(frappe.PermissionError):
 				method(NUMBER)
@@ -228,7 +228,7 @@ class TestQueue(PhonesCase):
 		self.assertEqual(frappe.db.get_value("Periskope Message", delivered.name, "send_status"), "Queued")
 
 	def test_admins_only(self):
-		frappe.set_user(_user("pkt.queue.manager@example.com", "Sales Manager"))
+		frappe.set_user(make_sales_manager(_user("pkt.queue.manager@example.com", "Sales Manager")))
 		for method in (phones.queue, phones.purge_queue):
 			with self.assertRaises(frappe.PermissionError):
 				method(NUMBER)

@@ -153,7 +153,7 @@ const hint = computed(
 			connect:
 				"The Periskope account behind every number. Keys are never shown here once saved.",
 			ai: "The model that tags messages, writes replies and learns from chats.",
-			team: "Who approves the agent's suggestions and who hears about escalations and SLA breaches.",
+			team: "Who manages Pranera Connect, who approves the agent's suggestions, and who hears about escalations and SLA breaches.",
 			auto_reply:
 				"When the AI answers a customer nobody has answered, and the hours the SLA clocks count.",
 			test_mode:
