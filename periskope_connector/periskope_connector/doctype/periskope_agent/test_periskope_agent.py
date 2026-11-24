@@ -2,7 +2,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from periskope_connector import access, numbers
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, isolate, make_sales_manager
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = [*OTHER_APP_DOCTYPES, "WhatsApp Number"]
 
@@ -67,8 +67,10 @@ class TestNumberAccess(FrappeTestCase):
 		return doc.name
 
 	def test_a_sales_manager_given_a_number_works_that_number_only(self):
-		user = self._user("access.limited.rep@example.com", "Sales User", "Sales Manager")
-		self.assertIsNone(access.allowed_numbers(user))  # no numbers yet: every number
+		user = make_sales_manager(self._user("access.limited.rep@example.com", "Sales User", "Sales Manager"))
+		self.assertIsNone(
+			access.allowed_numbers(user)
+		)  # a listed Sales Manager, no numbers yet: every number
 		self._give(user, self.mine)
 		self.assertEqual(access.allowed_numbers(user), [self.mine])
 		on_mine = self._chat(self.mine, "919600077701")  # assigned to nobody

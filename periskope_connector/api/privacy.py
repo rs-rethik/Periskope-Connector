@@ -50,9 +50,13 @@ def _number(number: str) -> str:
 def _scope(full: str) -> frappe._dict:
 	"""Everything of the number: its 1-to-1 chats and the messages it sent anywhere (groups too)."""
 	chat_id = f"{full}@c.us"
-	chats = frappe.get_all("Periskope Chat", filters={"chat_id": chat_id}, pluck="name")
+	# a manager given numbers exports or erases only what is on their numbers
+	allowed = access.allowed_numbers()
+	on_mine = {"whatsapp_number": ["in", allowed or [""]]} if allowed is not None else {}
+	chats = frappe.get_all("Periskope Chat", filters={"chat_id": chat_id, **on_mine}, pluck="name")
 	messages = frappe.get_all(
 		"Periskope Message",
+		filters=on_mine,
 		or_filters=[["chat_id", "=", chat_id], ["sender_phone", "=", full]],
 		pluck="name",
 	)

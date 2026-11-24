@@ -40,6 +40,7 @@ MESSAGE_FIELDS = [
 	"attachment_summary",
 	"crm_lead",
 	"crm_deal",
+	"periskope_chat",
 ]
 
 
@@ -126,7 +127,11 @@ def escalate(message: str) -> bool:
 			reference_doctype="Periskope Message",
 			reference_name=doc.name,
 		)
-		for user in _users(emails):
+		from periskope_connector.access import can_see_chat
+
+		# the bell only for those who see the chat (its number, or assigned to them)
+		bell_users = [u for u in _users(emails) if doc.periskope_chat and can_see_chat(doc.periskope_chat, u)]
+		for user in bell_users:
 			frappe.get_doc(
 				{
 					"doctype": "Notification Log",

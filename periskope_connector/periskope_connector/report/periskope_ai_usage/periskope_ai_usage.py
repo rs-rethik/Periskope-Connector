@@ -7,8 +7,11 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, today
 
+from periskope_connector import access
+
 
 def execute(filters=None):
+	access.require_every_number()  # the AI's cost covers every number
 	filters = frappe._dict(filters or {})
 	to_date = filters.get("to_date") or today()
 	from_date = filters.get("from_date") or add_days(to_date, -30)

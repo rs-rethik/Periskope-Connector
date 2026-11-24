@@ -30,18 +30,20 @@ const routes = [
 		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
 	},
 	...[
-		["/health", "Health", "Health"],
-		["/flow", "Flow", "Flow"],
+		["/health", "Health", "Health", true],
+		["/flow", "Flow", "Flow", true],
 		["/data/:kind", "DataList", "DataList"],
 		["/knowledge", "Knowledge", "Knowledge"],
 		["/scheduled", "Scheduled", "Scheduled"],
 		["/broadcasts", "Broadcasts", "Broadcasts"],
 		["/reports", "Reports", "Reports"],
-	].map(([path, name, page]) => ({
+	].map(([path, name, page, everyNumber]) => ({
 		path,
 		name,
 		component: () => import(`@/pages/${page}.vue`),
-		beforeEnter: () => (boot.is_manager ? true : { name: "Inbox" }),
+		// health and flow cover every number: not for a manager limited to numbers
+		beforeEnter: () =>
+			boot.is_manager && (!everyNumber || boot.sees_every_number) ? true : { name: "Inbox" },
 	})),
 	{ path: "/:pathMatch(.*)*", redirect: { name: "Today" } },
 ];

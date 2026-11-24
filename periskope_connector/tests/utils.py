@@ -126,3 +126,20 @@ def settings(**values):
 	"""Set values on Periskope Settings for the current test (rolled back with it)."""
 	for field, value in values.items():
 		frappe.db.set_single_value("Periskope Settings", field, value)
+
+
+def make_sales_manager(user: str) -> str:
+	"""Put the user in Periskope Settings > Sales Managers for the current test (rolled back with it):
+	the Frappe role "Sales Manager" alone no longer makes a manager (permission.is_manager)."""
+	row = frappe.get_doc(
+		{
+			"doctype": "Periskope Team Member",
+			"parent": "Periskope Settings",
+			"parenttype": "Periskope Settings",
+			"parentfield": "sales_managers",
+			"user": user,
+		}
+	)
+	row.name = frappe.generate_hash(length=10)
+	row.db_insert()
+	return user

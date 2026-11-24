@@ -53,8 +53,16 @@ def _manager():
 		frappe.throw(_("Broadcasts are for managers."), frappe.PermissionError)
 
 
+def _broadcast(name: str):
+	"""A broadcast of one of the user's numbers."""
+	doc = frappe.get_doc(DOCTYPE, name)
+	access.require_number(doc.whatsapp_number)
+	return doc
+
+
 def _number(number: str, allow_meta: bool = False) -> str:
 	number = "".join(ch for ch in (number or "") if ch.isdigit())
+	access.require_number(number)
 	if not frappe.db.get_value("WhatsApp Number", number, "is_active") or (
 		meta.is_meta(number) and not allow_meta
 	):
@@ -419,9 +427,11 @@ def broadcasts() -> list[dict]:
 	"""The broadcasts, newest first."""
 	access.require_inbox_user()
 	_manager()
+	allowed = access.allowed_numbers()
+	filters = {"whatsapp_number": ["in", allowed or [""]]} if allowed is not None else {}
 	return [
 		_out(frappe.get_doc(DOCTYPE, n))
-		for n in frappe.get_all(DOCTYPE, pluck="name", order_by="creation desc", limit=100)
+		for n in frappe.get_all(DOCTYPE, filters=filters, pluck="name", order_by="creation desc", limit=100)
 	]
 
 
@@ -430,7 +440,7 @@ def progress(broadcast: str) -> dict:
 	"""Read each message's state from Periskope's queue now: {broadcast, failed: [chat titles]}."""
 	access.require_inbox_user()
 	_manager()
-	doc = frappe.get_doc(DOCTYPE, broadcast)
+	doc = _broadcast(broadcast)
 	_refresh(doc)
 	doc.reload()
 	return {"broadcast": _out(doc), "failed": failed_titles(doc)}
@@ -515,7 +525,7 @@ def resend_failed(broadcast: str) -> dict:
 	"""A new broadcast with the same message to the chats this one could not reach."""
 	access.require_inbox_user()
 	_manager()
-	doc = frappe.get_doc(DOCTYPE, broadcast)
+	doc = _broadcast(broadcast)
 	chats = [r["chat"] for r in frappe.parse_json(doc.recipients or "[]") if r.get("status") == "failed"]
 	if not chats:
 		frappe.throw(_("No message of this broadcast failed."))
@@ -555,7 +565,7 @@ def stop(broadcast: str) -> dict:
 	"""Stop the broadcast: the messages not yet sent are cancelled (and their credits returned)."""
 	access.require_inbox_user()
 	_manager()
-	doc = frappe.get_doc(DOCTYPE, broadcast)
+	doc = _broadcast(broadcast)
 	if doc.status not in ("Scheduled", "Sending"):
 		frappe.throw(_("This broadcast has already finished."))
 	_stop(doc)

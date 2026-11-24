@@ -266,6 +266,7 @@ import {
 	toast,
 } from "frappe-ui";
 import LucideSearch from "~icons/lucide/search";
+import { boot } from "@/boot";
 import { errorText, showError } from "@/utils/errors";
 import { fromNow } from "@/utils/format";
 
@@ -274,10 +275,11 @@ const LOGS = [
 	{ kind: "agent_actions", label: "What the agent did" },
 	{ kind: "auto_replies", label: "Auto replies" },
 	{ kind: "reminders", label: "Reminders" },
-	{ kind: "agent_runs", label: "Agent runs" },
-	{ kind: "ai_usage", label: "AI usage" },
-	{ kind: "webhook_logs", label: "Webhook logs" },
-];
+	// app-wide logs: for managers who see every number
+	{ kind: "agent_runs", label: "Agent runs", everyNumber: true },
+	{ kind: "ai_usage", label: "AI usage", everyNumber: true },
+	{ kind: "webhook_logs", label: "Webhook logs", everyNumber: true },
+].filter((t) => !t.everyNumber || boot.sees_every_number);
 const kind = computed(() => route.params.kind);
 const meta = ref(null);
 const rows = ref([]);

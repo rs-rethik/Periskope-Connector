@@ -243,9 +243,14 @@ def mark_read(chats) -> dict:
 
 @frappe.whitelist()
 def teams() -> list[dict]:
-	"""The teams, for the team filter and the team picker."""
+	"""The teams, for the team filter and the team picker: those on the user's numbers."""
 	access.require_inbox_user()
-	return frappe.get_all("Periskope Team", fields=["name", "assignment"], order_by="name asc")
+	filters = {}
+	if (allowed := access.allowed_numbers()) is not None:
+		filters["name"] = ["in", access.teams_on(allowed) or [""]]
+	return frappe.get_all(
+		"Periskope Team", filters=filters, fields=["name", "assignment"], order_by="name asc"
+	)
 
 
 @frappe.whitelist()

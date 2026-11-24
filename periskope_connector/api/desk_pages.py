@@ -137,6 +137,8 @@ def list_meta(kind: str) -> dict:
 	access.require_inbox_user()
 	_manager()
 	cfg = _list(kind)
+	if kind not in NUMBER_SCOPE and access.allowed_numbers() is not None:
+		access.require_every_number()
 	meta = frappe.get_meta(cfg["doctype"])
 
 	def describe(name):
@@ -158,6 +160,33 @@ def list_meta(kind: str) -> dict:
 	}
 
 
+# How a list is kept to the numbers of a manager who was given numbers: the field that holds the chat
+# id, or the contact's number. The others are app-wide and need someone who sees every number.
+NUMBER_SCOPE = {
+	"contacts": "phone",
+	"groups": "chat_id",
+	"auto_replies": "chat_id",
+	"reminders": "chat_id",
+	"agent_actions": "chat_id",
+}
+
+
+def _scope(kind: str) -> dict:
+	"""The extra filter that keeps a list to the user's numbers ({} when they see every number)."""
+	allowed = access.allowed_numbers()
+	if allowed is None:
+		return {}
+	field = NUMBER_SCOPE.get(kind)
+	if not field:
+		access.require_every_number()
+	chat_ids = access.chat_ids_on(allowed)
+	if field == "phone":
+		values = [c.split("@")[0] for c in chat_ids if c.endswith("@c.us")]
+	else:
+		values = chat_ids
+	return {field: ["in", values or [""]]}
+
+
 @frappe.whitelist()
 def list_rows(
 	kind: str, filters: str | dict | None = None, search: str = "", start: int = 0, page_length: int = 0
@@ -168,6 +197,7 @@ def list_rows(
 	cfg = _list(kind)
 	filters = json.loads(filters) if isinstance(filters, str) else (filters or {})
 	where = {f: v for f, v in filters.items() if f in cfg["filters"] and v not in (None, "")}
+	where.update(_scope(kind))
 	or_filters = (
 		[[f, "like", f"%{search.strip()}%"] for f in cfg["search"]] if (search or "").strip() else None
 	)
@@ -223,6 +253,7 @@ def map_group(
 	access.require_inbox_user()
 	_manager()
 	doc = frappe.get_doc("Periskope Group", group)
+	access.require_chat_id(doc.chat_id)
 	if organization and not (crm_lead or crm_deal):
 		# a company: the group follows its best deal or lead, like linking it from the chat
 		from periskope_connector.api.crm_panel import set_group_organization
@@ -257,6 +288,7 @@ def decide_suggestion(name: str, decision: str) -> str:
 	"""Approve or reject one of the learning agent's suggestions, as the emailed links do."""
 	access.require_inbox_user()
 	_manager()
+	access.require_every_number()  # a suggestion changes the app for every number
 	from periskope_connector.suggestions import decide
 
 	return decide(name, decision)

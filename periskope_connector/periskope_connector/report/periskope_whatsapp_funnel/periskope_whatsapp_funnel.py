@@ -7,6 +7,8 @@ from frappe import _
 from frappe.query_builder.functions import Count, Sum
 from frappe.utils import add_days, flt, today
 
+from periskope_connector import access
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -28,7 +30,7 @@ def execute(filters=None):
 		{"label": _("Lead → Deal %"), "fieldname": "deal_rate", "fieldtype": "Percent", "width": 120},
 	]
 	lead = frappe.qb.DocType("CRM Lead")
-	leads = (
+	query = (
 		frappe.qb.from_(lead)
 		.select(lead.name, lead.lead_owner)
 		.where(
@@ -36,7 +38,11 @@ def execute(filters=None):
 			& (lead.creation >= from_date)
 			& (lead.creation <= f"{to_date} 23:59:59")
 		)
-	).run(as_dict=True)
+	)
+	mine = access.leads_on_my_numbers()
+	if mine is not None:  # a manager given numbers: the leads of the chats on their numbers
+		query = query.where(lead.name.isin(mine or [""]))
+	leads = query.run(as_dict=True)
 	owner_of = {r.name: r.lead_owner or _("(no owner)") for r in leads}
 	rows = {}
 	for owner in owner_of.values():

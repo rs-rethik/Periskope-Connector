@@ -174,7 +174,10 @@ def all_scheduled(
 	if status in ("Scheduled", "Paused", "Completed"):
 		filters["status"] = status
 	if number:
+		access.require_number(number)
 		filters["whatsapp_number"] = number
+	elif (allowed := access.allowed_numbers()) is not None:
+		filters["whatsapp_number"] = ["in", allowed or [""]]  # a manager given numbers: only theirs
 	if repeat in ("0", "1"):
 		filters["is_repeat"] = int(repeat)
 	rows = frappe.get_all(DOCTYPE, filters=filters, fields=FIELDS, order_by="next_run asc", limit=500)

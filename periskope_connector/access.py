@@ -12,10 +12,11 @@ list and read, and the inbox API only reads through them.
 
 import frappe
 
-from periskope_connector.api.permission import ADMIN_ROLES, MANAGER_ROLES
+from periskope_connector.api.permission import ADMIN_ROLES, INBOX_MANAGER_ROLES
+from periskope_connector.api.permission import is_manager as _is_manager
 from periskope_connector.periskope_connector.doctype.periskope_team.periskope_team import teams_of
 
-INBOX_ROLES = (*MANAGER_ROLES, "Sales User")
+INBOX_ROLES = (*INBOX_MANAGER_ROLES, "Sales User")
 
 
 def assigned_like(user: str) -> str:
@@ -26,15 +27,17 @@ def assigned_like(user: str) -> str:
 
 
 def is_manager(user: str | None = None) -> bool:
-	user = user or frappe.session.user
-	return user == "Administrator" or bool(set(MANAGER_ROLES) & set(frappe.get_roles(user)))
+	"""An admin, or a Sales Manager listed in Periskope Settings (permission.is_manager)."""
+	return _is_manager(user)
 
 
 def can_use_inbox(user: str | None = None) -> bool:
 	user = user or frappe.session.user
 	if user == "Guest":
 		return False
-	return user == "Administrator" or bool(set(INBOX_ROLES) & set(frappe.get_roles(user)))
+	return (
+		user == "Administrator" or bool(set(INBOX_ROLES) & set(frappe.get_roles(user))) or _is_manager(user)
+	)
 
 
 def require_inbox_user():
@@ -68,6 +71,123 @@ def managers_by_number() -> dict[str, list[str] | None]:
 def managers_of(number: str | None, managers: dict[str, list[str] | None]) -> list[str]:
 	"""The managers (from managers_by_number) who see this number."""
 	return [u for u, numbers in managers.items() if numbers is None or number in numbers]
+
+
+def users_on_numbers(numbers: list[str]) -> set[str]:
+	"""The users given any of these numbers: active agents and the members of teams that have them."""
+	if not numbers:
+		return set()
+	rows = frappe.get_all(
+		"Periskope Agent Number",
+		filters={
+			"whatsapp_number": ["in", numbers],
+			"parenttype": ["in", ["Periskope Agent", "Periskope Team"]],
+		},
+		fields=["parent", "parenttype"],
+	)
+	agents = [r.parent for r in rows if r.parenttype == "Periskope Agent"]
+	teams = [r.parent for r in rows if r.parenttype == "Periskope Team"]
+	users = set()
+	if agents:
+		users |= set(
+			frappe.get_all("Periskope Agent", filters={"name": ["in", agents], "is_active": 1}, pluck="user")
+		)
+	if teams:
+		users |= set(
+			frappe.get_all(
+				"Periskope Team Member",
+				filters={"parent": ["in", teams], "parenttype": "Periskope Team"},
+				pluck="user",
+			)
+		)
+	return users - {None}
+
+
+def require_every_number(user: str | None = None):
+	"""App-wide pages (health, flow, system logs) are for those who see every number."""
+	if allowed_numbers(user) is not None:
+		frappe.throw(
+			frappe._("This page covers every number: it is not shown to you."), frappe.PermissionError
+		)
+
+
+def require_message(message: str, user: str | None = None):
+	"""Refuse a message whose chat the user may not see."""
+	chat = frappe.db.get_value("Periskope Message", message, "periskope_chat")
+	if not chat or not can_see_chat(chat, user):
+		frappe.throw(frappe._("You cannot open this message."), frappe.PermissionError)
+
+
+def chat_ids_on(numbers: list[str]) -> list[str]:
+	"""The chat ids (customer or group) that have a chat row on any of these numbers."""
+	if not numbers:
+		return []
+	return frappe.get_all(
+		"Periskope Chat", filters={"whatsapp_number": ["in", numbers]}, pluck="chat_id", distinct=True
+	)
+
+
+def require_chat_id(chat_id: str | None, user: str | None = None):
+	"""Refuse a customer or group the user has no chat with on their numbers."""
+	allowed = allowed_numbers(user)
+	if allowed is None:
+		return
+	if not chat_id or not frappe.db.exists(
+		"Periskope Chat", {"chat_id": chat_id, "whatsapp_number": ["in", allowed or [""]]}
+	):
+		frappe.throw(frappe._("This chat is not on your numbers."), frappe.PermissionError)
+
+
+def require_contact(contact: str, user: str | None = None):
+	"""Refuse a contact-queue entry whose number has no chat on the user's numbers."""
+	if allowed_numbers(user) is None:
+		return
+	phone = frappe.db.get_value("Periskope Contact", contact, "phone")
+	require_chat_id(f"{phone}@c.us" if phone else None, user)
+
+
+def teams_on(numbers: list[str]) -> list[str]:
+	"""The teams that have any of these numbers."""
+	if not numbers:
+		return []
+	return frappe.get_all(
+		"Periskope Agent Number",
+		filters={"whatsapp_number": ["in", numbers], "parenttype": "Periskope Team"},
+		pluck="parent",
+		distinct=True,
+	)
+
+
+def number_filter(field: str = "whatsapp_number", user: str | None = None) -> dict:
+	"""A get_all filter keeping rows to the user's numbers ({} when they see every number)."""
+	allowed = allowed_numbers(user)
+	return {} if allowed is None else {field: ["in", allowed or [""]]}
+
+
+def chat_id_filter(field: str = "chat_id", user: str | None = None) -> dict:
+	"""A get_all filter keeping rows to the chats on the user's numbers ({} for every number)."""
+	allowed = allowed_numbers(user)
+	return {} if allowed is None else {field: ["in", chat_ids_on(allowed) or [""]]}
+
+
+def leads_on_my_numbers(user: str | None = None) -> list[str] | None:
+	"""The leads of the chats on the user's numbers, or None when they see every number."""
+	allowed = allowed_numbers(user)
+	if allowed is None:
+		return None
+	return frappe.get_all(
+		"Periskope Chat",
+		filters={"whatsapp_number": ["in", allowed or [""]], "crm_lead": ["is", "set"]},
+		pluck="crm_lead",
+		distinct=True,
+	)
+
+
+def require_number(number: str | None, user: str | None = None):
+	"""Refuse a number the user was not given (no number, or every number allowed: nothing to check)."""
+	allowed = allowed_numbers(user)
+	if number and allowed is not None and number not in allowed:
+		frappe.throw(frappe._("You do not work the number {0}.").format(number), frappe.PermissionError)
 
 
 def _given_numbers(user: str) -> list[str]:

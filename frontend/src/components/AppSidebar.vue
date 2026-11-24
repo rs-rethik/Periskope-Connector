@@ -104,7 +104,9 @@
 							><span class="text-sm">Manage</span></SidebarLabel
 						>
 						<SidebarItem
-							v-for="m in manage"
+							v-for="m in manage.filter(
+								(x) => !x.everyNumber || boot.sees_every_number
+							)"
 							:key="m.label"
 							:label="m.label"
 							:to="m.to"
@@ -216,6 +218,7 @@ const manage = [
 	},
 	{
 		label: "Suggestions",
+		everyNumber: true, // changes the whole app: managers who see every number
 		icon: LucideLightbulb,
 		to: { name: "DataList", params: { kind: "suggestions" } },
 		active: (r) => r.params.kind === "suggestions",
@@ -246,6 +249,7 @@ const manage = [
 	},
 	{
 		label: "Health and flow",
+		everyNumber: true,
 		icon: LucideActivity,
 		to: { name: "Health" },
 		active: (r) => ["Health", "Flow"].includes(r.name),

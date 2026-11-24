@@ -8,6 +8,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, today
 
+from periskope_connector import access
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -26,15 +28,23 @@ def execute(filters=None):
 		{"label": _("WhatsApp Leads"), "fieldname": "leads", "fieldtype": "Int", "width": 140},
 	]
 
+	leads = access.leads_on_my_numbers()  # None: every number
+	# raw SQL: the week is worked out with MariaDB's date functions, which qb cannot group by
 	rows = frappe.db.sql(
 		"""select date_sub(date(creation), interval weekday(date(creation)) day) as week,
 		ifnull(lead_owner, '(no owner)') as lead_owner,
 		count(*) as leads
 		from `tabCRM Lead`
 		where source = 'WhatsApp' and creation between %(from)s and %(to)s
+		and (%(every)s or name in %(leads)s)
 		group by week, lead_owner
 		order by week desc, leads desc""",
-		{"from": from_date, "to": f"{to_date} 23:59:59"},
+		{
+			"from": from_date,
+			"to": f"{to_date} 23:59:59",
+			"leads": tuple(leads or [""]),
+			"every": int(leads is None),
+		},
 		as_dict=True,
 	)
 	for row in rows:

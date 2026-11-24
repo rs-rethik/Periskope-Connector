@@ -11,7 +11,7 @@ from frappe.utils import get_datetime
 
 from periskope_connector import access, chat, messages, numbers, reminders, sla, workflow
 from periskope_connector.api import chat_actions, inbox, notifications, views
-from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate
+from periskope_connector.tests.utils import OTHER_APP_DOCTYPES, event, isolate, make_sales_manager
 
 IGNORE_TEST_RECORD_DEPENDENCIES = test_ignore = [
 	*OTHER_APP_DOCTYPES,
@@ -161,7 +161,7 @@ class TestLifecycle(FlowCase):
 				"use_working_hours": 0,
 			}
 		).insert(ignore_permissions=True)
-		manager = _user("flow.manager@example.com", "Sales Manager")
+		manager = make_sales_manager(_user("flow.manager@example.com", "Sales Manager"))
 		name = self._msg("919600070012", minutes_ago=30)
 		self.assertEqual(inbox.get_chat(name).sla, "Breached")
 		self.assertIn(name, [c.name for c in inbox.get_chats({"sla": "breached"})["chats"]])

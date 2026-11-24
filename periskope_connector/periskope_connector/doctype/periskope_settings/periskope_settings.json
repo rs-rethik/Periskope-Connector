@@ -33,6 +33,7 @@
   "section_business",
   "ai_business_context",
   "section_team",
+  "sales_managers",
   "approver_emails",
   "alert_emails",
   "escalation_emails",
@@ -274,6 +275,13 @@
    "fieldname": "section_team",
    "fieldtype": "Section Break",
    "label": "3. Team"
+  },
+  {
+   "fieldname": "sales_managers",
+   "fieldtype": "Table MultiSelect",
+   "options": "Periskope Team Member",
+   "label": "Sales Managers",
+   "description": "The users who manage Pranera Connect: they see Settings, the Dashboard and the Manage pages. A Sales Manager given WhatsApp numbers sees only those numbers. Admins (System Manager, WhatsApp Manager) always manage."
   },
   {
    "fieldname": "approver_emails",
@@ -711,7 +719,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-23 13:00:00.000000",
+ "modified": "2026-11-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Periskope Connector",
  "name": "Periskope Settings",

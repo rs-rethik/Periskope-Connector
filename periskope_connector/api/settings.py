@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from periskope_connector import access
 from periskope_connector.api.permission import require_admin, require_manager
 from periskope_connector.client import request
 
@@ -113,6 +114,7 @@ def _save_phones(phones: list[dict]) -> list[dict]:
 def set_correct_category(message: str, category: str) -> None:
 	"""A sales manager marks the category the AI should have given. Kept for the later learning loop"""
 	require_manager()
+	access.require_message(message)
 	from periskope_connector.tags import names
 
 	if category not in names():
@@ -125,9 +127,12 @@ def failed_messages() -> list[dict]:
 	"""The customer messages the AI could not analyse (after every retry), newest first: their
 	escalation, lead or tasks never happened until someone retries them."""
 	require_manager()
+	filters = {"classification_status": "Failed", "direction": "Incoming"}
+	if (allowed := access.allowed_numbers()) is not None:
+		filters["whatsapp_number"] = ["in", allowed or [""]]  # a manager given numbers: only theirs
 	rows = frappe.get_all(
 		"Periskope Message",
-		filters={"classification_status": "Failed", "direction": "Incoming"},
+		filters=filters,
 		fields=[
 			"name",
 			"periskope_chat",
@@ -151,6 +156,7 @@ def failed_messages() -> list[dict]:
 def retry_failed_message(message: str) -> None:
 	"""Analyse a failed message again; a voice note is transcribed again first."""
 	require_manager()
+	access.require_message(message)
 	row = frappe.db.get_value(
 		"Periskope Message", message, ["classification_status", "message_type", "transcript"], as_dict=True
 	)
@@ -182,6 +188,7 @@ def retry_failed_message(message: str) -> None:
 def get_health() -> dict:
 	"""The live figures for the Health tab of the settings page."""
 	require_manager()
+	access.require_every_number()
 	from periskope_connector.health import get_health as figures
 
 	return figures()
@@ -200,6 +207,7 @@ def backfill_messages(days: int = 7) -> dict:
 def get_flow() -> dict:
 	"""The health and figures of each step, for the Flow tab of the settings page."""
 	require_manager()
+	access.require_every_number()
 	from periskope_connector.flow import get_flow as figures
 
 	return figures()
