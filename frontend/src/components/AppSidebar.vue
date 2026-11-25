@@ -26,6 +26,17 @@
 				<div
 					class="-mx-2 mt-3 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 [&>*]:shrink-0"
 				>
+					<!-- back to Sales One, the sales app this inbox opens from -->
+					<SidebarItem
+						v-if="boot.sales_one"
+						label="Back to Sales One"
+						to="/sales/"
+						@click.prevent="backToSalesOne($event)"
+					>
+						<template #prefix
+							><LucideArrowLeft class="size-4 text-ink-gray-6"
+						/></template>
+					</SidebarItem>
 					<NotificationsBell :collapsed="collapsed" />
 					<SidebarItem
 						label="Today"
@@ -171,6 +182,7 @@ import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideSunrise from "~icons/lucide/sunrise";
 import LucideList from "~icons/lucide/list";
 import LucideExternalLink from "~icons/lucide/external-link";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideInbox from "~icons/lucide/inbox";
 import LucideUser from "~icons/lucide/user";
 import LucideUserX from "~icons/lucide/user-x";
@@ -199,6 +211,7 @@ import BrandLogo from "@/components/BrandLogo.vue";
 import { assistant } from "@/stores/assistant";
 import { QUICK_FILTERS, inbox } from "@/stores/inbox";
 import { openSettings } from "@/stores/shell";
+import { backToSalesOne } from "@/stores/salesOne";
 
 defineProps({ mobile: { type: Boolean, default: false } });
 const collapsed = ref(false);
