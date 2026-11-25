@@ -214,6 +214,18 @@ class TestInboxApi(InboxCase):
 		self.mine = self._chat(A, "919600055500")
 		frappe.db.set_value("Periskope Chat", self.mine, "_assign", json.dumps([self.rep]))
 
+	def test_boot_offers_the_way_back_to_sales_one_only_to_its_users(self):
+		with patch("frappe.get_installed_apps", return_value=["frappe", "periskope_connector"]):
+			self.assertFalse(inbox.boot()["sales_one"])
+		if "sales_one" not in frappe.get_installed_apps():
+			return
+		frappe.set_user(self.rep)  # Sales User, without the Sales One User role
+		self.assertFalse(inbox.boot()["sales_one"])
+		frappe.set_user("Administrator")
+		frappe.get_doc("User", self.rep).add_roles("Sales One User")
+		frappe.set_user(self.rep)
+		self.assertTrue(inbox.boot()["sales_one"])
+
 	def test_filters_pages_and_counts(self):
 		names = {self._chat(A, f"9196000555{i:02d}") for i in range(3)}
 		on_a = inbox.get_chats({"number": A, "search": "Enquiry"})
