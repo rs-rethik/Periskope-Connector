@@ -32,9 +32,20 @@
 						boot.brand?.name || "WhatsApp"
 					}}</span>
 					<TestModeBadge />
+					<!-- back to Sales One, the sales app this inbox opens from -->
+					<a
+						v-if="boot.sales_one"
+						href="/sales/"
+						class="tap ml-auto flex shrink-0 items-center gap-1 rounded-full border border-outline-gray-2 bg-surface-base py-1 pl-1.5 pr-2.5 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2"
+						@click.prevent="backToSalesOne($event)"
+					>
+						<LucideChevronLeft class="size-4 text-ink-gray-6" />
+						Sales One
+					</a>
 					<button
 						v-if="inbox.bell.unread"
-						class="tap ml-auto mr-2 rounded-full bg-surface-red-5 px-1.5 text-xs text-ink-white"
+						:class="!boot.sales_one && 'ml-auto'"
+						class="tap mr-2 rounded-full bg-surface-red-5 px-1.5 text-xs text-ink-white"
 						:aria-label="`${inbox.bell.unread} unread notifications`"
 						@click="shell.notifications = true"
 					>
@@ -81,6 +92,7 @@
 				/>
 			</div>
 			<SettingsModal v-if="boot.is_manager && shell.settingsUsed" v-model="shell.settings" />
+			<SalesOneTransition v-if="boot.sales_one" />
 		</div>
 	</FrappeUIProvider>
 </template>
@@ -90,6 +102,9 @@ import { defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Button, FrappeUIProvider, useTheme } from "frappe-ui";
 import LucideMenu from "~icons/lucide/menu";
+import LucideChevronLeft from "~icons/lucide/chevron-left";
+import SalesOneTransition from "@/components/SalesOneTransition.vue";
+import { backToSalesOne } from "@/stores/salesOne";
 import AppSidebar from "@/components/AppSidebar.vue";
 import BrandLogo from "@/components/BrandLogo.vue";
 import FestivalLights from "@/components/FestivalLights.vue";

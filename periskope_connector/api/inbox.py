@@ -663,7 +663,17 @@ def boot() -> dict:
 			frappe.db.exists("DocType", "Sales Order") and frappe.has_permission("Sales Order", "create")
 		),
 		"festival": festival.current(),
+		# a way back to Sales One, the sales app that opens this inbox, for the people who use it
+		"sales_one": _can_use_sales_one(),
 	}
+
+
+def _can_use_sales_one() -> bool:
+	if "sales_one" not in frappe.get_installed_apps():
+		return False
+	from sales_one.access import can_use
+
+	return can_use()
 
 
 # --- Searching what was written --------------------------------------------------------------------
